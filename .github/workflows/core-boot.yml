@@ -68,8 +68,8 @@ jobs:
       - name: Lints
         working-directory: rust
         run: |
-          cargo fmt -p zax-snes --check
-          cargo clippy --release -p zax-snes --all-targets --no-deps -- -D warnings
+          cargo fmt -p zax-snes -p xsnes-preview --check
+          cargo clippy --release -p zax-snes -p xsnes-preview --all-targets --no-deps -- -D warnings
 
       - name: Boot picture
         working-directory: rust

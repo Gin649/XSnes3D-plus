@@ -181,6 +181,21 @@ impl FrameDrawList {
         &self.palette
     }
 
+    /// `XSnes3D+`: adds the tiles of `other` (another background layer's engine), moved back by
+    /// `depth` scene units (larger z is further back). The palette, counter and time stay this
+    /// list's: every layer of a SNES frame has the same palette.
+    pub fn append_moved(&mut self, other: &Self, depth: f32) {
+        let shift = Vec3::new(0.0, 0.0, depth);
+        let moved = Mat4::translation(shift);
+        for tile in &other.tiles {
+            let mut tile = tile.clone();
+            tile.transform = moved * tile.transform;
+            tile.anchor = tile.anchor + shift;
+            tile.tile_center = tile.tile_center + shift;
+            self.tiles.push(tile);
+        }
+    }
+
     /// The frame counter of the frame (REQ-E3D-043).
     #[must_use]
     pub const fn frame_counter(&self) -> i32 {
