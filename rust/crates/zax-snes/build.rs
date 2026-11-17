@@ -40,15 +40,26 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
         .collect();
     patches.sort();
     for patch in &patches {
+        // The copy is inside this repository's target folder. Inside a repository, git apply
+        // quietly skips files outside the current folder, so git is stopped from finding the
+        // repository: it then patches the copy as plain files.
         let status = Command::new("git")
             .arg("apply")
             .arg(patch)
             .current_dir(&copy)
+            .env("GIT_CEILING_DIRECTORIES", &out)
+            .env_remove("GIT_DIR")
+            .env_remove("GIT_WORK_TREE")
             .status()?;
         if !status.success() {
             return Err(format!("could not apply {}", patch.display()).into());
         }
         println!("cargo:rerun-if-changed={}", patch.display());
+    }
+    // Make sure the host frame-step patch really landed.
+    let emulator = fs::read_to_string(copy.join("Core/Shared/Emulator.h"))?;
+    if !emulator.contains("HostRunFrame") {
+        return Err("the Mesen 2 patch was not applied (no HostRunFrame in Emulator.h)".into());
     }
 
     let mut c_files = Vec::new();
