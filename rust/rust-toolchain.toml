@@ -1,0 +1,5 @@
+# Kept the same as Xnes3D+ (external/xnes3d-plus/rust/rust-toolchain.toml), since its crates
+# are built in this workspace too.
+[toolchain]
+channel = "1.99.1"
+components = ["clippy", "rustfmt"]

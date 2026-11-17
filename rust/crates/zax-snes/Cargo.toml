@@ -1,0 +1,18 @@
+[package]
+name = "zax-snes"
+description = "The XSnes3D+ SNES core: Mesen 2 driven one frame at a time."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license = "GPL-3.0-only"
+publish.workspace = true
+build = "build.rs"
+
+[dependencies]
+png = "0.17"
+
+[build-dependencies]
+cc = { version = "1.2", features = ["parallel"] }
+
+[lints]
+workspace = true

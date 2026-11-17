@@ -1,0 +1,48 @@
+diff --git a/Core/Shared/Emulator.cpp b/Core/Shared/Emulator.cpp
+index 2702a5b..9a7a988 100644
+--- a/Core/Shared/Emulator.cpp
++++ b/Core/Shared/Emulator.cpp
+@@ -201,6 +201,25 @@ bool Emulator::ProcessSystemActions()
+ 	return false;
+ }
+ 
++// XSnes3D+: the host drives the frames (see Emulator.h). This sets up what Run() sets up
++// before its loop: the emulation thread is the caller's, and the frame limiter never waits.
++void Emulator::HostBegin()
++{
++	_stopFlag = false;
++	_isRunAheadFrame = false;
++	_emulationThreadId = std::this_thread::get_id();
++	_frameDelay = 0;
++	_stats.reset(new DebugStats());
++	_frameLimiter.reset(new FrameLimiter(0));
++	_lastFrameTimer.Reset();
++}
++
++// XSnes3D+: one frame, the same call Run() makes in its loop when run-ahead is off.
++void Emulator::HostRunFrame()
++{
++	_console->RunFrame();
++}
++
+ void Emulator::RunFrameWithRunAhead()
+ {
+ 	stringstream runAheadState;
+diff --git a/Core/Shared/Emulator.h b/Core/Shared/Emulator.h
+index d962bb0..320acea 100644
+--- a/Core/Shared/Emulator.h
++++ b/Core/Shared/Emulator.h
+@@ -145,6 +145,13 @@ public:
+ 	void Release();
+ 
+ 	void Run();
++
++	// XSnes3D+: lets a host step the emulation itself, one frame per call, on the calling thread,
++	// with no emulation thread and no frame limiter wait. Call HostBegin once after
++	// LoadRom(file, patch, false), then HostRunFrame for each frame.
++	void HostBegin();
++	void HostRunFrame();
++
+ 	void Stop(bool sendNotification, bool preventRecentGameSave = false, bool saveBattery = true);
+ 
+ 	void OnBeforeSendFrame();
