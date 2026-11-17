@@ -1,4 +1,4 @@
-//! Builds Mesen 2's emulation core (C and C++) and the XSnes3D+ shim into a static library.
+//! Builds Mesen 2's emulation core (C and C++) and the `XSnes3D+` shim into a static library.
 //!
 //! The submodule in `external/mesen2` is never changed. The parts we need are copied into the
 //! build folder, our patches in `patches/` are applied to that copy, and the copy is compiled.

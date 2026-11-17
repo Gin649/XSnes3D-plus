@@ -1,4 +1,4 @@
-//! The SNES core of XSnes3D+: Mesen 2's emulator, driven one frame at a time.
+//! The SNES core of `XSnes3D+`: Mesen 2's emulator, driven one frame at a time.
 //!
 //! [`Snes`] loads a ROM, takes the port 1 buttons, runs frames and hands back the finished
 //! picture. Mesen itself is C++ and is built by `build.rs`; `cpp/shim.cpp` is the small C
