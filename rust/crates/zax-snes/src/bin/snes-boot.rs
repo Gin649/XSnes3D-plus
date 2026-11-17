@@ -2,7 +2,11 @@
 //!
 //! ```text
 //! snes-boot <rom> [--frames N] [--shots 60,300,...] [--press SCRIPT] [--out DIR] [--name NAME]
+//!           [--firmware DIR]
 //! ```
+//!
+//! `--firmware` names a folder of chip firmware files under Mesen's names (`dsp1.rom`,
+//! `st018.rom` and so on). Games with those chips, like Super Mario Kart, need them.
 //!
 //! For each shot frame it writes `DIR/NAME-fNNNNN.png` and prints `shot <frame> <width>x<height>
 //! <hash>`. The defaults are 600 frames, a shot at the last frame, the current folder and the
@@ -23,6 +27,7 @@ struct Options {
     press: PressScript,
     out: PathBuf,
     name: String,
+    firmware: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -40,6 +45,9 @@ fn run() -> Result<(), String> {
     fs::create_dir_all(&options.out).map_err(|e| e.to_string())?;
     let home = env::temp_dir().join(format!("xsnes3d-boot-{}", std::process::id()));
     fs::create_dir_all(&home).map_err(|e| e.to_string())?;
+    if let Some(firmware) = &options.firmware {
+        copy_firmware(firmware, &home.join("Firmware"))?;
+    }
 
     let mut snes = Snes::load(&options.rom, &home).map_err(|e| e.to_string())?;
     for counter in 0..options.frames {
@@ -74,6 +82,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
     let mut press = PressScript::default();
     let mut out = PathBuf::from(".");
     let mut name = None;
+    let mut firmware = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let mut value = |flag: &str| args.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -100,11 +109,14 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             }
             "--out" => out = PathBuf::from(value("--out")?),
             "--name" => name = Some(value("--name")?),
+            "--firmware" => firmware = Some(PathBuf::from(value("--firmware")?)),
             flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
             path => rom = Some(PathBuf::from(path)),
         }
     }
-    let rom = rom.ok_or("usage: snes-boot <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--out DIR] [--name NAME]")?;
+    let rom = rom.ok_or(
+        "usage: snes-boot <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--out DIR] [--name NAME] [--firmware DIR]",
+    )?;
     if frames == 0 {
         return Err("--frames must be at least 1".into());
     }
@@ -122,7 +134,21 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
         press,
         out,
         name,
+        firmware,
     })
+}
+
+/// Copies the firmware files into the Firmware folder Mesen reads under its home folder.
+fn copy_firmware(from: &Path, to: &Path) -> Result<(), String> {
+    fs::create_dir_all(to).map_err(|e| e.to_string())?;
+    let entries = fs::read_dir(from).map_err(|e| format!("{}: {e}", from.display()))?;
+    for entry in entries.filter_map(Result::ok) {
+        let path = entry.path();
+        if path.is_file() {
+            fs::copy(&path, to.join(entry.file_name())).map_err(|e| e.to_string())?;
+        }
+    }
+    Ok(())
 }
 
 fn file_stem(path: &Path) -> String {
