@@ -1,0 +1,393 @@
+//! The import against a real (or stand-in) 3dSen installation. The tests need the built-in
+//! profiles (`ZAXNES_PROFILES`, for `inventory.json`) and the installation folder
+//! (`ZAXNES_3DSEN_INSTALL`), so they are `#[ignore]`d.
+
+use std::collections::HashSet;
+use std::env;
+use std::fs;
+use std::path::{Path, PathBuf};
+
+use sha2::{Digest, Sha256};
+use zax_profiles::catalogue::{
+    built_in, ProfileCatalogue, ProfileGeneration, ProfileOrigin, UserProfileFolder, FULL_EDITION,
+};
+use zax_profiles::format;
+use zax_profiles::import::{
+    find_bundle, is_bundle_name, locate_bundle, read_text_assets, ThreeDSenImporter, UnityBundle,
+    UnitySerializedFile,
+};
+use zax_profiles::library::{GameLibrary, GameLibraryEntry, GameProfileSource};
+
+use super::common::neutral_assets;
+use super::common::physical_fs::PhysicalProfileFileSystem;
+use super::common::recording_log::RecordingProfileLog;
+
+const PROFILE_COUNT: usize = 101;
+
+/// The four profiles of a 2.0 installation that are not byte-for-byte those of the 1.1.2: they
+/// differ by their Lua scripts alone (AMD-039 §5), in the order their file names sort in.
+const LUA_DIFFERING_PROFILES: [&str; 4] = [
+    "DQ3_DW3",
+    "Final_Fantasy_USA",
+    "Super Mario Bros",
+    "punchout",
+];
+
+fn install_root() -> PathBuf {
+    PathBuf::from(env::var_os("ZAXNES_3DSEN_INSTALL").unwrap_or_else(|| {
+        panic!(
+            "ZAXNES_3DSEN_INSTALL is not set: it names a 3dSen installation (or a stand-in) folder"
+        )
+    }))
+}
+
+/// The format version of the installation's profile bundle. AMD-039 §2 measures 7 on the 1.1.2
+/// and 8 on the 2.0, which is what tells the two apart without opening anything else of the
+/// installation: `"UnityFS\0"` then a big-endian `u32` (AMD-030 §4.1), so only twelve bytes of a
+/// 43 MB bundle are read.
+fn bundle_format_version() -> u32 {
+    let bundle = find_bundle(&PhysicalProfileFileSystem, &install_root()).unwrap();
+    let head = fs::read(bundle).unwrap();
+    u32::from_be_bytes(head[8..12].try_into().unwrap())
+}
+
+/// True when the installation is a 3dSen 2.0 (AMD-039 §2).
+fn is_version_2() -> bool {
+    bundle_format_version() >= 8
+}
+
+/// The version of the serialized file the bundle holds: 21 on the 1.1.2 and 22 on the 2.0
+/// (AMD-039 §2, table).
+fn expected_serialized_version() -> u32 {
+    if is_version_2() {
+        22
+    } else {
+        21
+    }
+}
+
+fn reference_hashes() -> HashSet<String> {
+    let text = fs::read_to_string(neutral_assets::root().join("inventory.json")).unwrap();
+    let document: serde_json::Value = serde_json::from_str(&text).unwrap();
+    document
+        .as_array()
+        .unwrap()
+        .iter()
+        .filter(|entry| entry.get("kind").and_then(serde_json::Value::as_str) == Some("Profile"))
+        .filter_map(|entry| entry.get("sha256").and_then(serde_json::Value::as_str))
+        .filter(|hash| !hash.is_empty())
+        .map(str::to_lowercase)
+        .collect()
+}
+
+fn hash_of(path: &Path) -> String {
+    format!("{:x}", Sha256::digest(fs::read(path).unwrap()))
+}
+
+/// AMD-030 §3, AMD-039 §2 last bullet
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen installation)"]
+fn the_bundle_is_found_from_the_installation_folder() {
+    let bundle = find_bundle(&PhysicalProfileFileSystem, &install_root()).unwrap();
+
+    assert!(is_bundle_name(
+        &bundle.file_name().unwrap().to_string_lossy()
+    ));
+    // The path pattern does not change in 2.0, only the platform folder, which is
+    // StandaloneWindows64 there and StandaloneWindows in 1.1.2.
+    assert!(bundle.to_string_lossy().contains("StandaloneWindows"));
+}
+
+/// AMD-030 §4, AMD-039 §2
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen installation)"]
+fn the_bundle_holds_the_101_profiles_and_the_asset_bundle_object() {
+    let bundle = locate_bundle(&PhysicalProfileFileSystem, &install_root()).unwrap();
+    let bytes = fs::read(bundle).unwrap();
+    let container = UnityBundle::read(&bytes).unwrap();
+
+    // §4.1 and §4.2: format version 7 on the 1.1.2 and 8 on the 2.0 (AMD-039 §2), one CAB- node,
+    // blocks of 128 KiB.
+    assert_eq!(bundle_format_version(), container.format_version);
+    assert!((7..=8).contains(&container.format_version));
+    assert_eq!(1, container.files.len());
+    let node = &container.files[0];
+    assert!(node.path.starts_with("CAB-"));
+
+    // §4.3: version 21 in 1.1.2 and 22 in 2.0 (AMD-039 §2), little-endian, 102 objects.
+    let serialized = UnitySerializedFile::read(&node.data).unwrap();
+    assert_eq!(expected_serialized_version(), serialized.version);
+    assert!(!serialized.is_big_endian);
+    assert_eq!(PROFILE_COUNT + 1, serialized.objects.len());
+
+    let assets = read_text_assets(&bytes).unwrap();
+    assert_eq!(PROFILE_COUNT, assets.len());
+    assert!(assets.iter().all(|asset| !asset.name.is_empty()));
+}
+
+/// AMD-030 §5, §6
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen installation)"]
+fn every_payload_decodes_with_the_spec_03_decoder() {
+    let bundle = locate_bundle(&PhysicalProfileFileSystem, &install_root()).unwrap();
+
+    for asset in read_text_assets(&fs::read(bundle).unwrap()).unwrap() {
+        if let Err(error) = format::load(&asset.script, None, Some(&asset.name)) {
+            panic!("{}: {error}", asset.name);
+        }
+    }
+}
+
+/// AMD-030 §6, second bullet, and AMD-039 §4, second part: whichever version the installation
+/// is, the import writes the 101 profiles with no failure, and a second import finds them all
+/// already present. The fingerprints are not looked at here, since the reference inventory
+/// describes the 1.1.2 only (AMD-039 §4, §5).
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen installation)"]
+fn the_import_writes_the_101_profiles_and_the_second_one_adds_nothing() {
+    // Outside the repository on purpose: no file of 3dSen ever lands in the tree.
+    let scratch = env::temp_dir().join(format!("zax-p8-{}", std::process::id()));
+    let destination = scratch.join("profiles");
+    let outcome = std::panic::catch_unwind(|| {
+        let importer = ThreeDSenImporter::new(&PhysicalProfileFileSystem, &destination, None);
+
+        let first = importer.import_from(&install_root()).unwrap();
+
+        assert_eq!(PROFILE_COUNT, first.imported);
+        assert_eq!(0, first.already_present);
+        assert_eq!(0, first.failed);
+
+        let written: Vec<PathBuf> = fs::read_dir(&destination)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(PROFILE_COUNT, written.len());
+        assert!(written.iter().all(|path| path
+            .to_string_lossy()
+            .ends_with(UserProfileFolder::EXTENSION)));
+
+        // 101 distinct files: no profile was written twice under two names.
+        let distinct: HashSet<String> = written.iter().map(|path| hash_of(path)).collect();
+        assert_eq!(PROFILE_COUNT, distinct.len());
+
+        let second = importer.import_from(&install_root()).unwrap();
+
+        assert_eq!(0, second.imported);
+        assert_eq!(PROFILE_COUNT, second.already_present);
+        assert_eq!(0, second.failed);
+        assert_eq!(PROFILE_COUNT, fs::read_dir(&destination).unwrap().count());
+    });
+    fs::remove_dir_all(&scratch).unwrap();
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+/// AMD-030 §6, first bullet, kept unchanged by AMD-039 §4, third bullet: on a 1.1.2, every
+/// imported file is byte for byte a profile of the reference inventory. On a 2.0 the comparison
+/// is not made — four of the 101 differ by their Lua scripts (AMD-039 §5, AMD-040 §1) — and the
+/// test reports that it did nothing rather than failing.
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen 1.1.2 installation)"]
+fn the_imported_profiles_are_those_of_the_reference_inventory() {
+    if is_version_2() {
+        println!(
+            "skipped: ZAXNES_3DSEN_INSTALL names a 2.0 (bundle format 8); the reference \
+             inventory describes the 1.1.2, so its fingerprints are not compared \
+             (AMD-039 §4, §5)."
+        );
+        return;
+    }
+
+    let reference = reference_hashes();
+    assert_eq!(PROFILE_COUNT, reference.len());
+
+    let scratch = env::temp_dir().join(format!("zax-p8-ref-{}", std::process::id()));
+    let destination = scratch.join("profiles");
+    let outcome = std::panic::catch_unwind(|| {
+        let summary = ThreeDSenImporter::new(&PhysicalProfileFileSystem, &destination, None)
+            .import_from(&install_root())
+            .unwrap();
+        assert_eq!(PROFILE_COUNT, summary.imported);
+
+        let written: Vec<PathBuf> = fs::read_dir(&destination)
+            .unwrap()
+            .map(|entry| entry.unwrap().path())
+            .collect();
+        assert_eq!(PROFILE_COUNT, written.len());
+        for path in &written {
+            assert!(reference.contains(&hash_of(path)), "{}", path.display());
+        }
+    });
+    fs::remove_dir_all(&scratch).unwrap();
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
+}
+
+/// The second half of the test below: the imported folder read against the **catalogue** of
+/// `assets-neutral/`.
+///
+/// Each file is one of the catalogue's own profiles and adds no game — but for the four of
+/// AMD-039 §5 on a 2.0, which differ by their Lua scripts (Q-076). On a 2.1 no file is a built-in
+/// copy, so the scan keeps all 101, and each of them replaces the built-in profile of its game
+/// (AMD-065 REQ-PROF-087).
+fn the_library_with_the_catalogue_assets(
+    files: &PhysicalProfileFileSystem,
+    folder: &UserProfileFolder<'_>,
+    is_2_1: bool,
+    log: &RecordingProfileLog,
+) {
+    let catalogue =
+        ProfileCatalogue::load(files, &neutral_assets::catalogue_file(), FULL_EDITION).unwrap();
+    let built_in_profiles = catalogue.read_built_in_profiles(files);
+    let profiles = folder
+        .scan_excluding(&catalogue.ids(), built_in_profiles.contents())
+        .unwrap();
+    let mut kept: Vec<String> = profiles
+        .iter()
+        .filter_map(|profile| profile.file_path.file_stem())
+        .map(|stem| stem.to_string_lossy().into_owned())
+        .collect();
+    kept.sort();
+    if is_2_1 {
+        assert_eq!(PROFILE_COUNT, kept.len());
+    } else {
+        let expected_kept: Vec<String> = if is_version_2() {
+            LUA_DIFFERING_PROFILES
+                .iter()
+                .map(|&name| name.to_owned())
+                .collect()
+        } else {
+            Vec::new()
+        };
+        assert_eq!(expected_kept, kept);
+    }
+    let library = GameLibrary::build_with_built_in_profiles(
+        &catalogue,
+        &built_in_profiles,
+        &profiles,
+        None,
+        Some(log),
+    );
+
+    // Whichever version: one entry per identifier, nothing hidden by a clash.
+    let mut ids: Vec<&str> = library.entries().iter().map(GameLibraryEntry::id).collect();
+    let distinct: HashSet<&str> = ids.iter().copied().collect();
+    assert_eq!(ids.len(), distinct.len());
+    if !is_2_1 {
+        assert_eq!(catalogue.entries().len() + kept.len(), ids.len());
+        return;
+    }
+
+    // AMD-065: every one of the 101 replaces the built-in profile of its game, so the library is
+    // exactly the catalogue — its identifiers included, which is what keeps `rom.json`, the saves
+    // and the cover attached — and every entry is shown from its 2.1 profile.
+    assert_eq!(catalogue.entries().len(), ids.len());
+    let mut expected: Vec<&str> = catalogue
+        .entries()
+        .iter()
+        .map(|entry| entry.id.as_str())
+        .collect();
+    ids.sort_unstable();
+    expected.sort_unstable();
+    assert_eq!(expected, ids);
+    for entry in library.entries() {
+        assert_eq!(
+            ProfileGeneration::TwoPointOne,
+            entry.generation(),
+            "{}: {}",
+            entry.id(),
+            entry.display_title()
+        );
+        assert_eq!(GameProfileSource::User, entry.source());
+    }
+}
+
+/// AMD-037 and AMD-065, on whichever installation `ZAXNES_3DSEN_INSTALL` names.
+///
+/// After the import, every one of the 101 profiles is a game without assets, and no game appears
+/// twice with them. What differs is the generation the installation writes (REQ-PROF-085), which
+/// is read at the content of the imported files, not at the version of the bundle:
+///
+/// - **1.x and 2.0** (3dn): 45 of the 101 carry no identifier and get a derived one (AMD-037). On
+///   a 2.0, four of the 101 are not byte-for-byte the catalogue's own, their Lua scripts differing
+///   (AMD-039 §5): those four stay user profiles, the other 97 are reported identical, and each of
+///   the four adds a library entry, its identifier not being one of the catalogue's. What the
+///   interface is to show then is Q-076.
+/// - **2.1** (3dh): all 101 envelopes carry an `Id`, so nothing is derived; none of the files is
+///   byte-for-byte a built-in profile, so all 101 are kept by the scan; and each of them is the
+///   same game as a built-in profile — 56 by their `Id`, 45 by their name — so the library counts
+///   exactly the entries of the catalogue alone, each shown from its 2.1 profile (AMD-065
+///   REQ-PROF-087).
+///
+/// In both cases no file is ignored and none is rewritten.
+// Q-076
+#[test]
+#[ignore = "needs ZAXNES_PROFILES and ZAXNES_3DSEN_INSTALL (a 3dSen installation)"]
+fn amd_037_the_imported_profiles_are_101_games_with_no_ignored_file_and_no_game_twice() {
+    let scratch = env::temp_dir().join(format!("zax-amd037-{}", std::process::id()));
+    let destination = scratch.join("profiles");
+    let outcome = std::panic::catch_unwind(|| {
+        let files = PhysicalProfileFileSystem;
+        ThreeDSenImporter::new(&files, &destination, None)
+            .import_from(&install_root())
+            .unwrap();
+        let before: Vec<Vec<u8>> = fs::read_dir(&destination)
+            .unwrap()
+            .map(|entry| fs::read(entry.unwrap().path()).unwrap())
+            .collect();
+
+        // REQ-PROF-085: the generation is read at the content of what was written, the import
+        // naming a 3dh `<name>.3dn` just as it names a 3dn (AMD-062 §8).
+        let is_2_1 = before
+            .iter()
+            .all(|bytes| ProfileGeneration::of_bytes(bytes).is_two_point_one());
+        println!(
+            "ZAXNES_3DSEN_INSTALL writes {} profiles (bundle format {})",
+            if is_2_1 { "2.1 \"3dh\"" } else { "3dn" },
+            bundle_format_version()
+        );
+
+        // Without assets: the generic catalogue, 101 games, nothing ignored.
+        let log = RecordingProfileLog::new();
+        let folder = UserProfileFolder::new(&files, &destination, Some(&log), ProfileOrigin::User);
+        let generic = built_in::create();
+        let profiles = folder
+            .scan_excluding(&generic.ids(), &generic.built_in_contents(&files))
+            .unwrap();
+        assert_eq!(PROFILE_COUNT, profiles.len());
+        assert!(!log.any_contains("ignored"));
+        let derived = log
+            .informations
+            .borrow()
+            .iter()
+            .filter(|line| line.contains("derived from its content"))
+            .count();
+        assert_eq!(
+            if is_2_1 { 0 } else { 45 },
+            derived,
+            "a 2.1 install carries an `Id` in all 101 envelopes; a 3dn install has 45 without one"
+        );
+        let library = GameLibrary::build(&generic, &profiles, None, Some(&log));
+        let user_games = library
+            .entries()
+            .iter()
+            .filter(|entry| entry.source() == GameProfileSource::User)
+            .count();
+        assert_eq!(PROFILE_COUNT, user_games);
+
+        the_library_with_the_catalogue_assets(&files, &folder, is_2_1, &log);
+
+        // The import left the files byte-identical (AMD-030): scanning rewrote nothing.
+        let after: Vec<Vec<u8>> = fs::read_dir(&destination)
+            .unwrap()
+            .map(|entry| fs::read(entry.unwrap().path()).unwrap())
+            .collect();
+        assert_eq!(before, after);
+    });
+    fs::remove_dir_all(&scratch).unwrap();
+    if let Err(panic) = outcome {
+        std::panic::resume_unwind(panic);
+    }
+}

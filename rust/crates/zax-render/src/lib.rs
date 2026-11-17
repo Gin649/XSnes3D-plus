@@ -1,0 +1,63 @@
+//! zax-render: the OpenGL renderer of SPEC-06 (port of `src/Zax.Render`).
+//!
+//! It draws one frame of the 3D scene — shadow map, background or skybox, opaque objects,
+//! sorted transparent objects, then the HUD — into a framebuffer the host provides, on an
+//! OpenGL 3.3 core or OpenGL ES 3.0 context the host owns and hands over as a
+//! `glow::Context` (REQ-SCN-056, REQ-SCN-057, REQ-ARCH-030). Everything that needs no GPU —
+//! camera, controls, colour science, scene state — is plain safe code; the GL calls are
+//! confined to [`gl::api`].
+
+pub mod assets;
+pub mod camera;
+pub mod color;
+pub mod controls;
+pub mod diagnostics;
+mod frame_plan;
+pub mod geometry;
+mod gl;
+pub mod interop;
+pub mod numerics;
+pub mod occlusion;
+#[cfg(feature = "offscreen")]
+pub mod offscreen;
+mod renderer;
+pub mod scene;
+pub mod scene_export;
+pub mod shadow_volume;
+pub mod sky;
+pub mod smoothing;
+pub mod statistics;
+pub mod style;
+pub mod sync;
+pub mod target;
+#[cfg(feature = "wgpu")]
+pub mod wgpu_backend;
+
+pub use gl::api::GlError;
+pub use renderer::{RenderError, SceneRenderer};
+
+/// The GLSL sources and how the variants of each pass are put together.
+///
+/// Public so that the variant selection of AMD-043 REQ-SCN-067 can be checked without a GL
+/// context: the curvature is a `#define` compiled into its own programs, never a uniform tested
+/// per vertex, and what the flat variant does **not** carry is as much the requirement as what
+/// the curvature variant does.
+pub mod shaders {
+    pub use crate::gl::shaders::{
+        assemble, backdrop, fantasy, floor_mask, gradient, scene, shadow, ProgramSource,
+        SceneVariant, Stage, AO, AO_BLUR, AO_COMPOSITE, SMAA_AREA_TABLE, SMAA_BLEND, SMAA_EDGES,
+        SMAA_SEARCH_TABLE, SMAA_WEIGHTS, SSR, SSR_COMPOSITE,
+    };
+}
+
+/// Stable identifier of this module.
+pub const NAME: &str = "Zax.Render";
+
+/// Short human-readable role of this module.
+pub const ROLE: &str = "OpenGL 3.3 core rendering into a host-provided target";
+
+/// Major version of the OpenGL core profile this renderer targets.
+pub const GL_MAJOR_VERSION: i32 = 3;
+
+/// Minor version of the OpenGL core profile this renderer targets.
+pub const GL_MINOR_VERSION: i32 = 3;

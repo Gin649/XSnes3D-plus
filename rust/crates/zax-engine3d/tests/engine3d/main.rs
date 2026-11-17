@@ -1,0 +1,29 @@
+//! Tests of `zax-engine3d`, ported from `tests/Zax.Engine3D.Tests`. The tests that read the
+//! built-in profiles are `#[ignore]`d: set `ZAXNES_PROFILES` and run with `--ignored`.
+
+// Integration-test crate: its helpers (outside `#[test]` functions) fail by unwrapping, which
+// `allow-unwrap-in-tests` in clippy.toml only grants inside `#[test]` items.
+#![allow(clippy::unwrap_used, clippy::expect_used, clippy::panic)]
+// The vectors of SPEC-04 and SPEC-04B compare floats exactly, as the C# tests do; the
+// tolerance of REQ-E3D-523 is applied where those tests apply it.
+#![allow(clippy::float_cmp)]
+
+mod amd055_build_depth_tests;
+mod amd057_wall_tests;
+mod amd062_hash_equals_3dn_tests;
+mod amd063_transparent_faces_tests;
+mod corpus_tests;
+mod cylinder_vector_tests;
+mod geometry_corpus_tests;
+mod geometry_lifetime_tests;
+mod geometry_placement_tests;
+mod geometry_vector_tests;
+mod instance_and_output_tests;
+mod intake_and_frame_tests;
+mod marching_vector_tests;
+mod registry_tests;
+mod scaffold_tests;
+mod space_bend_tests;
+mod state_and_mode_tests;
+mod support;
+mod test_vector_tests;

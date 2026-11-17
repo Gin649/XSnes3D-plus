@@ -1,8 +1,8 @@
 name: Core boot check
 
-# XSnes3D+ step 1: builds Mesen 2's SNES core with our patch, boots the hello test ROM and
-# checks its picture (tests/boot_hello.rs), and shows that the shared Xnes3D+ crates build
-# here. The boot picture is kept as a workflow artifact. Pictures of real games come from the
+# XSnes3D+: builds Mesen 2's SNES core with our patches, boots the hello test ROM and checks
+# its picture and recorded tiles (zax-snes tests), and builds and tests the 3D engine crates
+# copied from Xnes3D+ v1.0.0. The boot picture is kept as a workflow artifact. Pictures of real games come from the
 # roms repo's snes-preview workflow.
 on:
   push:
@@ -23,6 +23,11 @@ jobs:
         run: |
           python3 tools/make_hello.py "$RUNNER_TEMP/hello.sfc"
           cmp "$RUNNER_TEMP/hello.sfc" tests/roms/hello.sfc
+
+      - name: Software graphics (for the renderer's tests)
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q xvfb libgl1-mesa-dri libegl1 libgles2 > /dev/null
 
       - name: Rust (the version in rust-toolchain.toml)
         working-directory: rust
@@ -45,14 +50,16 @@ jobs:
         working-directory: rust
         run: cargo test --release -p zax-snes
 
-      - name: Shared Xnes3D+ crates build here
+      - name: 3D engine crates (copied from Xnes3D+)
         working-directory: rust
-        run: cargo check -p shared-link-check
+        env:
+          LIBGL_ALWAYS_SOFTWARE: '1'
+        run: xvfb-run -a cargo test --release -p zax-settings -p zax-profiles -p zax-engine3d -p zax-render
 
       - name: Lints
         working-directory: rust
         run: |
-          cargo fmt -p zax-snes -p shared-link-check --check
+          cargo fmt -p zax-snes --check
           cargo clippy --release -p zax-snes --all-targets -- -D warnings
 
       - name: Boot picture

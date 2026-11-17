@@ -1,0 +1,799 @@
+//! Turns a converted frame into the ordered list of tiles to draw (SPEC-04B REQ-E3D-641).
+
+use crate::hashing::FastMap;
+use std::sync::Arc;
+
+use zax_profiles::enums::TextureFormat;
+use zax_profiles::tags::GROUND_AXIS_TAG;
+
+use crate::frame::{ConversionFrame, FrameInstance, FrameInstanceId, FrameShape, FrameTile};
+use crate::geometry::builder::PatternGeometryBuilder;
+use crate::geometry::texture::ObjectTexture;
+use crate::geometry::tile_mesh::TileMesh;
+use crate::geometry::tile_sides::TileSides;
+use crate::grid;
+use crate::instance::{InstanceRef, PatternInstance, RenderStyle};
+use crate::palette::{FramePalette, Rgb24};
+use crate::registry::{PatternId, PatternRegistry};
+use crate::settings::{ConversionSettings, RenderAlgorithm, ZLayer};
+use crate::vectors::{Cell, Mat4, Vec2, Vec3};
+
+/// Where an instance is attached in the scene (SPEC-04B REQ-E3D-409, REQ-E3D-641).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum SceneContainer {
+    /// The game container.
+    Game = 0,
+    /// The interface container, for the UI layer.
+    Interface = 1,
+}
+
+/// Material class of a tile to draw (SPEC-04B REQ-E3D-642).
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
+pub enum MaterialClass {
+    /// Opaque.
+    Opaque = 0,
+    /// Alpha blended, casts no shadow.
+    Transparent = 1,
+    /// UI layer.
+    Interface = 2,
+    /// Invisible but casts its shadow.
+    ShadowOnly = 3,
+}
+
+/// The animated deformation parameters of a tile (SPEC-04B REQ-E3D-568).
+#[derive(Debug, Clone, Copy, PartialEq)]
+pub struct DeformParameters {
+    /// `deltaAmp`.
+    pub amplitude: Vec3,
+    /// `deltaSpeed`.
+    pub speed: Mat4,
+    /// `deltaOffset`.
+    pub phase: Mat4,
+    /// `sz = (pixel width, pixel height, D)`.
+    pub size: Vec3,
+    /// `(tx + 4, Hs − ty − 4, 0) − Pd`.
+    pub tile_relative_to_pivot: Vec3,
+}
+
+impl DeformParameters {
+    /// The displacement `δ` of the local mesh vertex `vertex` at `time` seconds
+    /// (REQ-E3D-568). The renderer may evaluate this in a shader instead; the result must be
+    /// the same.
+    ///
+    /// `δ` is added to the vertex in the object's local frame, *before* the scale and the
+    /// rotation (REQ-E3D-406, DEC-04B-Q2). Row 3 of the two matrices is free script data and
+    /// has no effect here (REQ-E3D-569).
+    #[must_use]
+    pub fn displacement(&self, vertex: Vec3, time: f32) -> Vec3 {
+        let point = self.tile_relative_to_pivot + vertex;
+        let ratio = |p: f32, size: f32| if size == 0.0 { 0.0 } else { p / size };
+        let normalised = Vec3::new(
+            ratio(point.x, self.size.x),
+            ratio(point.y, self.size.y),
+            ratio(point.z, self.size.z),
+        );
+
+        Vec3::new(
+            self.component(0, self.amplitude.x, self.size.x, normalised, time),
+            self.component(1, self.amplitude.y, self.size.y, normalised, time),
+            self.component(2, self.amplitude.z, self.size.z, normalised, time),
+        )
+    }
+
+    fn component(&self, row: usize, amplitude: f32, size: f32, normalised: Vec3, time: f32) -> f32 {
+        let (speed, phase) = (&self.speed, &self.phase);
+        amplitude
+            * size
+            * ((normalised.x * speed[(row, 0)]) + phase[(row, 0)]).sin()
+            * ((normalised.y * speed[(row, 1)]) + phase[(row, 1)]).sin()
+            * ((normalised.z * speed[(row, 2)]) + phase[(row, 2)]).sin()
+            * ((time * speed[(row, 3)]) + phase[(row, 3)]).sin()
+    }
+}
+
+/// One tile to draw, in the abstract form the renderer consumes (SPEC-04B REQ-E3D-641).
+#[derive(Debug, Clone)]
+#[allow(clippy::struct_excessive_bools)] // The four flags of the REQ-E3D-641 record.
+pub struct DrawTile {
+    /// The frame instance the tile belongs to.
+    pub instance: FrameInstanceId,
+    /// The pattern the tile's 3D object belongs to. AMD-051 REQ-E3D-644 bounds its diagnostic
+    /// at "at most once per pattern", and the renderer — which is where a texture allocation
+    /// fails — has no other way to name one. Taken from [`InstanceLook`], so it is read once per
+    /// instance, not once per tile.
+    pub pattern: PatternId,
+    /// The tile of the shape.
+    pub tile: FrameTile,
+    /// The mesh of this tile image for this instance, or `None` when no geometry builder is
+    /// plugged in (SPEC-04B REQ-E3D-640).
+    pub mesh: Option<Arc<TileMesh>>,
+    /// The complete transformation of REQ-E3D-406, scene transformation excluded: it maps a
+    /// local mesh vertex to its scene position. The sprite depth nudge `n` and the
+    /// deformation are *not* included (DEC-R2-T4).
+    pub transform: Mat4,
+    /// The anchor point `Pos` of the instance (REQ-E3D-205).
+    pub anchor: Vec3,
+    /// The tile centre `T` of SPEC-04B REQ-E3D-405.
+    pub tile_center: Vec3,
+    /// Where the tile is attached in the scene.
+    pub container: SceneContainer,
+    /// Material class (SPEC-04B REQ-E3D-642).
+    pub material: MaterialClass,
+    /// Opacity, 0 to 1.
+    pub alpha: f32,
+    /// The texture of the 3D object, resolved by the geometry builder — the custom texture of
+    /// the profile or the pattern image (SPEC-04B REQ-E3D-426, REQ-E3D-641). `None` when no
+    /// geometry builder is plugged in.
+    pub texture: Option<Arc<ObjectTexture>>,
+    /// Texture format: indexed or direct.
+    pub texture_format: TextureFormat,
+    /// The palette table `P` of SPEC-04B REQ-E3D-560, or −1 for a direct texture, which needs
+    /// none.
+    pub palette_table: i32,
+    /// Texture offset, a fraction of the texture size.
+    pub tex_offset: Vec2,
+    /// Texture repetition.
+    pub tex_tilting: Vec2,
+    /// Whether the tile casts a shadow (SPEC-04B REQ-E3D-567).
+    pub cast_shadow: bool,
+    /// Whether the tile receives shadows (SPEC-04B REQ-E3D-567).
+    pub receive_shadow: bool,
+    /// True for a tile of a sprite shape. With `behind_background` it lets the renderer pick
+    /// the depth nudge `n` (SPEC-04B REQ-E3D-405).
+    pub sprite: bool,
+    /// True for a sprite tile whose priority bit puts it behind the background.
+    pub behind_background: bool,
+    /// The deformation parameters, or `None` when no deformation is active.
+    pub deform: Option<DeformParameters>,
+}
+
+/// Everything the renderer needs for one displayed frame (SPEC-04B REQ-E3D-641): the ordered
+/// tiles to draw, the 64 resolved palette colours and the frame time.
+#[derive(Debug, Clone)]
+pub struct FrameDrawList {
+    tiles: Vec<DrawTile>,
+    palette: [Rgb24; FramePalette::ENTRY_COUNT],
+    frame_counter: i32,
+    time: f32,
+}
+
+impl Default for FrameDrawList {
+    fn default() -> Self {
+        Self {
+            tiles: Vec::new(),
+            palette: [Rgb24::default(); FramePalette::ENTRY_COUNT],
+            frame_counter: 0,
+            time: 0.0,
+        }
+    }
+}
+
+impl FrameDrawList {
+    /// The ordered tiles to draw.
+    #[must_use]
+    pub fn tiles(&self) -> &[DrawTile] {
+        &self.tiles
+    }
+
+    /// The 64 resolved RGB colours of the frame palette.
+    #[must_use]
+    pub const fn palette(&self) -> &[Rgb24; FramePalette::ENTRY_COUNT] {
+        &self.palette
+    }
+
+    /// The frame counter of the frame (REQ-E3D-043).
+    #[must_use]
+    pub const fn frame_counter(&self) -> i32 {
+        self.frame_counter
+    }
+
+    /// The frame time in seconds (REQ-E3D-043).
+    #[must_use]
+    pub const fn time(&self) -> f32 {
+        self.time
+    }
+
+    fn begin(&mut self, frame: &ConversionFrame) {
+        self.tiles.clear();
+        self.frame_counter = frame.counter();
+        self.time = frame.time();
+        frame.palette().copy_colors_to(&mut self.palette);
+    }
+}
+
+/// What a draw list build reads besides the frame.
+pub struct DrawSources<'a> {
+    /// The settings the pipeline consumes.
+    pub settings: &'a ConversionSettings,
+    /// The geometry side, which owns the meshes.
+    pub geometry: &'a mut dyn PatternGeometryBuilder,
+    /// The pattern registry, which holds the texture owners.
+    pub patterns: &'a PatternRegistry,
+    /// True when the loaded profile is in version 2 format, which moves the deformation pivot
+    /// by one unit (SPEC-04B REQ-E3D-568).
+    pub format_version_2: bool,
+}
+
+/// Turns a converted frame into the ordered list of tiles to draw (SPEC-04B REQ-E3D-641).
+///
+/// This is the hand-over point between SPEC-04 and SPEC-04B: the pipeline supplies the
+/// placement, the palette table, the material class, the shadow flags and the deformation
+/// parameters; the mesh of each tile comes from the geometry builder.
+///
+/// The order is the instance order of REQ-E3D-220 and, inside one instance, the tile order of
+/// the shape. Instances that are hidden (REQ-E3D-191) or whose geometry is not ready
+/// (REQ-E3D-361) contribute nothing; a shape restored from the pinned frame contributes only
+/// the tiles that overlap one of the frame's rectangles (REQ-E3D-233). The list and its
+/// buffers are reused, so a build allocates nothing once warm.
+#[derive(Debug, Default)]
+pub struct DrawListBuilder {
+    list: FrameDrawList,
+    /// AMD-051 REQ-E3D-646: the frame counter on which each 3D object that is in the frame but
+    /// not drawable started waiting, and the ones already reported.
+    ///
+    /// **Empty while everything works**, which is what keeps this off the cost of a healthy
+    /// frame: the only thing a frame with nothing waiting pays is the `is_empty` test of
+    /// [`Self::forget_ready_objects`], once per frame, not once per instance.
+    waiting: FastMap<InstanceRef, WaitingObject>,
+    /// Objects that have outstayed [`LATE_OBJECT_FRAMES`], newest last. Drained by the host,
+    /// which logs them; never read on the drawing path.
+    late: Vec<InstanceRef>,
+    /// The per-frame background cell map of AMD-063 REQ-SCN-087 step 1: for each cell of the
+    /// background grid, at most one instance and the tile it put there.
+    ///
+    /// **Left empty unless some background instance of the frame can lose a face**, which is
+    /// what keeps a picture without a transparent object paying nothing for the amendment.
+    cells: Vec<Option<(FrameInstanceId, FrameTile)>>,
+}
+
+/// Emulated frames a 3D object may stay undrawable before REQ-E3D-646 asks for a diagnostic:
+/// 600, which is 10 s at the nominal 60 frames per second of SPEC-07 §2.
+pub const LATE_OBJECT_FRAMES: i32 = 600;
+
+/// What [`DrawListBuilder::waiting`] remembers about one object that is not drawable yet.
+#[derive(Debug, Clone, Copy)]
+struct WaitingObject {
+    /// The frame counter of the first frame it was seen waiting on.
+    since: i32,
+    /// The last frame counter it was seen waiting on, so that an object which has left the
+    /// frame is forgotten instead of accumulating.
+    last_seen: i32,
+    /// Whether its diagnostic has already been produced (REQ-E3D-646: at most once per object).
+    reported: bool,
+}
+
+impl DrawListBuilder {
+    /// Creates a builder.
+    #[must_use]
+    pub fn new() -> Self {
+        Self::default()
+    }
+
+    /// The 3D objects that have been waiting for their meshes for [`LATE_OBJECT_FRAMES`]
+    /// consecutive emulated frames and have not been reported yet (REQ-E3D-646). Taking them
+    /// clears the list.
+    pub fn take_late_objects(&mut self) -> Vec<InstanceRef> {
+        std::mem::take(&mut self.late)
+    }
+
+    /// How many 3D objects are waiting for their meshes right now (REQ-E3D-601): 0 on any frame
+    /// of a loaded profile, so a test can assert that nothing is forgotten.
+    #[must_use]
+    pub fn waiting_objects(&self) -> usize {
+        self.waiting.len()
+    }
+
+    /// The list of the last build.
+    #[must_use]
+    pub const fn list(&self) -> &FrameDrawList {
+        &self.list
+    }
+
+    /// Whether the background cell map of AMD-063 REQ-SCN-087 was built for the last frame.
+    ///
+    /// False unless a background instance of that frame was transparent **and** held a full
+    /// tile, which is the cost rule of the amendment: a picture without a transparent object
+    /// pays one pass over the instance list and nothing more.
+    #[must_use]
+    pub fn background_map_built(&self) -> bool {
+        !self.cells.is_empty()
+    }
+
+    /// Swaps the list of the last build with `list`: the caller keeps the built list while the
+    /// builder fills the other one next time (its storage is reused).
+    pub fn exchange(&mut self, list: &mut FrameDrawList) {
+        std::mem::swap(&mut self.list, list);
+    }
+
+    /// Builds the draw list of `frame`.
+    pub fn build(
+        &mut self,
+        frame: &ConversionFrame,
+        sources: &mut DrawSources<'_>,
+    ) -> &FrameDrawList {
+        self.list.begin(frame);
+        let counter = frame.counter();
+        self.map_background_cells(frame, sources);
+        for &id in frame.instances() {
+            let instance = frame.instance(id);
+            if instance.style == RenderStyle::Hidden {
+                continue;
+            }
+            if !sources.geometry.is_ready(instance.reference()) {
+                // REQ-E3D-601 already keeps the shape in the frame and out of the drawing; the
+                // two clauses AMD-051 REQ-E3D-646 adds are watched from here, the one place
+                // that already knows an object is waiting. The healthy path does not reach it.
+                self.note_waiting(instance.reference(), counter);
+                continue;
+            }
+
+            self.add_instance(frame, id, sources);
+        }
+        self.forget_ready_objects(counter);
+
+        &self.list
+    }
+
+    /// Step 1 of AMD-063 REQ-SCN-087: walking the ordered instance list of the frame
+    /// (REQ-E3D-040), each cell of the background grid keeps at most one instance - the first
+    /// one that claims it, replaced only when the one held is opaque and the new one
+    /// transparent.
+    ///
+    /// The map is read for the **neighbourhood** of a drawn tile, so it is built on the
+    /// instances of the frame and on every tile of their shapes, restored shapes and hidden
+    /// instances included, as the requirement words it - not on the tiles the draw list ends up
+    /// holding (Q-179).
+    ///
+    /// Nothing is built unless a background instance of the frame is transparent **and** holds a
+    /// full tile: without that no face can be removed, so the whole of REQ-SCN-087 costs one
+    /// pass over the instance list.
+    ///
+    /// It runs **before** the drawing loop and not inside it, on purpose. Building the map on
+    /// demand, at the first drawn instance that could lose a face, would spare an opaque picture
+    /// even this pass — but it puts a call to a `&mut self` method in the loop, and step 12
+    /// measured the whole tile loop de-inlining around it: `push_tiles`, `InstanceLook::tile`,
+    /// the `Mat4` product and a `memcpy` all left `build` and the cost went to +0.149 % on a ROM
+    /// that gains nothing from the amendment, against +0.049 % for this shape.
+    fn map_background_cells(&mut self, frame: &ConversionFrame, sources: &DrawSources<'_>) {
+        self.cells.clear();
+        if !Self::has_removable_tile(frame, sources) {
+            return;
+        }
+
+        self.cells.resize(grid::CELL_COUNT, None);
+        for &id in frame.instances() {
+            let instance = frame.instance(id);
+            if !frame.shape(id.shape).background() {
+                continue;
+            }
+
+            let transparent = is_transparent(instance);
+            for tile in frame.shape_tiles(id.shape) {
+                let Some(slot) = grid::slot(tile.grid_index()) else {
+                    continue;
+                };
+
+                // Nothing there yet, or what is there is opaque and this one is transparent.
+                let claim = match self.cells[slot] {
+                    None => true,
+                    Some((held, _)) => transparent && !is_transparent(frame.instance(held)),
+                };
+                if claim {
+                    self.cells[slot] = Some((id, *tile));
+                }
+            }
+        }
+    }
+
+    /// Whether any background instance of the frame is transparent and holds a full tile, which
+    /// is the only case in which REQ-SCN-087 removes anything.
+    /// The opacity is tested **first**, before the shape is even looked up: this runs over every
+    /// instance of every frame, and on a picture with nothing see-through in it — which is every
+    /// frame of a 3dn profile that uses no transparency — the two field reads of
+    /// [`is_transparent`] are then the whole of what the amendment costs the frame.
+    fn has_removable_tile(frame: &ConversionFrame, sources: &DrawSources<'_>) -> bool {
+        frame.instances().iter().any(|&id| {
+            let instance = frame.instance(id);
+            is_transparent(instance)
+                && instance.style != RenderStyle::Hidden
+                && frame.shape(id.shape).background()
+                && frame.shape_tiles(id.shape).any(|tile| {
+                    sources
+                        .geometry
+                        .is_full_tile(instance.reference(), tile.image())
+                })
+        })
+    }
+
+    /// Step 2 of AMD-063 REQ-SCN-087: the lateral sides a drawn full tile of a transparent
+    /// background instance loses - those whose four-neighbour cell holds an instance that is
+    /// transparent and whose tile there is full for **its** reference 3D object. A cell outside
+    /// the grid removes nothing.
+    fn removed_sides(
+        &self,
+        frame: &ConversionFrame,
+        tile: &FrameTile,
+        sources: &DrawSources<'_>,
+    ) -> TileSides {
+        let cell = tile.position();
+        let neighbours = [
+            (Cell::new(cell.x - 1, cell.y), TileSides::LEFT),
+            (Cell::new(cell.x + 1, cell.y), TileSides::RIGHT),
+            (Cell::new(cell.x, cell.y - 1), TileSides::TOP),
+            (Cell::new(cell.x, cell.y + 1), TileSides::BOTTOM),
+        ];
+
+        let mut removed = TileSides::NONE;
+        for (neighbour, side) in neighbours {
+            if self.neighbour_removes(frame, neighbour, sources) {
+                removed = removed.with(side);
+            }
+        }
+
+        removed
+    }
+
+    /// Whether the cell `neighbour` takes its shared side away: it is inside the grid, the
+    /// instance the map kept there is transparent, and its tile of that cell is a full tile of
+    /// its own reference 3D object.
+    fn neighbour_removes(
+        &self,
+        frame: &ConversionFrame,
+        neighbour: Cell,
+        sources: &DrawSources<'_>,
+    ) -> bool {
+        if !grid::contains(neighbour) {
+            return false;
+        }
+
+        let Some(slot) = grid::slot(grid::index_of(neighbour)) else {
+            return false;
+        };
+        let Some((id, tile)) = self.cells.get(slot).copied().flatten() else {
+            return false;
+        };
+        let instance = frame.instance(id);
+        is_transparent(instance)
+            && sources
+                .geometry
+                .is_full_tile(instance.reference(), tile.image())
+    }
+
+    /// Counts one more frame of waiting for `reference` and reports it once it has waited
+    /// [`LATE_OBJECT_FRAMES`] frames in a row (REQ-E3D-646).
+    #[cold]
+    fn note_waiting(&mut self, reference: InstanceRef, counter: i32) {
+        let entry = self.waiting.entry(reference).or_insert(WaitingObject {
+            since: counter,
+            last_seen: counter,
+            reported: false,
+        });
+        // A frame counter that went backwards — a savestate restore, a reset — restarts the
+        // window rather than reporting a wait that never happened.
+        if counter < entry.last_seen {
+            entry.since = counter;
+        }
+        entry.last_seen = counter;
+        if !entry.reported && counter - entry.since >= LATE_OBJECT_FRAMES {
+            entry.reported = true;
+            self.late.push(reference);
+        }
+    }
+
+    /// Drops the objects that did not wait on this frame: they are drawable again — the first
+    /// frame after their meshes arrived draws them (REQ-E3D-646) — or no longer in the frame.
+    fn forget_ready_objects(&mut self, counter: i32) {
+        if self.waiting.is_empty() {
+            return;
+        }
+        self.waiting.retain(|_, object| object.last_seen == counter);
+    }
+
+    fn add_instance(
+        &mut self,
+        frame: &ConversionFrame,
+        id: FrameInstanceId,
+        sources: &mut DrawSources<'_>,
+    ) {
+        let instance = frame.instance(id);
+        let shape = frame.shape(id.shape);
+        let look = InstanceLook::of(instance, shape, sources);
+
+        // REQ-SCN-087 step 2 only ever applies to a background instance the drawn instance
+        // itself declares transparent, and only when the map of step 1 was built at all; the
+        // sprites are left out. The empty map is tested first, so a frame that can lose no face
+        // reaches the loop on one `is_empty` and nothing else.
+        //
+        // The decision is per **instance**, so it picks one of two monomorphisations of the tile
+        // loop instead of being tested inside a single one. A loop that *may* call
+        // `removed_sides` pays, on every tile it draws, the spills and reloads that call needs
+        // around it — even on a frame where the branch is never taken: step 12 measured one
+        // shared loop at **+0.26 %** of the whole process on a ROM with no profile at all, which
+        // is above the owner's +0.05 % bar for a picture with nothing transparent in it. With
+        // `REMOVAL = false` the removal is dead code, the mesh comes from `mesh_of` as AMD-057
+        // asks for it, and the loop is instruction for instruction the one before the amendment.
+        if self.cells.is_empty() || !shape.background() || !is_transparent(instance) {
+            self.push_tiles::<false>(frame, id, instance, shape, &look, sources);
+        } else {
+            self.push_tiles::<true>(frame, id, instance, shape, &look, sources);
+        }
+    }
+
+    /// Pushes the drawn tiles of one instance, in the tile order of its shape.
+    ///
+    /// `REMOVAL` turns on step 2 of AMD-063 REQ-SCN-087, which only a transparent background
+    /// instance of a frame whose map was built ever needs; [`DrawListBuilder::add_instance`]
+    /// says why it is a type parameter and not an argument.
+    fn push_tiles<const REMOVAL: bool>(
+        &mut self,
+        frame: &ConversionFrame,
+        id: FrameInstanceId,
+        instance: &FrameInstance,
+        shape: &FrameShape,
+        look: &InstanceLook,
+        sources: &mut DrawSources<'_>,
+    ) {
+        for tile in frame.shape_tiles(id.shape) {
+            if shape.restored_from_pinned_frame() && !frame.tile_overlaps_pinned_rects(tile) {
+                continue;
+            }
+
+            // AMD-057: the drawn mesh is the mesh of REQ-E3D-501, every wall included. The
+            // per-instance neighbour map Q-067 needed to find the covered walls — a hash insert
+            // and a hash lookup per tile — is gone with it; REQ-SCN-065 is held by the depth of
+            // the inner walls in the scene vertex shader instead.
+            //
+            // AMD-063 REQ-SCN-087: a full tile of a transparent background instance gives up the
+            // lateral faces that fall on a joint with another transparent full tile.
+            let mesh = if REMOVAL {
+                let removed = if sources
+                    .geometry
+                    .is_full_tile(instance.reference(), tile.image())
+                {
+                    self.removed_sides(frame, tile, sources)
+                } else {
+                    TileSides::NONE
+                };
+                sources
+                    .geometry
+                    .mesh_of_without(instance.reference(), tile.image(), removed)
+            } else {
+                sources.geometry.mesh_of(instance.reference(), tile.image())
+            };
+            self.list
+                .tiles
+                .push(look.tile(id, instance, shape, tile, mesh));
+        }
+    }
+}
+
+/// What every tile of one instance shares: material, shadows, texture and transform parts.
+struct InstanceLook {
+    container: SceneContainer,
+    /// The pattern of the instance (AMD-051 REQ-E3D-644: its diagnostic is per pattern).
+    pattern: PatternId,
+    material: MaterialClass,
+    cast_shadow: bool,
+    receive_shadow: bool,
+    texture: Option<Arc<ObjectTexture>>,
+    format: TextureFormat,
+    /// `Pos . R . S` of REQ-E3D-406, the part of the transform every tile of the instance
+    /// shares; each tile only multiplies it by its own translation, in the same order as the
+    /// whole product, so the floats are those of the full product.
+    placement: Mat4,
+    size: Vec3,
+    deform_pivot: Vec3,
+}
+
+impl InstanceLook {
+    #[allow(clippy::cast_precision_loss)] // C# int-to-float conversions of small values.
+    fn of(instance: &FrameInstance, shape: &FrameShape, sources: &DrawSources<'_>) -> Self {
+        let settings = sources.settings;
+        let layer = instance.effective_layer(settings);
+        let layer_setting = settings.layer(layer);
+        let ui = layer == ZLayer::Ui;
+        let material = material_of(instance, ui);
+
+        // The texture comes from the instance's own pattern instance, unless a script
+        // redirected the texture slot with shape.slot = other.slot (SPEC-05 REQ-LUA-097).
+        let texture_owner = instance.texture_owner();
+        let texture = sources.geometry.texture_of(texture_owner);
+        let format = texture.as_ref().map_or_else(
+            || {
+                sources
+                    .patterns
+                    .instance(texture_owner)
+                    .and_then(|owner| owner.texture.as_ref())
+                    .and_then(|texture| texture.pixels.as_ref())
+                    .map_or(TextureFormat::Indexed, |pixels| pixels.format)
+            },
+            |texture| texture.format(),
+        );
+
+        let size = Vec3::new(
+            (shape.pixel_end().x - shape.pixel_start().x + 1) as f32,
+            (shape.pixel_end().y - shape.pixel_start().y + 1) as f32,
+            instance.depth as f32,
+        );
+
+        Self {
+            container: if ui {
+                SceneContainer::Interface
+            } else {
+                SceneContainer::Game
+            },
+            pattern: instance.reference().pattern,
+            material,
+            cast_shadow: settings.shadow
+                && !ui
+                && matches!(material, MaterialClass::Opaque | MaterialClass::ShadowOnly)
+                && instance.cast_shadow
+                && layer_setting.cast_shadow,
+            receive_shadow: settings.shadow
+                && !ui
+                && instance.receive_shadow
+                && layer_setting.receive_shadow,
+            texture,
+            format,
+            placement: Mat4::translation(instance.pos)
+                * rotation_of(instance)
+                * Mat4::scale_matrix(scale_of(instance, shape, settings)),
+            size,
+            deform_pivot: deform_pivot(instance, shape, size, sources.format_version_2),
+        }
+    }
+
+    #[allow(clippy::cast_precision_loss)] // C# int-to-float conversions of small values.
+    fn tile(
+        &self,
+        id: FrameInstanceId,
+        instance: &FrameInstance,
+        shape: &FrameShape,
+        tile: &FrameTile,
+        mesh: Option<Arc<TileMesh>>,
+    ) -> DrawTile {
+        let anchor = instance.pos;
+        let tile_center = Vec3::new(
+            (tile.x() + 4) as f32 + instance.offset.x,
+            (grid::SCENE_HEIGHT - tile.y() - 4) as f32 + instance.offset.y,
+            instance.center.z,
+        );
+
+        // P = Pos + R . (S (T - Pos + v)) : REQ-E3D-406.
+        let transform = self.placement * Mat4::translation(tile_center - anchor);
+
+        // REQ-E3D-560: the palette table is customPalette when it is set, and otherwise the
+        // palette of **each tile of the frame** (plus 4 for a sprite shape) — not the shape's
+        // own palette, which REQ-E3D-047 derives from the germ alone. A background shape that
+        // spans several attribute quads therefore keeps the colours of each quad, as
+        // REQ-SCN-034 restates. A background tile in sub-palette 4-7 (a margin decoder's own
+        // palette) uses tables 8-11, where the frame keeps that palette.
+        let palette_table = if self.format == TextureFormat::Direct {
+            -1
+        } else if instance.custom_palette >= 0 {
+            instance.custom_palette
+        } else {
+            tile.palette()
+                + if shape.background() && tile.palette() < 4 {
+                    0
+                } else {
+                    4
+                }
+        };
+
+        let deform = instance.deform_enabled().then(|| DeformParameters {
+            amplitude: instance.deform_amplitude,
+            speed: instance.deform_speed,
+            phase: instance.deform_offset,
+            size: self.size,
+            tile_relative_to_pivot: Vec3::new(
+                (tile.x() + 4) as f32,
+                (grid::SCENE_HEIGHT - tile.y() - 4) as f32,
+                0.0,
+            ) - self.deform_pivot,
+        });
+
+        DrawTile {
+            instance: id,
+            pattern: self.pattern,
+            tile: *tile,
+            mesh,
+            transform,
+            anchor,
+            tile_center,
+            container: self.container,
+            material: self.material,
+            alpha: instance.alpha,
+            texture: self.texture.clone(),
+            texture_format: self.format,
+            palette_table,
+            tex_offset: instance.tex_offset,
+            tex_tilting: instance.tex_tilting,
+            cast_shadow: self.cast_shadow,
+            receive_shadow: self.receive_shadow,
+            sprite: !shape.background(),
+            behind_background: !shape.background() && tile.hidden(),
+            deform,
+        }
+    }
+}
+
+/// The material class of SPEC-04B REQ-E3D-566 and REQ-E3D-642: interface in the UI layer,
+/// shadow-only for render style 2, opaque when alpha is 1, transparent otherwise.
+fn material_of(instance: &PatternInstance, ui: bool) -> MaterialClass {
+    if ui {
+        MaterialClass::Interface
+    } else if instance.style == RenderStyle::ShadowOnly {
+        MaterialClass::ShadowOnly
+    } else if instance.alpha >= 1.0 {
+        MaterialClass::Opaque
+    } else {
+        MaterialClass::Transparent
+    }
+}
+
+/// The rotation of SPEC-04B REQ-E3D-407: `Rx·Ry·Rz`, or `Ry·Rx·Rz` when the tags carry
+/// `_gaxis`.
+///
+/// `_gaxis` has to be one element of the comma-separated list, not a piece of a longer tag;
+/// one object of the built-in catalogue stores `mc._gaxis` and so keeps the default order,
+/// which is why annex A counts one more than the engine does (Q-018).
+fn rotation_of(instance: &PatternInstance) -> Mat4 {
+    let x = Mat4::rotation_x(instance.rotation.x);
+    let y = Mat4::rotation_y(instance.rotation.y);
+    let z = Mat4::rotation_z(instance.rotation.z);
+    if instance.has_tag(GROUND_AXIS_TAG) {
+        y * x * z
+    } else {
+        x * y * z
+    }
+}
+
+/// The scale of an instance, with the MARCHING correction of SPEC-04B REQ-E3D-408.
+#[allow(clippy::cast_precision_loss)] // C# int-to-float conversions of small values.
+fn scale_of(instance: &FrameInstance, shape: &FrameShape, settings: &ConversionSettings) -> Vec3 {
+    let scale = instance.scale;
+    if instance.effective_algorithm(settings.render_algorithm) != RenderAlgorithm::Marching {
+        return scale;
+    }
+
+    let sx = (shape.pixel_end().x - shape.pixel_start().x + 1) as f32;
+    let sy = (shape.pixel_end().y - shape.pixel_start().y + 1) as f32;
+    let sz = instance.depth as f32;
+    Vec3::new(
+        scale.x * (sx / (sx + 1.0)),
+        scale.y * (sy / (sy + 1.0)),
+        if sz == 0.0 {
+            0.0
+        } else {
+            scale.z * (sz / (sz + 1.0))
+        },
+    )
+}
+
+/// The deformation pivot `Pd` of SPEC-04B REQ-E3D-568:
+/// `deltaPivot ⊙ sz + (pStart.x, Hs − pEnd.y − h₀, −D/2)`, with `h₀ = 0` for a version 2
+/// profile and 1 otherwise.
+#[allow(clippy::cast_precision_loss)] // C# int-to-float conversions of small values.
+fn deform_pivot(
+    instance: &PatternInstance,
+    shape: &FrameShape,
+    size: Vec3,
+    format_version_2: bool,
+) -> Vec3 {
+    let h0 = if format_version_2 { 0.0 } else { 1.0 };
+    Vec3::scale(instance.deform_pivot, size)
+        + Vec3::new(
+            shape.pixel_start().x as f32,
+            (grid::SCENE_HEIGHT - shape.pixel_end().y) as f32 - h0,
+            -instance.depth as f32 / 2.0,
+        )
+}
+
+/// Whether a frame instance is **transparent** in the sense of AMD-063 REQ-SCN-087: its own
+/// opacity is strictly below 1 and its own render style is not "shadow only". An `alpha` above 1
+/// is therefore opaque. Only the drawn instance decides: the `alpha` of the profile reaches this
+/// through it and nowhere else.
+fn is_transparent(instance: &FrameInstance) -> bool {
+    instance.alpha < 1.0 && instance.style != RenderStyle::ShadowOnly
+}

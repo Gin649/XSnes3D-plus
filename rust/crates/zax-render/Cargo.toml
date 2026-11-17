@@ -1,0 +1,56 @@
+[package]
+name = "zax-render"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[features]
+# An offscreen GL context (EGL, Mesa surfaceless or default display, off Windows; WGL on a hidden
+# window on Windows) for the tests and the harness. It is
+# not part of the renderer's API, which takes the host's `glow::Context`; it lives here because
+# this is the crate allowed to hold `unsafe` GL code (RUST-PORT-PLAN §2).
+offscreen = ["dep:khronos-egl", "dep:libloading", "dep:windows-sys"]
+# The wgpu backend of the renderer (Vulkan, and DirectX 12 on Windows), desktop only: the
+# handheld package never turns it on.
+wgpu = ["dep:wgpu", "dep:pollster"]
+
+[dependencies]
+glow = "0.16"
+png = "0.17"
+pollster = { version = "0.4", optional = true }
+thiserror = "2"
+zax-engine3d = { path = "../zax-engine3d" }
+zax-profiles = { path = "../zax-profiles" }
+wgpu = { version = "30.0.0", optional = true, default-features = false, features = [
+    "std",
+    "parking_lot",
+    "dx12",
+    "vulkan",
+    "wgsl",
+] }
+
+[target.'cfg(not(windows))'.dependencies]
+khronos-egl = { version = "6", features = ["dynamic"], optional = true }
+libloading = { version = "0.8", optional = true }
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", optional = true, features = [
+    "Win32_Foundation",
+    "Win32_Graphics_Gdi",
+    "Win32_Graphics_OpenGL",
+    "Win32_System_LibraryLoader",
+    "Win32_UI_WindowsAndMessaging",
+] }
+
+[dev-dependencies]
+flate2 = "1"
+# AMD-060 §4: the two precomputed tables are "reprises à l'octet", which
+# `tests/amd060_smaa_tests.rs` pins by SHA-256. Already in the tree (zax-profiles),
+# so this adds no dependency to the lock file.
+sha2 = "0.10"
+zax-render = { path = ".", features = ["offscreen"] }
+
+[lints]
+workspace = true

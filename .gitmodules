@@ -1,6 +1,3 @@
 [submodule "external/mesen2"]
 	path = external/mesen2
 	url = https://github.com/SourMesen/Mesen2.git
-[submodule "external/xnes3d-plus"]
-	path = external/xnes3d-plus
-	url = https://github.com/Gin649/Xnes3D-plus.git

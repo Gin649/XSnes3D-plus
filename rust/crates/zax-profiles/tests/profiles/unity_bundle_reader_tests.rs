@@ -1,0 +1,599 @@
+use zax_profiles::import::{
+    read_text_assets, UnityBundle, UnityCompression, UnitySerializedFile, TEXT_ASSET_CLASS_ID,
+};
+
+use super::common::synthetic_bundle::{
+    self as synthetic, compression_code, SyntheticBundleOptions, ASSET_BUNDLE_CLASS_ID,
+};
+
+fn payload(seed: u8, length: usize) -> Vec<u8> {
+    // Compressible but not trivial: long runs with a changing pattern, which gives the LZ4
+    // encoder both literals and matches.
+    (0..length)
+        .map(|index| {
+            if index % 97 < 40 {
+                seed
+            } else {
+                u8::try_from((usize::from(seed) + index) % 251).unwrap()
+            }
+        })
+        .collect()
+}
+
+fn assets() -> Vec<(&'static str, Vec<u8>)> {
+    vec![
+        ("Pinball", payload(0x11, 300)),
+        ("Blaster Master (U)", payload(0x22, 70_000)),
+        ("pacman", payload(0x33, 5)),
+    ]
+}
+
+fn layouts() -> Vec<(&'static str, SyntheticBundleOptions)> {
+    [
+        stored_layouts(),
+        compressed_layouts(),
+        serialized_file_layouts(),
+        three_d_sen_2_layouts(),
+    ]
+    .concat()
+}
+
+/// The two layouts AMD-039 §4 asks for that must read like any other.
+fn three_d_sen_2_layouts() -> Vec<(&'static str, SyntheticBundleOptions)> {
+    vec![
+        (
+            "3dSen 2.0: format 8, flag 0x200",
+            SyntheticBundleOptions::three_d_sen_2(),
+        ),
+        (
+            "3dSen 2.0 flags with the info block at the end",
+            SyntheticBundleOptions {
+                info_at_end: true,
+                ..SyntheticBundleOptions::three_d_sen_2()
+            },
+        ),
+    ]
+}
+
+fn stored_layouts() -> Vec<(&'static str, SyntheticBundleOptions)> {
+    let default = SyntheticBundleOptions::default;
+    vec![
+        ("stored, one block, info first", default()),
+        (
+            "stored, info at the end",
+            SyntheticBundleOptions {
+                info_at_end: true,
+                ..default()
+            },
+        ),
+        (
+            "stored, 8 KiB blocks",
+            SyntheticBundleOptions {
+                block_size: 8 * 1024,
+                ..default()
+            },
+        ),
+        (
+            "bundle format version 6",
+            SyntheticBundleOptions {
+                format_version: 6,
+                ..default()
+            },
+        ),
+        (
+            "bundle format version 8",
+            SyntheticBundleOptions {
+                format_version: 8,
+                ..default()
+            },
+        ),
+    ]
+}
+
+fn compressed_layouts() -> Vec<(&'static str, SyntheticBundleOptions)> {
+    let default = SyntheticBundleOptions::default;
+    vec![
+        (
+            "LZ4 blocks, one block",
+            SyntheticBundleOptions {
+                block_compression: UnityCompression::Lz4,
+                ..default()
+            },
+        ),
+        (
+            "LZ4 blocks of 128 KiB, as measured",
+            SyntheticBundleOptions {
+                block_compression: UnityCompression::Lz4,
+                block_size: 128 * 1024,
+                ..default()
+            },
+        ),
+        (
+            "LZ4 info and blocks, info at the end",
+            SyntheticBundleOptions {
+                info_compression: UnityCompression::Lz4,
+                block_compression: UnityCompression::Lz4,
+                block_size: 16 * 1024,
+                info_at_end: true,
+                ..default()
+            },
+        ),
+        (
+            "LZ4HC flagged blocks",
+            SyntheticBundleOptions {
+                block_compression: UnityCompression::Lz4Hc,
+                block_size: 32 * 1024,
+                ..default()
+            },
+        ),
+        (
+            "big-endian, LZ4, several blocks, info at the end",
+            SyntheticBundleOptions {
+                big_endian: true,
+                block_compression: UnityCompression::Lz4,
+                info_compression: UnityCompression::Lz4,
+                block_size: 4 * 1024,
+                info_at_end: true,
+                ..default()
+            },
+        ),
+    ]
+}
+
+fn serialized_file_layouts() -> Vec<(&'static str, SyntheticBundleOptions)> {
+    let default = SyntheticBundleOptions::default;
+    vec![
+        (
+            "big-endian serialized file",
+            SyntheticBundleOptions {
+                big_endian: true,
+                ..default()
+            },
+        ),
+        (
+            "serialized file version 17",
+            SyntheticBundleOptions {
+                serialized_version: 17,
+                ..default()
+            },
+        ),
+        (
+            "serialized file version 19",
+            SyntheticBundleOptions {
+                serialized_version: 19,
+                ..default()
+            },
+        ),
+        (
+            "serialized file version 22",
+            SyntheticBundleOptions {
+                serialized_version: 22,
+                ..default()
+            },
+        ),
+        (
+            "serialized file version 22, big-endian",
+            SyntheticBundleOptions {
+                serialized_version: 22,
+                big_endian: true,
+                ..default()
+            },
+        ),
+        (
+            "no type tree",
+            SyntheticBundleOptions {
+                type_tree: false,
+                ..default()
+            },
+        ),
+    ]
+}
+
+/// AMD-030 §4, §6
+#[test]
+fn every_layout_yields_the_same_text_assets() {
+    let expected = assets();
+    for (layout, options) in layouts() {
+        let bundle = synthetic::build(&expected, &options);
+
+        assert_assets_read(layout, &expected, &bundle);
+    }
+}
+
+/// AMD-039 §4, first bullet: a format 8 bundle with flags 0x243 whose compressed information
+/// block does not end on a multiple of 16 gives the expected `TextAsset`s — the data blocks are
+/// found at the next 16-byte boundary and not right after the block.
+#[test]
+fn the_data_blocks_of_a_bundle_with_flag_0x200_start_on_a_multiple_of_16() {
+    let expected = assets();
+    let layout = synthetic::build_with_layout(&expected, &SyntheticBundleOptions::three_d_sen_2());
+
+    // The flags of the measured 2.0 header: LZ4HC (3), file list (0x40), alignment (0x200).
+    assert_eq!(0x243, layout.flags);
+
+    // The case that matters: like the measured 1429-byte block ending at 1493, this one does not
+    // end on a boundary, so the padding is what the reader must skip.
+    assert_ne!(0, layout.info_end % 16);
+    assert_eq!(layout.info_end.div_ceil(16) * 16, layout.data_start);
+    assert_eq!(
+        vec![0_u8; layout.data_start - layout.info_end],
+        layout.bytes[layout.info_end..layout.data_start]
+    );
+
+    assert_assets_read("flag 0x200", &expected, &layout.bytes);
+}
+
+/// AMD-039 §4, second bullet: the very same bytes with bit 0x200 taken out of the header — the
+/// padding still in front of the data — import no profile at all and do not crash (AMD-030 §5).
+#[test]
+fn the_same_bundle_without_flag_0x200_is_refused_rather_than_misread() {
+    let expected = assets();
+    let aligned = synthetic::build_with_layout(&expected, &SyntheticBundleOptions::three_d_sen_2());
+    let same = synthetic::build_with_layout(
+        &expected,
+        &SyntheticBundleOptions {
+            align_data_flag: Some(false),
+            ..SyntheticBundleOptions::three_d_sen_2()
+        },
+    );
+
+    // Only the flag word differs: the bundle still carries its padding bytes.
+    assert_eq!(0x43, same.flags);
+    assert_eq!(aligned.data_start, same.data_start);
+    assert_eq!(aligned.bytes.len(), same.bytes.len());
+
+    // A message, which is how AMD-030 §5 asks a bundle that cannot be read to come out: an
+    // error, not a panic, and no asset.
+    let refusal = read_text_assets(&same.bytes);
+    assert!(
+        refusal.is_err(),
+        "the padded bundle without flag 0x200 must be refused, not misread"
+    );
+}
+
+/// AMD-039 §4, third bullet: with bits 0x80 and 0x200 both set, the data blocks follow the
+/// aligned header and bit 0x200 adds nothing.
+#[test]
+fn flag_0x200_has_no_effect_when_the_information_block_is_at_the_end() {
+    let expected = assets();
+    let layout = synthetic::build_with_layout(
+        &expected,
+        &SyntheticBundleOptions {
+            info_at_end: true,
+            ..SyntheticBundleOptions::three_d_sen_2()
+        },
+    );
+
+    assert_eq!(0x2C3, layout.flags);
+
+    // The header of this bundle ends at 50 and its data start at 64, the aligned position of
+    // AMD-030 §4.2: no further padding was inserted.
+    assert_eq!(64, layout.data_start);
+
+    assert_assets_read("flags 0x80 and 0x200", &expected, &layout.bytes);
+}
+
+/// Checks that `bundle` holds `expected`, name for name and byte for byte; `what` names the
+/// layout in the failure message.
+fn assert_assets_read(what: &str, expected: &[(&str, Vec<u8>)], bundle: &[u8]) {
+    let read = read_text_assets(bundle).unwrap();
+
+    assert_eq!(expected.len(), read.len(), "{what}");
+    for ((name, script), asset) in expected.iter().zip(&read) {
+        assert_eq!(*name, asset.name, "{what}");
+        assert!(
+            *script == asset.script,
+            "{what}: the payload of \"{name}\" came back changed."
+        );
+    }
+}
+
+/// AMD-030 §4.1
+#[test]
+fn the_header_fields_are_read() {
+    let bundle = synthetic::build(&assets(), &SyntheticBundleOptions::default());
+
+    let container = UnityBundle::read(&bundle).unwrap();
+
+    assert_eq!(7, container.format_version);
+    assert_eq!("5.x.x", container.player_version);
+    assert_eq!(synthetic::ENGINE_VERSION, container.engine_version);
+    assert_eq!(1, container.files.len());
+    let node = &container.files[0];
+    assert!(node.path.starts_with("CAB-"));
+    assert_eq!(4, node.flags);
+}
+
+/// AMD-030 §4.1: the information block of a version 7 bundle starts on a multiple of 16.
+#[test]
+fn the_information_block_of_a_version_7_bundle_is_aligned_on_16_bytes() {
+    let bundle = synthetic::build(&assets(), &SyntheticBundleOptions::default());
+
+    // "UnityFS\0" + u32 + "5.x.x\0" + "2019.4.41f2\0" + i64 + 3 x u32 = 50 bytes, and the block
+    // that follows starts at 64. The padding is what the bytes between show.
+    assert!(50 < bundle.len());
+    assert_eq!(64, 50_usize.div_ceil(16) * 16);
+    assert_eq!(vec![0_u8; 14], bundle[50..64]);
+
+    // Reading it back proves the reader skips exactly the same padding.
+    assert_eq!(3, read_text_assets(&bundle).unwrap().len());
+}
+
+/// AMD-030 §4.3, §4.4
+#[test]
+fn the_serialized_file_exposes_its_version_order_and_classes() {
+    let expected = assets();
+    let bundle = synthetic::build(
+        &expected,
+        &SyntheticBundleOptions {
+            big_endian: true,
+            serialized_version: 21,
+            ..SyntheticBundleOptions::default()
+        },
+    );
+    let container = UnityBundle::read(&bundle).unwrap();
+
+    let serialized = UnitySerializedFile::read(&container.files[0].data).unwrap();
+
+    assert_eq!(21, serialized.version);
+    assert!(serialized.is_big_endian);
+    assert_eq!(synthetic::ENGINE_VERSION, serialized.unity_version);
+
+    // The measured file holds one TextAsset per profile plus the AssetBundle object.
+    assert_eq!(expected.len() + 1, serialized.objects.len());
+    assert_eq!(
+        expected.len(),
+        serialized
+            .objects
+            .iter()
+            .filter(|object| object.class_id == TEXT_ASSET_CLASS_ID)
+            .count()
+    );
+    assert_eq!(
+        1,
+        serialized
+            .objects
+            .iter()
+            .filter(|object| object.class_id == ASSET_BUNDLE_CLASS_ID)
+            .count()
+    );
+}
+
+/// AMD-030 §4.4: an empty payload is still a payload.
+#[test]
+fn an_empty_text_asset_is_read() {
+    let bundle = synthetic::build(&[("empty", Vec::new())], &SyntheticBundleOptions::default());
+
+    let read = read_text_assets(&bundle).unwrap();
+
+    assert_eq!(1, read.len());
+    assert_eq!("empty", read[0].name);
+    assert_eq!(read[0].script, [] as [u8; 0]);
+}
+
+/// AMD-030 §4.4: a name whose length is not a multiple of four exercises the alignment.
+#[test]
+fn names_of_every_length_modulo_four_are_read() {
+    let assets: Vec<(&str, Vec<u8>)> = vec![
+        ("a", vec![1]),
+        ("ab", vec![2, 2]),
+        ("abc", vec![3, 3, 3]),
+        ("abcd", vec![4, 4, 4, 4]),
+        ("accentué", vec![5]),
+    ];
+
+    let read = read_text_assets(&synthetic::build(
+        &assets,
+        &SyntheticBundleOptions::default(),
+    ))
+    .unwrap();
+
+    assert_eq!(assets.len(), read.len());
+    for ((name, script), asset) in assets.iter().zip(&read) {
+        assert_eq!(*name, asset.name);
+        assert_eq!(*script, asset.script);
+    }
+}
+
+/// AMD-030 §5: unknown signature.
+#[test]
+fn a_file_that_is_not_a_bundle_is_refused() {
+    let bytes = b"UnityWeb\0and then nothing useful at all......";
+
+    let error = read_text_assets(bytes).unwrap_err();
+
+    assert!(
+        error.message().contains("not a Unity asset bundle"),
+        "{error}"
+    );
+    assert!(error.message().contains("UnityWeb"), "{error}");
+}
+
+/// AMD-030 §5: a truncated file, cut at several places.
+#[test]
+fn a_truncated_bundle_is_refused() {
+    let bundle = synthetic::build(&assets(), &SyntheticBundleOptions::default());
+
+    for kept in [0, 4, 30, 60, 200] {
+        assert!(
+            read_text_assets(&bundle[..kept.min(bundle.len())]).is_err(),
+            "kept {kept}"
+        );
+    }
+}
+
+/// AMD-030 §5: cutting the tail off an otherwise well-formed bundle.
+#[test]
+fn a_bundle_cut_in_its_data_blocks_is_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            block_size: 8 * 1024,
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle[..bundle.len() - 4096]).unwrap_err();
+
+    assert!(error.message().contains("truncated"), "{error}");
+}
+
+/// AMD-030 §4.1: LZMA is refused with a message that names it.
+#[test]
+fn an_lzma_information_block_is_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            info_compression_code: Some(compression_code(UnityCompression::Lzma)),
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(error.message().contains("LZMA"), "{error}");
+    assert!(error.message().contains("information block"), "{error}");
+}
+
+/// AMD-030 §4.1
+#[test]
+fn lzma_data_blocks_are_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            block_compression_code: Some(
+                u16::try_from(compression_code(UnityCompression::Lzma)).unwrap(),
+            ),
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(error.message().contains("LZMA"), "{error}");
+}
+
+/// AMD-030 §4.2: an unknown compression code is refused, not guessed.
+#[test]
+fn an_unknown_compression_code_is_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            block_compression_code: Some(9),
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(
+        error.message().contains("unknown compression code 9"),
+        "{error}"
+    );
+}
+
+/// AMD-030 §5: a file table that points outside the decompressed stream.
+#[test]
+fn a_file_node_out_of_range_is_refused() {
+    for (offset_delta, size_delta) in [(1_000_000, 0), (-8, 0), (0, 1_000_000), (0, -1_000_000)] {
+        let bundle = synthetic::build(
+            &assets(),
+            &SyntheticBundleOptions {
+                node_offset_delta: offset_delta,
+                node_size_delta: size_delta,
+                ..SyntheticBundleOptions::default()
+            },
+        );
+
+        assert!(
+            read_text_assets(&bundle).is_err(),
+            "{offset_delta} {size_delta}"
+        );
+    }
+}
+
+/// AMD-030 §5: a block table announcing an absurd stream is refused, not allocated.
+#[test]
+fn a_block_table_announcing_more_than_the_cap_is_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            block_uncompressed_size_code: Some(0xF000_0000),
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(error.message().contains("once decompressed"), "{error}");
+}
+
+/// AMD-030 §4.1: a format version outside 6 to 8.
+#[test]
+fn an_unsupported_bundle_version_is_refused() {
+    let mut bundle = synthetic::build(&assets(), &SyntheticBundleOptions::default());
+
+    // The version is the u32 right after "UnityFS\0".
+    bundle[8..12].copy_from_slice(&[0, 0, 0, 9]);
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(
+        error.message().contains("version 9 is not supported"),
+        "{error}"
+    );
+}
+
+/// AMD-030 §4.1: bit 0x40 clear leaves nothing to extract.
+#[test]
+fn a_bundle_without_a_file_list_is_refused() {
+    let bundle = synthetic::build(
+        &assets(),
+        &SyntheticBundleOptions {
+            file_list: false,
+            ..SyntheticBundleOptions::default()
+        },
+    );
+
+    let error = read_text_assets(&bundle).unwrap_err();
+
+    assert!(error.message().contains("no file list"), "{error}");
+}
+
+/// AMD-030 §4.3: versions 17 to 22 and nothing else.
+#[test]
+fn an_unsupported_serialized_file_version_is_refused() {
+    for version in [16_u8, 23] {
+        let mut serialized = synthetic::build_serialized_file(
+            &assets(),
+            &SyntheticBundleOptions {
+                serialized_version: 21,
+                ..SyntheticBundleOptions::default()
+            },
+        );
+
+        // The version is the third u32 of the big-endian header.
+        serialized[8..12].copy_from_slice(&[0, 0, 0, version]);
+
+        let error = UnitySerializedFile::read(&serialized).unwrap_err();
+
+        assert!(
+            error
+                .message()
+                .contains(&format!("version {version} is not supported")),
+            "{error}"
+        );
+    }
+}
+
+/// AMD-030 §5: an object table pointing past the end of the file.
+#[test]
+fn a_serialized_file_whose_object_table_is_out_of_range_is_refused() {
+    let serialized =
+        synthetic::build_serialized_file(&assets(), &SyntheticBundleOptions::default());
+
+    // Shorten the file without touching its table: every object now ends out of range.
+    let cut = &serialized[..serialized.len() / 2];
+
+    assert!(UnitySerializedFile::read(cut).is_err());
+}
