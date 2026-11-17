@@ -1537,6 +1537,8 @@ version = "0.1.0"
 dependencies = [
  "cc",
  "png",
+ "zax-engine3d",
+ "zax-profiles",
 ]
 
 [[package]]

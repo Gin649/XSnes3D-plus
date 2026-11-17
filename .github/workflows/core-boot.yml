@@ -69,7 +69,7 @@ jobs:
         working-directory: rust
         run: |
           cargo fmt -p zax-snes --check
-          cargo clippy --release -p zax-snes --all-targets -- -D warnings
+          cargo clippy --release -p zax-snes --all-targets --no-deps -- -D warnings
 
       - name: Boot picture
         working-directory: rust

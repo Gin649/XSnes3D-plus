@@ -160,6 +160,9 @@ pub struct FrameBatch<'a> {
     /// `$3F00-$3F0F`): background records in sub-palettes 4-7 are in its sub-palettes 0-3.
     /// `None` for a frame without (its records stay in sub-palettes 0-3).
     pub margin_palette: Option<[u8; 16]>,
+    /// `XSnes3D+`: the frame's 256 colours (a SNES frame's CGRAM). When set, the frame palette
+    /// is these colours and `palette` and `margin_palette` are not used.
+    pub colors: Option<&'a [crate::palette::Rgb24; 256]>,
     /// Width in NES pixels of the unreliable bands on the left *and* right edges
     /// (REQ-CORE-046).
     pub mask_x: i32,

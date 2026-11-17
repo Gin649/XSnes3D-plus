@@ -68,7 +68,7 @@ pub(crate) struct RawSprite {
     pub palette: u8,
     pub priority: u8,
     pub horizontal_mirror: u8,
-    pub padding: u8,
+    pub vertical_mirror: u8,
     pub chr: [u16; 2],
     pub vram_address: u16,
     pub padding2: u16,
@@ -119,7 +119,7 @@ pub struct SnesTileRecord {
     /// Backgrounds: 0 or 1 (the tile's priority bit). Sprites: 0 to 3.
     pub priority: u8,
     pub flip_x: bool,
-    /// Backgrounds only; the row is already the flipped one.
+    /// Flipped top to bottom; the row is already the one shown on this line.
     pub flip_y: bool,
     /// Backgrounds: the tile number. Sprites: the VRAM word address of the row.
     pub tile: u16,
@@ -223,9 +223,9 @@ pub struct Rebuild {
 /// Everything the tap recorded during one frame.
 #[derive(Debug, Clone, Default)]
 pub struct TileCapture {
-    chunks: Vec<RawChunk>,
-    lines: Vec<RawLine>,
-    sprites: Vec<RawSprite>,
+    pub(crate) chunks: Vec<RawChunk>,
+    pub(crate) lines: Vec<RawLine>,
+    pub(crate) sprites: Vec<RawSprite>,
     cgram: Vec<u16>,
 }
 
@@ -331,7 +331,7 @@ impl TileCapture {
                 palette: sprite.palette,
                 priority: sprite.priority,
                 flip_x: sprite.horizontal_mirror != 0,
-                flip_y: false,
+                flip_y: sprite.vertical_mirror != 0,
                 tile: sprite.vram_address,
                 bg_mode: chunk.bg_mode,
                 palette_snapshot: chunk.cgram_index,

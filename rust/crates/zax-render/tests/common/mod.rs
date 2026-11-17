@@ -618,6 +618,7 @@ impl SceneFixture {
             records: &self.records,
             palette: self.palette,
             margin_palette: None,
+            colors: None,
             mask_x: 0,
             mask_y: 0,
             margin: 0,

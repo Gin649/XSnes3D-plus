@@ -9,9 +9,11 @@ use std::fmt;
 use std::path::Path;
 use std::sync::Mutex;
 
+pub mod engine_input;
 pub mod press;
 pub mod tap;
 
+pub use engine_input::{EngineInput, LayerInput};
 pub use press::{Buttons, PressScript};
 pub use tap::{Rebuild, SnesTileRecord, TileCapture, TileLayer};
 

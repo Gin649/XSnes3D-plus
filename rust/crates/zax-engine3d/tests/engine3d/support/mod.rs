@@ -190,6 +190,7 @@ impl Batch {
             records: &self.records,
             palette: self.palette,
             margin_palette: None,
+            colors: None,
             mask_x: self.mask_x,
             mask_y: self.mask_y,
             margin: 0,

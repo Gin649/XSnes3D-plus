@@ -505,9 +505,13 @@ impl ConversionEngine {
         frame.set_vertical_margin(margin_y);
 
         // (a) frame palette.
-        frame.palette_mut().load_from(&batch.palette);
-        if let Some(margin) = &batch.margin_palette {
-            frame.palette_mut().load_margin(margin);
+        if let Some(colors) = batch.colors {
+            frame.palette_mut().load_rgb(colors);
+        } else {
+            frame.palette_mut().load_from(&batch.palette);
+            if let Some(margin) = &batch.margin_palette {
+                frame.palette_mut().load_margin(margin);
+            }
         }
 
         // (b) filtering and placement of the tiles.
