@@ -202,13 +202,13 @@ fn write_three_way(path: &Path, rebuild: &Rebuild) -> Result<(), String> {
         for x in 0..width {
             let at = (y * width + x) * 3;
             let reference = &rebuild.reference[at..at + 3];
-            let rebuilt = &rebuild.rebuilt[at..at + 3];
-            let difference = if reference == rebuilt {
+            let redrawn = &rebuild.rebuilt[at..at + 3];
+            let difference = if reference == redrawn {
                 [reference[0] / 3, reference[1] / 3, reference[2] / 3]
             } else {
                 [255, 0, 0]
             };
-            for (panel, colour) in [reference, rebuilt, &difference[..]].iter().enumerate() {
+            for (panel, colour) in [reference, redrawn, &difference[..]].iter().enumerate() {
                 let out = (y * total + panel * (width + gap) + x) * 3;
                 rgb[out..out + 3].copy_from_slice(colour);
             }
