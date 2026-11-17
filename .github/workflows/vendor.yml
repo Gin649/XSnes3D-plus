@@ -1,0 +1,42 @@
+name: Vendored crates
+
+# XSnes3D+: the session Claude works in cannot download Rust crates, so this bundles every
+# crate the workspace uses (cargo vendor) with the Cargo.lock that goes with them, and
+# publishes the bundle as the "dev-vendor" pre-release. With it, the workspace builds and
+# tests offline there. Run it from the Actions tab after a dependency changes.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # to publish the bundle as a release
+
+jobs:
+  vendor:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Rust (the version in rust-toolchain.toml)
+        working-directory: rust
+        run: rustup show
+
+      - name: Vendor
+        working-directory: rust
+        run: |
+          cargo generate-lockfile
+          cargo vendor --versioned-dirs "$RUNNER_TEMP/vendor" > "$RUNNER_TEMP/vendor-config.toml"
+          cp Cargo.lock "$RUNNER_TEMP/Cargo.lock"
+          tar -C "$RUNNER_TEMP" -czf "$RUNNER_TEMP/vendor.tar.gz" vendor vendor-config.toml Cargo.lock
+          ls -la "$RUNNER_TEMP/vendor.tar.gz"
+
+      - name: Publish (the "dev-vendor" pre-release, replaced each run)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release delete dev-vendor --yes --cleanup-tag 2>/dev/null || true
+          gh release create dev-vendor "$RUNNER_TEMP/vendor.tar.gz" --prerelease --target "${{ github.sha }}" \
+            --title "Vendored crates (for offline builds)" \
+            --notes "Every crate the workspace uses, with its Cargo.lock, for building without network access. Not an app release."
