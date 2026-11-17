@@ -96,7 +96,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
                 }
             }
             "--press" => {
-                press = PressScript::parse(&value("--press")?).map_err(|e| e.to_string())?
+                press = PressScript::parse(&value("--press")?).map_err(|e| e.to_string())?;
             }
             "--out" => out = PathBuf::from(value("--out")?),
             "--name" => name = Some(value("--name")?),

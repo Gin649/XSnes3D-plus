@@ -1,6 +1,9 @@
-//! Boots tests/roms/hello.sfc (built by tools/make_hello.py) and checks its picture.
+//! Boots `tests/roms/hello.sfc` (built by `tools/make_hello.py`) and checks its picture.
 //!
 //! Everything runs in one test, because only one emulator may exist at a time.
+
+// The helpers below are test code too, so a failed step may stop the test.
+#![allow(clippy::unwrap_used)]
 
 use std::path::PathBuf;
 
