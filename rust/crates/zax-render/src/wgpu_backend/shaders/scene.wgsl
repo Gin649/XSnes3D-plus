@@ -322,9 +322,10 @@ fn fs_main(in: VertexOut) -> @location(0) vec4<f32> {
             in.uv.y * draw.tilting.y + draw.texture.w * size.y);
         let texel = vec2<i32>(zax_mod(floor(uv), size));
         if (color_mode == 0) {
-            // REQ-SCN-034: the index selects 4 * P + (t mod 4) in the frame palette.
+            // REQ-SCN-034, XSnes3D+: the index selects P + t in the 256-entry frame palette,
+            // P being the tiles' first entry (the NES version used 4 * P + (t mod 4)).
             let value = zax_index_texel(draw, texel);
-            let entry = clamp(draw.modes.y, 0, 15) * 4 + i32(value & 3u);
+            let entry = clamp(draw.modes.y + i32(value & 255u), 0, 255);
             albedo = textureLoad(palette, vec2<i32>(entry, 0), 0).rgb;
         } else {
             let direct = zax_color_texel(draw, texel);

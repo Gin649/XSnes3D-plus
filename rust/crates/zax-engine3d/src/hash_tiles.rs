@@ -149,6 +149,11 @@ impl HashProfileTiles {
         let mut count = 0;
         let mut previous: Option<(u64, u64)> = None;
         for record in records {
+            // XSnes3D+: profiles know 2-plane tiles only; a tile with upper planes has no
+            // profile to resolve against.
+            if record.upper != [0; 6] {
+                continue;
+            }
             let planes = (record.plane0, record.plane1);
             if previous == Some(planes) {
                 continue;

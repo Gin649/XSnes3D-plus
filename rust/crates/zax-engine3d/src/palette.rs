@@ -285,81 +285,90 @@ pub const fn nes_color_in(palette: NesPalette, index: usize) -> Rgb24 {
     Rgb24::from_packed(palette.table()[index & 0x3F])
 }
 
-/// The palette of one frame: 16 tables of 4 NES colour indices (REQ-E3D-250).
+/// The palette of one frame (REQ-E3D-250).
 ///
-/// Entry `e` is `p[0]` when `e mod 4 = 0` and `p[e mod 32]` otherwise, where `p` is the 32-byte
-/// PPU palette of the batch (SPEC-02 REQ-CORE-045). Tables 0 to 3 are the background
-/// sub-palettes, 4 to 7 the sprite ones, and tables 8 to 15 repeat tables 0 to 7 so that a
-/// script can use them as custom palettes.
+/// `XSnes3D+`: 256 RGB colours, a tile's colour `v` being entry `p + v` where `p` is the tile's
+/// palette start ([`crate::input::TileRecord::palette`]). For a SNES frame the entries are the
+/// 256 colours of CGRAM ([`FramePalette::load_rgb`]): backgrounds use 0 to 127, sprites 128 to
+/// 255. A NES-style batch ([`FramePalette::load_from`]) fills entries 0 to 63 as the NES
+/// version had them: 16 tables of 4 NES colours, background tables 0 to 3 (palette starts 0,
+/// 4, 8 and 12), sprite tables 4 to 7 (16 to 28), and tables 8 to 15 repeating them.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct FramePalette {
-    entries: [u8; Self::ENTRY_COUNT],
+    entries: [Rgb24; Self::ENTRY_COUNT],
 }
 
 impl Default for FramePalette {
     fn default() -> Self {
         Self {
-            entries: [0; Self::ENTRY_COUNT],
+            entries: [Rgb24::default(); Self::ENTRY_COUNT],
         }
     }
 }
 
 impl FramePalette {
-    /// Number of entries: 16 tables × 4 columns.
-    pub const ENTRY_COUNT: usize = 64;
+    /// Number of entries: the 256 colours of SNES CGRAM.
+    pub const ENTRY_COUNT: usize = 256;
 
-    /// NES colour index (0 to 63) of `entry`, or `None` outside 0..63.
+    /// The colour of `entry`, or `None` outside 0..255.
     #[must_use]
-    pub fn get(&self, entry: usize) -> Option<u8> {
+    pub fn get(&self, entry: usize) -> Option<Rgb24> {
         self.entries.get(entry).copied()
     }
 
-    /// Writes entry `entry` (six bits kept); false when the entry is outside 0..63.
-    pub fn set(&mut self, entry: usize, value: u8) -> bool {
+    /// Writes entry `entry`; false when the entry is outside 0..255.
+    pub fn set(&mut self, entry: usize, value: Rgb24) -> bool {
         match self.entries.get_mut(entry) {
             Some(slot) => {
-                *slot = value & 0x3F;
+                *slot = value;
                 true
             }
             None => false,
         }
     }
 
-    /// The RGB colour of entry `entry` (REQ-E3D-251), or `None` outside 0..63.
+    /// The RGB colour of entry `entry` (REQ-E3D-251), or `None` outside 0..255.
     #[must_use]
     pub fn color(&self, entry: usize) -> Option<Rgb24> {
-        self.get(entry).map(|index| nes_color(usize::from(index)))
+        self.get(entry)
     }
 
     /// The RGB colour of entry 0, the universal background colour (REQ-E3D-254).
     #[must_use]
     pub fn universal_color(&self) -> Rgb24 {
-        nes_color(self.entries[0] as usize)
+        self.entries[0]
     }
 
-    /// Rebuilds the 64 entries from the 32 palette bytes of a frame batch.
+    /// Sets all 256 entries (`XSnes3D+`: a SNES frame's CGRAM).
+    pub fn load_rgb(&mut self, colors: &[Rgb24; Self::ENTRY_COUNT]) {
+        self.entries = *colors;
+    }
+
+    /// Rebuilds entries 0 to 63 from the 32 NES palette bytes of a NES-style batch, as the NES
+    /// version did; entries 64 to 255 are cleared.
     pub fn load_from(&mut self, ppu_palette: &[u8; 32]) {
         let universal = ppu_palette[0] & 0x3F;
         for (e, entry) in self.entries.iter_mut().enumerate() {
-            *entry = if e % 4 == 0 {
-                universal
+            *entry = if e >= 64 {
+                Rgb24::default()
+            } else if e % 4 == 0 {
+                nes_color(usize::from(universal))
             } else {
-                ppu_palette[e & 31] & 0x3F
+                nes_color(usize::from(ppu_palette[e & 31] & 0x3F))
             };
         }
     }
 
-    /// Sets tables 8 to 11 (the copies of the background sub-palettes) to `margin`, a margin
-    /// decoder's own background palette (16 NES colour indices, as `$3F00-$3F0F`): the
-    /// background tiles in sub-palettes 4 to 7 use them. Entries 0 of the tables keep the
-    /// universal background colour.
+    /// Sets tables 8 to 11 (entries 32 to 47, the copies of the background sub-palettes) to
+    /// `margin`, a margin decoder's own background palette (16 NES colour indices, as
+    /// `$3F00-$3F0F`). Entries 0 of the tables keep the universal background colour.
     pub fn load_margin(&mut self, margin: &[u8; 16]) {
         let universal = self.entries[0];
         for (e, entry) in self.entries[32..48].iter_mut().enumerate() {
             *entry = if e % 4 == 0 {
                 universal
             } else {
-                margin[e] & 0x3F
+                nes_color(usize::from(margin[e] & 0x3F))
             };
         }
     }
@@ -369,16 +378,14 @@ impl FramePalette {
         self.entries = source.entries;
     }
 
-    /// Writes the 64 resolved RGB colours of the frame (SPEC-04B REQ-E3D-641).
+    /// Writes the 256 RGB colours of the frame (SPEC-04B REQ-E3D-641).
     pub fn copy_colors_to(&self, destination: &mut [Rgb24; Self::ENTRY_COUNT]) {
-        for (color, &entry) in destination.iter_mut().zip(&self.entries) {
-            *color = nes_color(usize::from(entry));
-        }
+        *destination = self.entries;
     }
 
-    /// Sets every entry to zero.
+    /// Sets every entry to black.
     pub fn clear(&mut self) {
-        self.entries = [0; Self::ENTRY_COUNT];
+        self.entries = [Rgb24::default(); Self::ENTRY_COUNT];
     }
 }
 
@@ -395,16 +402,17 @@ mod tests {
         let mut palette = FramePalette::default();
         palette.load_from(&ppu);
         // Tables 8-11 repeat the background sub-palettes...
-        assert_eq!(palette.get(32 + 5), Some(5));
+        let nes = |index: usize| Some(nes_color(index));
+        assert_eq!(palette.get(32 + 5), nes(5));
         let margin: [u8; 16] = std::array::from_fn(|index| 0x30 + u8::try_from(index).unwrap());
         palette.load_margin(&margin);
         // ...until a margin palette replaces them, entry 0 of each staying the universal colour.
-        assert_eq!(palette.get(32 + 5), Some(0x35));
-        assert_eq!(palette.get(32 + 4), Some(0));
-        assert_eq!(palette.get(47), Some(0x3F));
+        assert_eq!(palette.get(32 + 5), nes(0x35));
+        assert_eq!(palette.get(32 + 4), nes(0));
+        assert_eq!(palette.get(47), nes(0x3F));
         // The background and sprite tables are left alone.
-        assert_eq!(palette.get(5), Some(5));
-        assert_eq!(palette.get(16 + 5), Some(21));
+        assert_eq!(palette.get(5), nes(5));
+        assert_eq!(palette.get(16 + 5), nes(21));
     }
 }
 

@@ -119,7 +119,7 @@ impl Batch {
             image.flip_x,
             image.flip_y,
             false,
-            palette,
+            palette * 4, // XSnes3D+: the record holds the sub-palette's first entry
             true,
         ));
         self
@@ -173,7 +173,7 @@ impl Batch {
             image.flip_x,
             image.flip_y,
             hidden,
-            palette,
+            16 + palette * 4, // XSnes3D+: the sprite sub-palette's first entry
             false,
         ));
         self.sprite_ord += 1;

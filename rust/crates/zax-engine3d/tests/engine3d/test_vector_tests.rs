@@ -383,7 +383,7 @@ fn tv_e3d_08_sprites_with_an_empty_profile_req_e3d_131() {
     assert_eq!(2, frame.shapes().len());
     assert_eq!(0, frame.background_shape_count());
     assert_eq!(vec![2, 1], tile_counts(frame));
-    assert!(frame.shape_list().all(|shape| shape.palette() == 4));
+    assert!(frame.shape_list().all(|shape| shape.palette() == 16)); // XSnes3D+: palettes are first entries now, 4 per NES table
 
     assert_eq!(2, engine.patterns().permanent().len());
     let first = engine.patterns().get(permanent(&engine, 0)).unwrap();
@@ -442,7 +442,7 @@ fn tv_e3d_08_same_sprite_palette_req_e3d_131() {
     engine.settings_mut().same_sprite_palette = false;
     let merged = abc_batch(1).convert(&mut engine, 1);
     assert_eq!(1, merged.shapes().len());
-    assert_eq!(4, merged.shape(merged.shapes()[0]).palette());
+    assert_eq!(16, merged.shape(merged.shapes()[0]).palette()); // XSnes3D+: palettes are first entries now, 4 per NES table
 }
 
 #[test]
@@ -459,14 +459,14 @@ fn tv_e3d_09_frame_palette_req_e3d_250_251() {
     let frame = batch.convert(&mut engine, 0);
     let palette = frame.palette();
 
-    assert_eq!(Some(0x0F), palette.get(0));
-    assert_eq!(Some(0x30), palette.get(1));
-    assert_eq!(Some(0x0F), palette.get(4));
-    assert_eq!(Some(0x16), palette.get(5));
-    assert_eq!(Some(0x0F), palette.get(16));
-    assert_eq!(Some(0x27), palette.get(17));
-    assert_eq!(Some(0x16), palette.get(37));
-    assert_eq!(Some(0x27), palette.get(49));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x0F)), palette.get(0));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x30)), palette.get(1));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x0F)), palette.get(4));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x16)), palette.get(5));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x0F)), palette.get(16));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x27)), palette.get(17));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x16)), palette.get(37));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x27)), palette.get(49));
 
     assert_eq!(Some(Rgb24::new(0xFC, 0x38, 0x00)), palette.color(5));
     assert_eq!(Some(Rgb24::new(0xFC, 0xA0, 0x48)), palette.color(17));

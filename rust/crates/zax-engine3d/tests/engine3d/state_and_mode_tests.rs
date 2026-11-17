@@ -75,7 +75,7 @@ fn digest(engine: &mut ConversionEngine) -> String {
 
     let mut palette = String::new();
     for entry in 0..FramePalette::ENTRY_COUNT {
-        write!(palette, "{:02X}", frame.palette().get(entry).unwrap()).unwrap();
+        write!(palette, "{:06X}", frame.palette().get(entry).unwrap().packed()).unwrap();
     }
 
     for tile in engine.build_draw_list_of(FrameRole::Converting).tiles() {

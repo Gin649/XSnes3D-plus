@@ -33,6 +33,8 @@ use std::sync::atomic::{AtomicBool, Ordering};
 
 use crate::engine::build_geometry;
 use crate::frame::{ConversionFrame, FrameTile, ShapeId};
+use crate::hashing::FastMap;
+use crate::palette::Rgb24;
 use crate::vectors::Cell;
 use crate::instance::PatternInstance;
 use crate::settings::ZLayer;
@@ -285,18 +287,20 @@ fn is_plain(tile: &FrameTile) -> bool {
     tile.image().pixel_count() >= 64 && tile.image().color_count() == 1
 }
 
-/// The NES colour a pixel value (1 to 3) of a background tile shows in this frame.
-fn nes_color(frame: &ConversionFrame, tile: &FrameTile, value: i32) -> Option<u8> {
-    let entry = usize::try_from(tile.palette() * 4 + value).ok()?;
-    frame.palette().get(entry).map(|color| color & 0x3F)
+/// The colour a pixel value of a background tile shows in this frame: entry palette start +
+/// value of the frame palette (`XSnes3D+`: an RGB colour; the NES version compared NES colour
+/// indices).
+fn tile_color(frame: &ConversionFrame, tile: &FrameTile, value: i32) -> Option<Rgb24> {
+    let entry = usize::try_from(tile.palette() + value).ok()?;
+    frame.palette().get(entry)
 }
 
 /// The sky's colour in this frame: the colour of the plain tiles that cover a large share of the
 /// background, mostly in its upper half. `None` when no colour does (the sky of most games is
 /// the background colour itself, which is not drawn as tiles at all).
-fn sky_color(frame: &ConversionFrame) -> Option<u8> {
-    // Per NES colour: plain tiles counted and the sum of their rows.
-    let mut counts = [(0u32, 0i64); 64];
+fn sky_color(frame: &ConversionFrame) -> Option<Rgb24> {
+    // Per colour: plain tiles counted and the sum of their rows.
+    let mut counts: FastMap<Rgb24, (u32, i64)> = FastMap::default();
     let mut total = 0u32;
     for tile in frame.background_tiles() {
         total += 1;
@@ -304,43 +308,37 @@ fn sky_color(frame: &ConversionFrame) -> Option<u8> {
             continue;
         }
         let value = tile.image().color_at(0, 0);
-        if let Some(color) = nes_color(frame, tile, value) {
-            if let Some(entry) = counts.get_mut(usize::from(color)) {
-                entry.0 += 1;
-                entry.1 += i64::from(tile.y());
-            }
+        if let Some(color) = tile_color(frame, tile, value) {
+            let entry = counts.entry(color).or_default();
+            entry.0 += 1;
+            entry.1 += i64::from(tile.y());
         }
     }
+    // The most common colour; ties go to the smaller packed value, so the choice does not
+    // depend on the map's order.
     let (color, (count, rows)) = counts
         .iter()
-        .enumerate()
-        .max_by_key(|(_, (count, _))| *count)?;
+        .max_by_key(|(color, (count, _))| (*count, std::cmp::Reverse(color.packed())))?;
     #[allow(clippy::cast_precision_loss)] // at most a few thousand tiles
     let share = *count as f32 / total.max(1) as f32;
     if share < SKY_SHARE || rows / i64::from((*count).max(1)) >= SKY_LOWEST_MEAN_Y {
         return None;
     }
-    u8::try_from(color).ok()
+    Some(*color)
 }
 
 /// True when at least half of the tile's pixels show `sky`: a plain sky tile, or the edge of the
 /// sky around a cloud, a rope or a rooftop, which goes back with it instead of standing out.
-fn is_mostly_sky(frame: &ConversionFrame, tile: &FrameTile, sky: u8) -> bool {
+fn is_mostly_sky(frame: &ConversionFrame, tile: &FrameTile, sky: Rgb24) -> bool {
     let image = tile.image();
     if is_plain(tile) {
-        return nes_color(frame, tile, image.color_at(0, 0)) == Some(sky);
-    }
-    let mut colors = [None; 4];
-    for (value, slot) in colors.iter_mut().enumerate().skip(1) {
-        *slot = i32::try_from(value)
-            .ok()
-            .and_then(|value| nes_color(frame, tile, value));
+        return tile_color(frame, tile, image.color_at(0, 0)) == Some(sky);
     }
     let mut sky_pixels = 0;
     for y in 0..8 {
         for x in 0..8 {
-            let value = usize::try_from(image.color_at(x, y)).unwrap_or(0);
-            if value != 0 && colors.get(value).copied().flatten() == Some(sky) {
+            let value = image.color_at(x, y);
+            if value != 0 && tile_color(frame, tile, value) == Some(sky) {
                 sky_pixels += 1;
             }
         }

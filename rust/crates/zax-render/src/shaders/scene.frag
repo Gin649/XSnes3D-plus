@@ -88,9 +88,10 @@ void main()
         ivec2 texel = ivec2(mod(floor(uv), uTextureSize));
         if (uColorMode == 0)
         {
-            // REQ-SCN-034: the index selects 4 * P + (t mod 4) in the frame palette.
+            // REQ-SCN-034, XSnes3D+: the index selects P + t in the 256-entry frame palette,
+            // P being the tiles' first entry (the NES version used 4 * P + (t mod 4)).
             uint value = texelFetch(uIndexTexture, texel, 0).r;
-            int entry = clamp(uPaletteTable, 0, 15) * 4 + int(value & 3u);
+            int entry = clamp(uPaletteTable + int(value & 255u), 0, 255);
 #ifdef ZAX_SRGB_PALETTE
             albedoLinear = zaxToLinear3(texelFetch(uPalette, ivec2(entry, 0), 0).rgb);
 #else

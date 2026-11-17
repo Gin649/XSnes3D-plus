@@ -508,7 +508,9 @@ impl FrameShape {
         );
         let end = Cell::new(tile.x + image.pixel_end().x, tile.y + image.pixel_end().y);
         if self.tiles.len() == 1 {
-            self.palette = tile.palette + if self.background { 0 } else { 4 };
+            // XSnes3D+: the tile's palette is already its first entry in the frame palette,
+            // sprites included (the NES version added 4 tables for a sprite).
+            self.palette = tile.palette;
             self.tile_start = tile.position;
             self.tile_end = tile.position;
             self.pixel_start = start;
@@ -599,12 +601,13 @@ impl FrameInstance {
         self.texture_source.unwrap_or(self.reference)
     }
 
-    /// The palette table used to colour the tiles: the custom palette when it is ≥ 0,
-    /// otherwise the shape's palette (REQ-E3D-192).
+    /// The first frame palette entry used to colour the tiles: the custom palette's when it is
+    /// ≥ 0 (a table of 4 entries, as in the NES version), otherwise the shape's palette
+    /// (REQ-E3D-192).
     #[must_use]
     pub fn palette_table(&self) -> i32 {
         if self.custom_palette >= 0 {
-            self.custom_palette
+            self.custom_palette * 4
         } else {
             self.shape_box.palette
         }

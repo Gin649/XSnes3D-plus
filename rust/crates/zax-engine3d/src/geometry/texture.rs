@@ -74,11 +74,13 @@ impl ObjectTexture {
             .map_or(Rgb24::default(), |colors| colors[self.wrap(x, y)])
     }
 
-    /// The palette column `t mod 4` an indexed texel addresses (REQ-E3D-560). The extra bit
-    /// does not reach the colour.
+    /// The palette offset an indexed texel addresses (REQ-E3D-560): `XSnes3D+` uses the whole
+    /// texel, 0 to 255, added to the tiles' first palette entry (the NES version used `t mod 4`,
+    /// so a profile texture's extra bit 2 did not reach the colour; SNES games have no
+    /// profiles).
     #[must_use]
     pub const fn palette_column(texel: i32) -> i32 {
-        texel & 3
+        texel & 0xFF
     }
 
     /// The transparent colour `e` of REQ-E3D-424: `emptyColor` when it is positive or zero,

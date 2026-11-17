@@ -308,9 +308,10 @@ fn tv_k1_indexed_colours_come_from_the_frame_palette_table() {
     let background = &list.tiles()[0];
     let sprite = &list.tiles()[1];
 
-    assert_eq!(1, background.palette_table);
-    assert_eq!(5, sprite.palette_table);
-    let entry = |table: i32, column: i32| usize::try_from((4 * table) + column).unwrap();
+    assert_eq!(4, background.palette_table); // XSnes3D+: palettes are first entries now, 4 per NES table
+    assert_eq!(20, sprite.palette_table);
+    // XSnes3D+: palettes are first entries now, 4 per NES table: the table is the first entry.
+    let entry = |table: i32, column: i32| usize::try_from(table + column).unwrap();
 
     // Background tile of palette 1, texel 2 -> core[6]; the same sprite -> core[22].
     assert_eq!(
@@ -340,8 +341,9 @@ fn tv_k1_indexed_colours_come_from_the_frame_palette_table() {
         .instance_mut(first)
         .custom_palette = 9;
     let custom = engine.build_draw_list_of(FrameRole::Converting);
-    assert_eq!(9, custom.tiles()[0].palette_table);
-    assert_eq!(nes_color(6), custom.palette()[entry(9, 2)]);
+    // XSnes3D+: custom palette 9 is table 9, so its first entry is 36.
+    assert_eq!(36, custom.tiles()[0].palette_table);
+    assert_eq!(nes_color(6), custom.palette()[entry(36, 2)]);
 }
 
 #[test]
@@ -363,7 +365,7 @@ fn req_e3d_560_the_palette_table_is_the_one_of_each_tile_not_of_the_shape() {
 
     assert_eq!(4, list.tiles().len());
     let tables: Vec<i32> = list.tiles().iter().map(|tile| tile.palette_table).collect();
-    assert_eq!(vec![0, 0, 1, 1], tables);
+    assert_eq!(vec![0, 0, 4, 4], tables); // XSnes3D+: palettes are first entries now, 4 per NES table
 
     // The tiles belong to one single shape, whose own palette is the germ's.
     let shapes: HashSet<_> = list
@@ -392,7 +394,7 @@ fn req_e3d_560_a_custom_palette_overrides_every_tile_of_the_shape() {
     let list = engine.build_draw_list_of(FrameRole::Converting);
 
     let tables: Vec<i32> = list.tiles().iter().map(|tile| tile.palette_table).collect();
-    assert_eq!(vec![9, 9], tables);
+    assert_eq!(vec![36, 36], tables); // XSnes3D+: palettes are first entries now, 4 per NES table
 }
 
 #[test]

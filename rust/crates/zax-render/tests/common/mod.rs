@@ -507,7 +507,7 @@ impl SceneFixture {
             false,
             false,
             false,
-            palette,
+            palette * 4, // XSnes3D+: the record holds the sub-palette's first entry
             true,
         ));
     }
@@ -593,7 +593,7 @@ impl SceneFixture {
             false,
             false,
             behind,
-            palette,
+            16 + palette * 4, // XSnes3D+: the sprite sub-palette's first entry
             false,
         ));
         self.sprite_order = self.sprite_order.max(index) + 1;

@@ -671,14 +671,11 @@ impl InstanceLook {
         let palette_table = if self.format == TextureFormat::Direct {
             -1
         } else if instance.custom_palette >= 0 {
-            instance.custom_palette
+            instance.custom_palette * 4
         } else {
+            // XSnes3D+: the tile's palette is its first entry in the frame palette, so it is
+            // used as it is (the NES version turned a sub-palette into a table here).
             tile.palette()
-                + if shape.background() && tile.palette() < 4 {
-                    0
-                } else {
-                    4
-                }
         };
 
         let deform = instance.deform_enabled().then(|| DeformParameters {

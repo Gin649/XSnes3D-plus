@@ -23,7 +23,8 @@ use crate::vectors::{Cell, Mat4, Vec2, Vec3};
 pub const MAGIC: u32 = 0x4433_4553;
 
 /// Version of the format.
-pub const VERSION: u16 = 1;
+// XSnes3D+: version 2 adds the upper bit planes of each learned image.
+pub const VERSION: u16 = 2;
 
 /// The capacity a host may reserve for this block so that it can announce an upper bound on
 /// the savestate size before serialising (REQ-ARCH-013).
@@ -57,6 +58,9 @@ pub fn write(engine: &ConversionEngine) -> Vec<u8> {
         let key = image.key();
         out.u64(key.low);
         out.u64(key.high);
+        for plane in key.upper {
+            out.u64(plane);
+        }
         out.u8(key.flip());
     }
 
@@ -138,9 +142,13 @@ pub fn read(engine: &mut ConversionEngine, block: &[u8]) -> Result<(), EngineErr
     for _ in 0..learned_image_count {
         let low = reader.u64()?;
         let high = reader.u64()?;
+        let mut upper = [0u64; 6];
+        for plane in &mut upper {
+            *plane = reader.u64()?;
+        }
         let flip = reader.u8()?;
         let (_, images) = engine.registries_mut();
-        images.intern(TileImageKey::new(low, high, flip & 1 != 0, flip & 2 != 0));
+        images.intern(TileImageKey::new(low, high, flip & 1 != 0, flip & 2 != 0).with_upper(upper));
     }
 
     let mut restored = Vec::new();

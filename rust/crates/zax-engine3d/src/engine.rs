@@ -684,12 +684,15 @@ fn intake(
             continue;
         }
 
-        let image = images.intern(TileImageKey::new(
-            record.plane0,
-            record.plane1,
-            record.mirror_h,
-            record.mirror_v,
-        ));
+        let image = images.intern(
+            TileImageKey::new(
+                record.plane0,
+                record.plane1,
+                record.mirror_h,
+                record.mirror_v,
+            )
+            .with_upper(record.upper),
+        );
 
         if record.background {
             if image.is_empty() && !settings.empty_tile {
@@ -948,8 +951,9 @@ impl ConversionState {
     // palette access for scripts (REQ-E3D-252)
 
     /// Reads a frame palette entry: the published frame when `current` is false, the frame
-    /// being converted when it is true (REQ-E3D-252). 0 without such a frame or outside
-    /// 0..63.
+    /// being converted when it is true (REQ-E3D-252). `XSnes3D+`: the colour packed as
+    /// `0xRRGGBB` (the NES version gave a NES colour index). 0 without such a frame or outside
+    /// 0..255.
     #[must_use]
     pub fn frame_color_index(&self, entry: usize, current: bool) -> i32 {
         let frame = if current {
@@ -959,19 +963,23 @@ impl ConversionState {
         };
         frame
             .and_then(|frame| frame.palette().get(entry))
-            .map_or(0, i32::from)
+            .map_or(0, Rgb24::packed)
     }
 
-    /// Writes a frame palette entry for this frame only (REQ-E3D-252); false when there is no
-    /// such frame or the entry is outside 0..63.
-    #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)] // C# (byte) cast.
+    /// Writes a frame palette entry for this frame only (REQ-E3D-252), `value` packed as
+    /// `0xRRGGBB` (`XSnes3D+`); false when there is no such frame or the entry is outside
+    /// 0..255.
     pub fn set_color_index(&mut self, entry: usize, value: i32, current: bool) -> bool {
         let index = if current {
             Some(self.converting)
         } else {
             self.published
         };
-        index.is_some_and(|index| self.frames[index].palette_mut().set(entry, value as u8))
+        index.is_some_and(|index| {
+            self.frames[index]
+                .palette_mut()
+                .set(entry, Rgb24::from_packed(value))
+        })
     }
 
     /// The RGB colour of a palette entry of the published frame (REQ-E3D-252); black without

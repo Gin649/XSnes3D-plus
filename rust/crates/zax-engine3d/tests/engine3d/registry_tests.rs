@@ -514,10 +514,10 @@ fn req_e3d_253_each_tile_keeps_its_own_palette_attribute() {
     let shape = frame.shape(id);
 
     assert_eq!(2, shape.tile_count());
-    assert_eq!(1, shape.palette());
+    assert_eq!(4, shape.palette()); // XSnes3D+: palettes are first entries now, 4 per NES table
     let tiles: Vec<_> = frame.shape_tiles(id).collect();
-    assert_eq!(1, tiles[0].palette());
-    assert_eq!(2, tiles[1].palette());
+    assert_eq!(4, tiles[0].palette()); // XSnes3D+: palettes are first entries now, 4 per NES table
+    assert_eq!(8, tiles[1].palette());
 }
 
 #[test]

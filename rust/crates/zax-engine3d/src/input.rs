@@ -22,6 +22,9 @@ pub struct TileRecord {
     pub plane0: u64,
     /// High bit plane, 8 CHR bytes packed little-endian by row.
     pub plane1: u64,
+    /// `XSnes3D+`: bit planes 2 to 7 of a SNES tile with 4 or 8 bits per pixel, packed the
+    /// same way; zero for a 2-plane tile. Pixel colours then go up to 15 or 255.
+    pub upper: [u64; 6],
     /// Screen x of the tile's top-left pixel. Background: -7..255. Sprite: 0..255.
     pub x: i16,
     /// Screen y of the tile's top-left pixel. Background: -1..238. Sprite: 1..239.
@@ -35,7 +38,9 @@ pub struct TileRecord {
     /// Sprite priority bit "behind background" (bit 5 of the attribute). Always false for
     /// background.
     pub hidden: bool,
-    /// Sub-palette number, 0 to 3; background sub-palette for background tiles.
+    /// `XSnes3D+`: the first entry of the tile's colours in the frame palette (the NES version
+    /// held a sub-palette number, 0 to 3). A NES background sub-palette `p` starts at `4p`, a
+    /// NES sprite sub-palette at `16 + 4p`; a SNES tile at its CGRAM palette's first colour.
     pub palette: u8,
     /// True for a background tile, false for a sprite tile.
     pub background: bool,
@@ -61,6 +66,7 @@ impl TileRecord {
         Self {
             plane0,
             plane1,
+            upper: [0; 6],
             x,
             y,
             index,
@@ -72,8 +78,15 @@ impl TileRecord {
         }
     }
 
-    /// Colour (0 to 3) of the *source* pixel at (`column`, `row`), flips not applied. 0 is
-    /// transparent. `None` when a coordinate is outside 0..=7.
+    /// The same record with bit planes 2 to 7 set (`XSnes3D+`).
+    #[must_use]
+    pub const fn with_upper(mut self, upper: [u64; 6]) -> Self {
+        self.upper = upper;
+        self
+    }
+
+    /// Colour (0 to 3, or up to 255 with upper planes) of the *source* pixel at (`column`,
+    /// `row`), flips not applied. 0 is transparent. `None` when a coordinate is outside 0..=7.
     #[must_use]
     pub const fn source_pixel(&self, column: usize, row: usize) -> Option<u8> {
         if column > 7 || row > 7 {
@@ -81,9 +94,14 @@ impl TileRecord {
         }
 
         let bit = (8 * row) + 7 - column;
-        #[allow(clippy::cast_possible_truncation)] // Each term is 0 or 1.
-        let pixel = ((self.plane0 >> bit) & 1) as u8 + 2 * ((self.plane1 >> bit) & 1) as u8;
-        Some(pixel)
+        let mut pixel = ((self.plane0 >> bit) & 1) | (((self.plane1 >> bit) & 1) << 1);
+        let mut plane = 0;
+        while plane < 6 {
+            pixel |= ((self.upper[plane] >> bit) & 1) << (plane + 2);
+            plane += 1;
+        }
+        #[allow(clippy::cast_possible_truncation)] // Eight bits at most.
+        Some(pixel as u8)
     }
 
     /// Colour (0 to 3) of the pixel *displayed* at tile position (`px`, `py`), flips
@@ -100,13 +118,14 @@ impl TileRecord {
         )
     }
 
-    /// True when both planes are zero, i.e. the tile draws nothing.
+    /// True when every plane is zero, i.e. the tile draws nothing.
     ///
     /// Empty records are still emitted by the core (REQ-CORE-036); filtering is the
     /// consumer's job (SPEC-04).
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        (self.plane0 | self.plane1) == 0
+        let u = &self.upper;
+        (self.plane0 | self.plane1 | u[0] | u[1] | u[2] | u[3] | u[4] | u[5]) == 0
     }
 
     /// Packs eight CHR bytes of one plane into the 64-bit representation of REQ-CORE-034:

@@ -7,17 +7,23 @@ use std::fmt;
 use crate::registry::PatternId;
 use crate::vectors::Cell;
 
-/// The identity of a tile image: its two bit planes and its flips (SPEC-04 §2).
+/// The identity of a tile image: its bit planes and its flips (SPEC-04 §2).
 ///
-/// Two tiles have the same image if and only if the four components are equal, so the same
+/// Two tiles have the same image if and only if the planes and flips are equal, so the same
 /// CHR data shown flipped is *another* image. This is the unit of identity of the whole
 /// recognition (REQ-E3D-007, TV-E3D-10).
+///
+/// `XSnes3D+`: a NES tile has two bit planes (`low`, `high`); a SNES tile has 2, 4 or 8, the
+/// planes past the second in `upper`, which stays zero for a 2-plane tile. A pixel's colour is
+/// bit `p` of plane `p` for every plane, so 0 to 255.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
 pub struct TileImageKey {
-    /// Low bit plane, packed as in SPEC-02 REQ-CORE-034.
+    /// Bit plane 0, packed as in SPEC-02 REQ-CORE-034.
     pub low: u64,
-    /// High bit plane.
+    /// Bit plane 1.
     pub high: u64,
+    /// Bit planes 2 to 7 (`XSnes3D+`), zero for a 2-plane tile.
+    pub upper: [u64; 6],
     /// Horizontal flip.
     pub flip_x: bool,
     /// Vertical flip.
@@ -25,15 +31,23 @@ pub struct TileImageKey {
 }
 
 impl TileImageKey {
-    /// Creates a key.
+    /// Creates the key of a 2-plane tile.
     #[must_use]
     pub const fn new(low: u64, high: u64, flip_x: bool, flip_y: bool) -> Self {
         Self {
             low,
             high,
+            upper: [0; 6],
             flip_x,
             flip_y,
         }
+    }
+
+    /// The same key with bit planes 2 to 7 set (`XSnes3D+`).
+    #[must_use]
+    pub const fn with_upper(mut self, upper: [u64; 6]) -> Self {
+        self.upper = upper;
+        self
     }
 
     /// The flips as the two-bit value of SPEC-03 (bit 0 horizontal, bit 1 vertical).
@@ -42,54 +56,75 @@ impl TileImageKey {
         (self.flip_x as u8) | ((self.flip_y as u8) << 1)
     }
 
-    /// True when both planes are zero: the image draws nothing.
+    /// True when every plane is zero: the image draws nothing.
     #[must_use]
     pub const fn is_empty(&self) -> bool {
-        (self.low | self.high) == 0
+        let u = &self.upper;
+        (self.low | self.high | u[0] | u[1] | u[2] | u[3] | u[4] | u[5]) == 0
     }
 
-    /// Colour (0 to 3) of the pixel *displayed* at (`px`, `py`), flips applied, both 0 to 7.
-    /// Colour 0 is transparent (SPEC-04 §2).
+    /// Colour (0 to 255; 0 to 3 for a 2-plane tile) of the pixel *displayed* at (`px`, `py`),
+    /// flips applied, both 0 to 7. Colour 0 is transparent (SPEC-04 §2).
     #[must_use]
-    #[allow(clippy::cast_possible_truncation)] // Two bits.
+    #[allow(clippy::cast_possible_truncation)] // Eight bits at most.
     pub const fn color_at(&self, px: i32, py: i32) -> i32 {
         let sx = if self.flip_x { 7 - px } else { px };
         let sy = if self.flip_y { 7 - py } else { py };
         let bit = (sy << 3) | (7 - sx);
-        (((self.low >> bit) & 1) | (((self.high >> bit) & 1) << 1)) as i32
+        let mut color = ((self.low >> bit) & 1) | (((self.high >> bit) & 1) << 1);
+        let mut plane = 0;
+        while plane < 6 {
+            color |= ((self.upper[plane] >> bit) & 1) << (plane + 2);
+            plane += 1;
+        }
+        color as i32
     }
 }
 
-/// Colours used by an image; colour 0 is transparent and has no flag (bits 1 to 3).
+/// Colours used by an image; colour 0 is transparent and has no flag (bits 1 to 255, one per
+/// colour: `XSnes3D+` widened them from 1 to 3 for 256-colour tiles).
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Default)]
-pub struct ImageColors(u8);
+pub struct ImageColors([u64; 4]);
 
 impl ImageColors {
     /// No colour.
-    pub const NONE: Self = Self(0);
+    pub const NONE: Self = Self([0; 4]);
     /// Colour 1 occurs.
-    pub const COLOR1: Self = Self(1 << 1);
+    pub const COLOR1: Self = Self([1 << 1, 0, 0, 0]);
     /// Colour 2 occurs.
-    pub const COLOR2: Self = Self(1 << 2);
+    pub const COLOR2: Self = Self([1 << 2, 0, 0, 0]);
     /// Colour 3 occurs.
-    pub const COLOR3: Self = Self(1 << 3);
+    pub const COLOR3: Self = Self([1 << 3, 0, 0, 0]);
 
-    /// The raw flags.
+    /// The flags of colours 1 to 7 (bits 1 to 7), as the NES version had them.
     #[must_use]
+    #[allow(clippy::cast_possible_truncation)] // The low byte on purpose.
     pub const fn bits(self) -> u8 {
-        self.0
+        self.0[0] as u8
+    }
+
+    /// The flag set with colour `color` (0 to 255) added.
+    #[must_use]
+    #[allow(clippy::cast_sign_loss)] // Colours are 0 to 255.
+    const fn with(mut self, color: i32) -> Self {
+        let color = color as usize & 0xFF;
+        self.0[color >> 6] |= 1 << (color & 63);
+        self
     }
 
     /// True when every flag of `other` is set.
     #[must_use]
     pub const fn contains(self, other: Self) -> bool {
-        self.0 & other.0 == other.0
+        (self.0[0] & other.0[0]) == other.0[0]
+            && (self.0[1] & other.0[1]) == other.0[1]
+            && (self.0[2] & other.0[2]) == other.0[2]
+            && (self.0[3] & other.0[3]) == other.0[3]
     }
 
     /// Number of colours set.
     #[must_use]
     pub const fn count(self) -> u32 {
-        self.0.count_ones()
+        self.0[0].count_ones() + self.0[1].count_ones() + self.0[2].count_ones() + self.0[3].count_ones()
     }
 }
 
@@ -145,7 +180,7 @@ impl TileImage {
     fn new(key: TileImageKey, id: u32) -> Self {
         let mut count = 0;
         let (mut sx, mut sy, mut ex, mut ey) = (7, 7, 0, 0);
-        let mut colors = 0u8;
+        let mut colors = ImageColors::NONE;
         for px in 0..8 {
             for py in 0..8 {
                 let color = key.color_at(px, py);
@@ -158,11 +193,10 @@ impl TileImage {
                 sy = sy.min(py);
                 ex = ex.max(px);
                 ey = ey.max(py);
-                colors |= 1 << color;
+                colors = colors.with(color);
             }
         }
 
-        let colors = ImageColors(colors);
         let pixel_start = Cell::new(sx, sy);
         let pixel_end = Cell::new(ex, ey);
         Self {
@@ -237,13 +271,13 @@ impl TileImage {
         self.pixel_count == 0
     }
 
-    /// Number of distinct colours used, 0 to 3.
+    /// Number of distinct colours used, 0 to 3 (to 255 for a SNES tile).
     #[must_use]
     pub const fn color_count(&self) -> u32 {
         self.colors.count()
     }
 
-    /// Colour (0 to 3) of the displayed pixel at (x, y).
+    /// Colour (0 to 3, or to 255 for a SNES tile) of the displayed pixel at (x, y).
     #[must_use]
     pub const fn color_at(&self, px: i32, py: i32) -> i32 {
         self.key.color_at(px, py)

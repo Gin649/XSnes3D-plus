@@ -121,10 +121,10 @@ fn req_e3d_192_the_instance_palette_falls_back_to_the_shape_palette() {
     let id = batch.convert(&mut engine, 0).instances()[0];
     let instance = engine.converting_frame_mut().instance_mut(id);
 
-    assert_eq!(2, instance.palette_table());
+    assert_eq!(8, instance.palette_table()); // XSnes3D+: palettes are first entries now, 4 per NES table
 
     instance.custom_palette = 9;
-    assert_eq!(9, instance.palette_table());
+    assert_eq!(36, instance.palette_table()); // XSnes3D+: palettes are first entries now, 4 per NES table
 }
 
 #[test]
@@ -696,18 +696,26 @@ fn req_e3d_252_a_palette_write_only_affects_the_frame_it_targets() {
     batch.convert_and_publish(&mut engine, 1);
 
     super::support::host_mut(&mut engine).on_update = Some(Box::new(|state| {
-        assert!(state.set_color_index(5, 0x30, true));
+        // XSnes3D+: script colours are RGB, packed as 0xRRGGBB.
+        let white = zax_engine3d::palette::nes_color(0x30).packed();
+        assert!(state.set_color_index(5, white, true));
     }));
     let current = batch.convert(&mut engine, 2);
 
-    assert_eq!(Some(0x30), current.palette().get(5));
-    assert_eq!(0x30, engine.frame_color_index(5, true));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x30)), current.palette().get(5));
+    assert_eq!(
+        zax_engine3d::palette::nes_color(0x30).packed(),
+        engine.frame_color_index(5, true)
+    );
 
     // The published frame keeps the core's value; the next frame rebuilds from the core.
-    assert_eq!(0x16, engine.frame_color_index(5, false));
+    assert_eq!(
+        zax_engine3d::palette::nes_color(0x16).packed(),
+        engine.frame_color_index(5, false)
+    );
     engine.publish();
     super::support::host_mut(&mut engine).on_update = None;
-    assert_eq!(Some(0x16), batch.convert(&mut engine, 3).palette().get(5));
+    assert_eq!(Some(zax_engine3d::palette::nes_color(0x16)), batch.convert(&mut engine, 3).palette().get(5));
 }
 
 #[test]
@@ -737,7 +745,7 @@ fn req_e3d_641_the_draw_list_carries_the_placement_and_the_flags() {
     assert!(!background.sprite);
     assert_eq!(SceneContainer::Game, background.container);
     assert_eq!(MaterialClass::Opaque, background.material);
-    assert_eq!(1, background.palette_table);
+    assert_eq!(4, background.palette_table); // XSnes3D+: palettes are first entries now, 4 per NES table
     assert_eq!(TextureFormat::Indexed, background.texture_format);
     assert!(background.cast_shadow);
     assert!(background.receive_shadow);

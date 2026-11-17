@@ -1,6 +1,6 @@
 out vec4 oColor;
 
-// The 64 sRGB colours of the frame palette, one texel each.
+// The 256 sRGB colours of the frame palette, one texel each.
 uniform sampler2D uPalette;
 
 void main()

@@ -200,7 +200,7 @@ fn req_e3d_005_a_sprite_lands_in_its_cell_without_margin() {
     let frame = batch.convert(&mut engine, 0);
 
     assert_eq!(Cell::new(1, 2), frame.sprites()[0].position());
-    assert_eq!(2, frame.sprites()[0].palette());
+    assert_eq!(24, frame.sprites()[0].palette()); // XSnes3D+: palettes are first entries now, 4 per NES table, sprites from 16
 }
 
 fn first_image_of_first_shape(
@@ -481,12 +481,12 @@ fn req_e3d_047_the_shape_palette_is_the_germ_attribute_plus_four_for_a_sprite() 
     let mut sprite = Batch::new();
     sprite.sprite_full(img::a(), 100, 100, 2, false);
     let frame = sprite.convert(&mut engine, 0);
-    assert_eq!(6, frame.shape(frame.shapes()[0]).palette());
+    assert_eq!(24, frame.shape(frame.shapes()[0]).palette()); // XSnes3D+: palettes are first entries now, 4 per NES table, sprites from 16
 
     let mut background = Batch::new();
     background.bg_cell_pal(img::a(), 10, 10, 2);
     let frame = background.convert(&mut engine, 1);
-    assert_eq!(2, frame.shape(frame.shapes()[0]).palette());
+    assert_eq!(8, frame.shape(frame.shapes()[0]).palette()); // XSnes3D+: palettes are first entries now, 4 per NES table
 }
 
 #[test]
