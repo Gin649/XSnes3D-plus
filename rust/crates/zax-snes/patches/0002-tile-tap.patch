@@ -1,5 +1,5 @@
 diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
-index 3c72452..3a1dc62 100644
+index 3c72452..05dbec6 100644
 --- a/Core/SNES/SnesPpu.cpp
 +++ b/Core/SNES/SnesPpu.cpp
 @@ -392,12 +392,97 @@ void SnesPpu::FetchTileData()
@@ -26,9 +26,9 @@ index 3c72452..3a1dc62 100644
 +	}
 +
 +	// A new palette snapshot only when the palette changed since the last one.
-+	size_t count = _tap->Cgram.size() / 256;
-+	if(count == 0 || memcmp(&_tap->Cgram[(count - 1) * 256], _cgram, 512) != 0) {
-+		_tap->Cgram.insert(_tap->Cgram.end(), _cgram, _cgram + 256);
++	size_t count = _tap->Building.Cgram.size() / 256;
++	if(count == 0 || memcmp(&_tap->Building.Cgram[(count - 1) * 256], _cgram, 512) != 0) {
++		_tap->Building.Cgram.insert(_tap->Building.Cgram.end(), _cgram, _cgram + 256);
 +		count++;
 +	}
 +	chunk.CgramIndex = (uint32_t)(count - 1);
@@ -39,7 +39,7 @@ index 3c72452..3a1dc62 100644
 +	TapWindowMask<3>(chunk.WindowMasked[3]);
 +	TapWindowMask<SnesPpu::SpriteLayerIndex>(chunk.WindowMasked[4]);
 +
-+	_tap->Chunks.push_back(chunk);
++	_tap->Building.Chunks.push_back(chunk);
 +	memcpy(_tapReference + _drawStartX, _mainScreenBuffer + _drawStartX, (_drawEndX - _drawStartX + 1) * sizeof(uint16_t));
 +}
 +
@@ -62,8 +62,8 @@ index 3c72452..3a1dc62 100644
 +// XSnes3D+: the line is finished; keep its fetched tiles and its main screen.
 +void SnesPpu::TapLineEnd()
 +{
-+	_tap->Lines.emplace_back();
-+	SnesTapLine& line = _tap->Lines.back();
++	_tap->Building.Lines.emplace_back();
++	SnesTapLine& line = _tap->Building.Lines.back();
 +	line.Scanline = _scanline;
 +	line.Padding = 0;
 +	for(int i = 0; i < 4; i++) {
@@ -85,7 +85,7 @@ index 3c72452..3a1dc62 100644
 +	sprite.ChrData[0] = _currentSprite.ChrData[0];
 +	sprite.ChrData[1] = _currentSprite.ChrData[1];
 +	sprite.VramAddress = (_currentSprite.FetchAddress - 8) & 0x7FFF;
-+	_tap->Sprites.push_back(sprite);
++	_tap->Building.Sprites.push_back(sprite);
 +}
 +
  bool SnesPpu::ProcessEndOfScanline(uint16_t& hClock)
@@ -121,8 +121,23 @@ index 3c72452..3a1dc62 100644
  		ApplyColorMath();
  		ApplyBrightness<true>();
  		ApplyHiResMode();
+@@ -1499,6 +1591,14 @@ void SnesPpu::ProcessWindowMaskSettings(uint8_t value, uint8_t offset)
+ 
+ void SnesPpu::SendFrame()
+ {
++	// XSnes3D+: remember this picture, and close the tile tap's frame at the same moment.
++	_lastSentBuffer = _currentBuffer;
++	_lastSentHighRes = _useHighResOutput;
++	_lastSentOverscan = _overscanFrame;
++	if(_tap) {
++		_tap->FinishFrame();
++	}
++
+ 	uint16_t width = _useHighResOutput ? 512 : 256;
+ 	uint16_t height = _useHighResOutput ? 478 : 239;
+ 
 diff --git a/Core/SNES/SnesPpu.h b/Core/SNES/SnesPpu.h
-index 0d73374..fcd5228 100644
+index 0d73374..0b700ab 100644
 --- a/Core/SNES/SnesPpu.h
 +++ b/Core/SNES/SnesPpu.h
 @@ -1,6 +1,7 @@
@@ -133,13 +148,18 @@ index 0d73374..fcd5228 100644
  #include "Utilities/ISerializable.h"
  #include "Utilities/Timer.h"
  
-@@ -219,7 +220,19 @@ private:
+@@ -219,7 +220,32 @@ private:
  
  	__noinline void FillInterlacedFrame();
  
 +	// XSnes3D+: the tile tap (see SnesTileTap.h). Null unless the host asked for it.
 +	SnesTapFrame* _tap = nullptr;
 +	uint16_t _tapReference[256] = {};
++	// XSnes3D+: the last picture sent, so the host gets a whole frame even when its frame
++	// step ends after the next frame has started drawing.
++	uint16_t* _lastSentBuffer = nullptr;
++	bool _lastSentHighRes = false;
++	bool _lastSentOverscan = false;
 +	void TapChunk();
 +	void TapLineEnd();
 +	void TapSprite();
@@ -149,22 +169,30 @@ index 0d73374..fcd5228 100644
  public:
 +	// XSnes3D+: start or stop recording tiles into tap (null stops it).
 +	void SetTileTap(SnesTapFrame* tap) { _tap = tap; }
++	// XSnes3D+: the last picture sent (null before the first), 512x478 when highRes is set,
++	// else 256x239.
++	uint16_t* GetLastSentBuffer(bool& highRes, bool& overscan)
++	{
++		highRes = _lastSentHighRes;
++		overscan = _lastSentOverscan;
++		return _lastSentBuffer;
++	}
 +
  	SnesPpu(Emulator* emu, SnesConsole* console);
  	virtual ~SnesPpu();
  
 diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
 new file mode 100644
-index 0000000..d6483d1
+index 0000000..bf7e82d
 --- /dev/null
 +++ b/Core/SNES/SnesTileTap.h
-@@ -0,0 +1,72 @@
+@@ -0,0 +1,94 @@
 +#pragma once
 +#include "pch.h"
 +#include "SNES/SnesPpuTypes.h"
 +
 +// XSnes3D+: what the tile tap records while the PPU draws a frame. The host gives the PPU a
-+// SnesTapFrame with SnesPpu::SetTileTap, clears it before each frame and reads it after.
++// SnesTapFrame with SnesPpu::SetTileTap and reads SnesTapFrame::Finished after each frame.
 +// With no tap set, the PPU records nothing. The structs are read from Rust as raw memory, so
 +// their layout must not change without changing rust/crates/zax-snes/src/tap.rs too.
 +
@@ -216,7 +244,8 @@ index 0000000..d6483d1
 +};
 +static_assert(sizeof(SnesTapSprite) == 16, "SnesTapSprite layout changed");
 +
-+struct SnesTapFrame
++// One frame's worth of records.
++struct SnesTapData
 +{
 +	vector<SnesTapChunk> Chunks;
 +	vector<SnesTapLine> Lines;
@@ -229,5 +258,26 @@ index 0000000..d6483d1
 +		Lines.clear();
 +		Sprites.clear();
 +		Cgram.clear();
++	}
++};
++
++// The PPU fills Building. When it sends a finished picture (SnesPpu::SendFrame), Building
++// becomes Finished, so Finished always matches the last picture sent, even when the host's
++// frame step ends a little before or after that moment.
++struct SnesTapFrame
++{
++	SnesTapData Building;
++	SnesTapData Finished;
++
++	void FinishFrame()
++	{
++		std::swap(Building, Finished);
++		Building.Clear();
++	}
++
++	void Clear()
++	{
++		Building.Clear();
++		Finished.Clear();
 +	}
 +};

@@ -152,9 +152,6 @@ int xs_run_frame(XsSnes* snes)
 		return 0;
 	}
 	try {
-		if(snes->TapOn) {
-			snes->Tap.Clear();
-		}
 		snes->Emu->HostRunFrame();
 		return 1;
 	} catch(...) {
@@ -162,28 +159,31 @@ int xs_run_frame(XsSnes* snes)
 	}
 }
 
-// The last finished frame, as 15-bit BGR colours (bits 0-4 red, 5-9 green, 10-14 blue).
-// The buffer is 256 wide and 239 tall, or 512 by 478 in hi-res. Without overscan the
+// The last picture the PPU sent, as 15-bit BGR colours (bits 0-4 red, 5-9 green, 10-14
+// blue). The buffer is 256 wide and 239 tall, or 512 by 478 in hi-res. Without overscan the
 // picture is rows 7 to 230 (14 to 461 in hi-res). The pointer stays valid until the next
-// xs_run_frame. Returns null when no ROM is loaded.
+// xs_run_frame. Returns null before the first picture.
+//
+// This is the picture sent when the PPU reached the end of the frame, not whatever is in the
+// buffer when the frame step returns: some games (Star Fox) run a long copy across that
+// moment, and the next frame has started drawing by the time the step ends.
 const uint16_t* xs_frame(XsSnes* snes, uint32_t* width, uint32_t* height, int* overscan)
 {
 	if(!snes->Loaded) {
 		return nullptr;
 	}
 	try {
-		shared_ptr<IConsole> console = snes->Emu->GetConsole();
-		if(!console) {
+		SnesPpu* ppu = GetSnesPpu(snes);
+		if(!ppu) {
 			return nullptr;
 		}
-		PpuFrameInfo frame = console->GetPpuFrame();
-		*width = frame.Width;
-		*height = frame.Height;
-		*overscan = 0;
-		if(auto snesConsole = dynamic_cast<SnesConsole*>(console.get())) {
-			*overscan = snesConsole->GetPpu()->GetState().OverscanMode ? 1 : 0;
-		}
-		return reinterpret_cast<const uint16_t*>(frame.FrameBuffer);
+		bool highRes = false;
+		bool overscanFrame = false;
+		uint16_t* buffer = ppu->GetLastSentBuffer(highRes, overscanFrame);
+		*width = highRes ? 512 : 256;
+		*height = highRes ? 478 : 239;
+		*overscan = overscanFrame ? 1 : 0;
+		return buffer;
 	} catch(...) {
 		return nullptr;
 	}
@@ -209,10 +209,10 @@ int xs_set_tap(XsSnes* snes, int on)
 	}
 }
 
-// What the tap recorded during the last frame.
+// What the tap recorded for the last picture sent (the one xs_frame returns).
 void xs_tap_view(XsSnes* snes, XsTapView* view)
 {
-	SnesTapFrame& tap = snes->Tap;
+	SnesTapData& tap = snes->Tap.Finished;
 	view->Chunks = tap.Chunks.data();
 	view->ChunkCount = (uint32_t)tap.Chunks.size();
 	view->Lines = tap.Lines.data();
