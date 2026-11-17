@@ -1,0 +1,233 @@
+diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
+index 3c72452..3a1dc62 100644
+--- a/Core/SNES/SnesPpu.cpp
++++ b/Core/SNES/SnesPpu.cpp
+@@ -392,12 +392,97 @@ void SnesPpu::FetchTileData()
+ 	}
+ }
+ 
++// XSnes3D+: the tile tap. Records one drawn piece of the current line with the settings
++// used to draw it, and copies the main screen pixels before colour maths changes them.
++void SnesPpu::TapChunk()
++{
++	SnesTapChunk chunk = {};
++	chunk.Scanline = _scanline;
++	chunk.StartX = (uint8_t)_drawStartX;
++	chunk.EndX = (uint8_t)_drawEndX;
++	chunk.BgMode = _state.BgMode;
++	chunk.Bg3Priority = _state.Mode1Bg3Priority ? 1 : 0;
++	chunk.MainLayers = _state.MainScreenLayers & _configVisibleLayers;
++	chunk.DirectColor = _state.DirectColorMode ? 1 : 0;
++	chunk.ForcedBlank = _state.ForcedBlank ? 1 : 0;
++	chunk.MosaicSize = _state.MosaicSize;
++	chunk.MosaicEnabled = _state.MosaicEnabled;
++	for(int i = 0; i < 4; i++) {
++		chunk.HScroll[i] = _state.Layers[i].HScroll;
++	}
++
++	// A new palette snapshot only when the palette changed since the last one.
++	size_t count = _tap->Cgram.size() / 256;
++	if(count == 0 || memcmp(&_tap->Cgram[(count - 1) * 256], _cgram, 512) != 0) {
++		_tap->Cgram.insert(_tap->Cgram.end(), _cgram, _cgram + 256);
++		count++;
++	}
++	chunk.CgramIndex = (uint32_t)(count - 1);
++
++	TapWindowMask<0>(chunk.WindowMasked[0]);
++	TapWindowMask<1>(chunk.WindowMasked[1]);
++	TapWindowMask<2>(chunk.WindowMasked[2]);
++	TapWindowMask<3>(chunk.WindowMasked[3]);
++	TapWindowMask<SnesPpu::SpriteLayerIndex>(chunk.WindowMasked[4]);
++
++	_tap->Chunks.push_back(chunk);
++	memcpy(_tapReference + _drawStartX, _mainScreenBuffer + _drawStartX, (_drawEndX - _drawStartX + 1) * sizeof(uint16_t));
++}
++
++// XSnes3D+: which pixels of this piece a window hides from the main screen, for one layer.
++template<uint8_t layerIndex>
++void SnesPpu::TapWindowMask(uint8_t masked[32])
++{
++	memset(masked, 0, 32);
++	if(!_state.WindowMaskMain[layerIndex]) {
++		return;
++	}
++	uint8_t count = (uint8_t)_state.Window[0].ActiveLayers[layerIndex] + (uint8_t)_state.Window[1].ActiveLayers[layerIndex];
++	for(int x = _drawStartX; x <= _drawEndX; x++) {
++		if(ProcessMaskWindow<layerIndex>(count, x)) {
++			masked[x >> 3] |= (uint8_t)(1 << (x & 0x07));
++		}
++	}
++}
++
++// XSnes3D+: the line is finished; keep its fetched tiles and its main screen.
++void SnesPpu::TapLineEnd()
++{
++	_tap->Lines.emplace_back();
++	SnesTapLine& line = _tap->Lines.back();
++	line.Scanline = _scanline;
++	line.Padding = 0;
++	for(int i = 0; i < 4; i++) {
++		memcpy(line.Tiles[i], _layerData[i].Tiles, sizeof(line.Tiles[i]));
++	}
++	memcpy(line.Reference, _tapReference, sizeof(line.Reference));
++	memset(_tapReference, 0, sizeof(_tapReference));
++}
++
++// XSnes3D+: one 8-pixel sprite slice, fetched now and drawn on the next line.
++void SnesPpu::TapSprite()
++{
++	SnesTapSprite sprite = {};
++	sprite.FetchScanline = _scanline;
++	sprite.X = _currentSprite.DrawX;
++	sprite.Palette = _currentSprite.Palette;
++	sprite.Priority = _currentSprite.Priority;
++	sprite.HorizontalMirror = _currentSprite.HorizontalMirror ? 1 : 0;
++	sprite.ChrData[0] = _currentSprite.ChrData[0];
++	sprite.ChrData[1] = _currentSprite.ChrData[1];
++	sprite.VramAddress = (_currentSprite.FetchAddress - 8) & 0x7FFF;
++	_tap->Sprites.push_back(sprite);
++}
++
+ bool SnesPpu::ProcessEndOfScanline(uint16_t& hClock)
+ {
+ 	if(hClock >= 1364 || (hClock == 1360 && _scanline == 240 && _oddFrame && !_state.ScreenInterlace)) {
+ 		//"In non-interlace mode scanline 240 of every other frame (those with $213f.7=1) is only 1360 cycles."
+ 		if(_scanline < _vblankStartScanline) {
+ 			RenderScanline();
++			if(_tap && !_skipRender && _scanline > 0) {
++				TapLineEnd();
++			}
+ 
+ 			if(_scanline == 0) {
+ 				_overscanFrame = _state.OverscanMode;
+@@ -760,6 +845,9 @@ void SnesPpu::FetchSpriteTile(bool secondCycle)
+ 	if(!secondCycle) {
+ 		_currentSprite.FetchAddress = (_currentSprite.FetchAddress + 8) & 0x7FFF;
+ 	} else {
++		if(_tap) {
++			TapSprite();
++		}
+ 		int16_t xPos = _currentSprite.DrawX;
+ 		for(int x = 0; x < 8; x++) {
+ 			if(xPos + x < 0 || xPos + x > 255) {
+@@ -901,6 +989,10 @@ void SnesPpu::RenderScanline()
+ 			RenderBgColor();
+ 		}
+ 
++		if(_tap) {
++			TapChunk();
++		}
++
+ 		ApplyColorMath();
+ 		ApplyBrightness<true>();
+ 		ApplyHiResMode();
+diff --git a/Core/SNES/SnesPpu.h b/Core/SNES/SnesPpu.h
+index 0d73374..fcd5228 100644
+--- a/Core/SNES/SnesPpu.h
++++ b/Core/SNES/SnesPpu.h
+@@ -1,6 +1,7 @@
+ #pragma once
+ #include "pch.h"
+ #include "SNES/SnesPpuTypes.h"
++#include "SNES/SnesTileTap.h"
+ #include "Utilities/ISerializable.h"
+ #include "Utilities/Timer.h"
+ 
+@@ -219,7 +220,19 @@ private:
+ 
+ 	__noinline void FillInterlacedFrame();
+ 
++	// XSnes3D+: the tile tap (see SnesTileTap.h). Null unless the host asked for it.
++	SnesTapFrame* _tap = nullptr;
++	uint16_t _tapReference[256] = {};
++	void TapChunk();
++	void TapLineEnd();
++	void TapSprite();
++	template<uint8_t layerIndex>
++	void TapWindowMask(uint8_t masked[32]);
++
+ public:
++	// XSnes3D+: start or stop recording tiles into tap (null stops it).
++	void SetTileTap(SnesTapFrame* tap) { _tap = tap; }
++
+ 	SnesPpu(Emulator* emu, SnesConsole* console);
+ 	virtual ~SnesPpu();
+ 
+diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
+new file mode 100644
+index 0000000..d6483d1
+--- /dev/null
++++ b/Core/SNES/SnesTileTap.h
+@@ -0,0 +1,72 @@
++#pragma once
++#include "pch.h"
++#include "SNES/SnesPpuTypes.h"
++
++// XSnes3D+: what the tile tap records while the PPU draws a frame. The host gives the PPU a
++// SnesTapFrame with SnesPpu::SetTileTap, clears it before each frame and reads it after.
++// With no tap set, the PPU records nothing. The structs are read from Rust as raw memory, so
++// their layout must not change without changing rust/crates/zax-snes/src/tap.rs too.
++
++// One drawn piece of a line. Usually a whole line; a game that changes PPU registers in the
++// middle of a line splits it into several pieces, each with the settings in force then.
++struct SnesTapChunk
++{
++	uint16_t Scanline;
++	uint8_t StartX;
++	uint8_t EndX;
++	uint8_t BgMode;
++	uint8_t Bg3Priority;
++	uint8_t MainLayers; // bits 0-3 background layers, bit 4 sprites, as drawn on the main screen
++	uint8_t DirectColor;
++	uint8_t ForcedBlank;
++	uint8_t MosaicSize;
++	uint8_t MosaicEnabled; // bits 0-3, one per background layer
++	uint8_t Padding;
++	uint16_t HScroll[4];
++	uint32_t CgramIndex; // which palette snapshot was in force (SnesTapFrame::Cgram, 256 per snapshot)
++	uint8_t WindowMasked[5][32]; // per layer (4 = sprites), one bit per pixel hidden by a window
++};
++static_assert(sizeof(SnesTapChunk) == 184, "SnesTapChunk layout changed");
++
++// One finished line: the tiles fetched for each background layer (33 columns) and the main
++// screen as drawn, before colour maths and brightness.
++struct SnesTapLine
++{
++	uint16_t Scanline;
++	uint16_t Padding;
++	TileData Tiles[4][33];
++	uint16_t Reference[256];
++};
++static_assert(sizeof(TileData) == 12, "TileData layout changed");
++static_assert(sizeof(SnesTapLine) == 2100, "SnesTapLine layout changed");
++
++// One 8-pixel slice of a sprite, fetched during line FetchScanline and drawn on the next line.
++struct SnesTapSprite
++{
++	uint16_t FetchScanline;
++	int16_t X;
++	uint8_t Palette;
++	uint8_t Priority;
++	uint8_t HorizontalMirror;
++	uint8_t Padding;
++	uint16_t ChrData[2];
++	uint16_t VramAddress;
++	uint16_t Padding2;
++};
++static_assert(sizeof(SnesTapSprite) == 16, "SnesTapSprite layout changed");
++
++struct SnesTapFrame
++{
++	vector<SnesTapChunk> Chunks;
++	vector<SnesTapLine> Lines;
++	vector<SnesTapSprite> Sprites;
++	vector<uint16_t> Cgram;
++
++	void Clear()
++	{
++		Chunks.clear();
++		Lines.clear();
++		Sprites.clear();
++		Cgram.clear();
++	}
++};

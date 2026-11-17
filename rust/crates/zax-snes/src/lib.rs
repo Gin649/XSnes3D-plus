@@ -10,8 +10,10 @@ use std::path::Path;
 use std::sync::Mutex;
 
 pub mod press;
+pub mod tap;
 
 pub use press::{Buttons, PressScript};
+pub use tap::{Rebuild, SnesTileRecord, TileCapture, TileLayer};
 
 #[repr(C)]
 struct RawSnes {
@@ -29,6 +31,8 @@ extern "C" {
         height: *mut u32,
         overscan: *mut c_int,
     ) -> *const u16;
+    fn xs_set_tap(snes: *mut RawSnes, on: c_int) -> c_int;
+    fn xs_tap_view(snes: *mut RawSnes, view: *mut tap::RawView);
     fn xs_destroy(snes: *mut RawSnes);
 }
 
@@ -49,6 +53,8 @@ pub enum SnesError {
     Frame,
     /// Another emulator is still alive in this process.
     Busy,
+    /// The tile tap could not be switched on or off.
+    Tap,
 }
 
 impl fmt::Display for SnesError {
@@ -59,6 +65,7 @@ impl fmt::Display for SnesError {
             Self::Load(path) => write!(f, "{path} could not be loaded as a SNES game"),
             Self::Frame => write!(f, "the SNES emulator failed while running a frame"),
             Self::Busy => write!(f, "another SNES emulator is still running in this process"),
+            Self::Tap => write!(f, "the tile tap could not be switched"),
         }
     }
 }
@@ -109,6 +116,7 @@ impl Frame {
 pub struct Snes {
     raw: *mut RawSnes,
     frames: u32,
+    tap_on: bool,
     _guard: std::sync::MutexGuard<'static, ()>,
 }
 
@@ -131,6 +139,7 @@ impl Snes {
         let snes = Self {
             raw,
             frames: 0,
+            tap_on: false,
             _guard: guard,
         };
         // SAFETY: `raw` came from `xs_create` and is not freed until `drop`.
@@ -160,6 +169,46 @@ impl Snes {
         }
         self.frames += 1;
         Ok(())
+    }
+
+    /// Starts or stops the tile tap: while it is on, each frame records the tiles it drew
+    /// (see [`Snes::tile_capture`]). It costs some speed, so it is off by default.
+    ///
+    /// # Errors
+    ///
+    /// [`SnesError::Tap`] when Mesen has no SNES picture unit to attach to.
+    pub fn set_tile_tap(&mut self, on: bool) -> Result<(), SnesError> {
+        // SAFETY: `raw` is alive for as long as `self`.
+        if unsafe { xs_set_tap(self.raw, c_int::from(on)) } != 1 {
+            return Err(SnesError::Tap);
+        }
+        self.tap_on = on;
+        Ok(())
+    }
+
+    /// What the tile tap recorded during the last frame, or `None` when it is off or no frame
+    /// has run since it was switched on.
+    #[must_use]
+    pub fn tile_capture(&self) -> Option<TileCapture> {
+        if !self.tap_on || self.frames == 0 {
+            return None;
+        }
+        let mut view = tap::RawView {
+            chunks: std::ptr::null(),
+            chunk_count: 0,
+            lines: std::ptr::null(),
+            line_count: 0,
+            sprites: std::ptr::null(),
+            sprite_count: 0,
+            cgram: std::ptr::null(),
+            cgram_snapshots: 0,
+        };
+        // SAFETY: `raw` is alive; the shim fills `view` with pointers into its own buffers,
+        // valid until the next frame, and `from_view` copies them right away.
+        unsafe {
+            xs_tap_view(self.raw, &raw mut view);
+            Some(TileCapture::from_view(&view))
+        }
     }
 
     /// The picture of the last frame run, or `None` before the first frame.

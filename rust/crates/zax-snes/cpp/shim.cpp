@@ -17,6 +17,7 @@
 #include "Shared/Interfaces/IInputProvider.h"
 #include "SNES/SnesConsole.h"
 #include "SNES/SnesPpu.h"
+#include "SNES/SnesTileTap.h"
 #include "Utilities/FolderUtilities.h"
 #include "Utilities/VirtualFile.h"
 
@@ -50,7 +51,30 @@ struct XsSnes
 	std::unique_ptr<Emulator> Emu;
 	HostInput Input;
 	bool Loaded = false;
+	// The tile tap, filled during each frame when TapOn (see SnesTileTap.h).
+	SnesTapFrame Tap;
+	bool TapOn = false;
 };
+
+// What Rust reads after a frame: pointers into XsSnes::Tap, valid until the next frame.
+struct XsTapView
+{
+	const SnesTapChunk* Chunks;
+	uint32_t ChunkCount;
+	const SnesTapLine* Lines;
+	uint32_t LineCount;
+	const SnesTapSprite* Sprites;
+	uint32_t SpriteCount;
+	const uint16_t* Cgram;
+	uint32_t CgramSnapshots;
+};
+
+static SnesPpu* GetSnesPpu(XsSnes* snes)
+{
+	shared_ptr<IConsole> console = snes->Emu->GetConsole();
+	auto snesConsole = dynamic_cast<SnesConsole*>(console.get());
+	return snesConsole ? snesConsole->GetPpu() : nullptr;
+}
 
 extern "C" {
 
@@ -78,6 +102,8 @@ XsSnes* xs_create(const char* home_folder)
 		snesConfig.Port1.Type = ControllerType::SnesController;
 		snesConfig.RamPowerOnState = RamState::AllZeros;
 		snesConfig.EnableRandomPowerOnState = false;
+		// Draw every frame: at unlimited speed Mesen would otherwise skip drawing some.
+		snesConfig.DisableFrameSkipping = true;
 		settings->SetSnesConfig(snesConfig);
 
 		// Do not keep a recent-games list or show the game selection screen.
@@ -126,6 +152,9 @@ int xs_run_frame(XsSnes* snes)
 		return 0;
 	}
 	try {
+		if(snes->TapOn) {
+			snes->Tap.Clear();
+		}
 		snes->Emu->HostRunFrame();
 		return 1;
 	} catch(...) {
@@ -160,6 +189,40 @@ const uint16_t* xs_frame(XsSnes* snes, uint32_t* width, uint32_t* height, int* o
 	}
 }
 
+// Starts (on = 1) or stops recording tiles each frame. Returns 1 on success.
+int xs_set_tap(XsSnes* snes, int on)
+{
+	if(!snes->Loaded) {
+		return 0;
+	}
+	try {
+		SnesPpu* ppu = GetSnesPpu(snes);
+		if(!ppu) {
+			return 0;
+		}
+		snes->TapOn = on != 0;
+		snes->Tap.Clear();
+		ppu->SetTileTap(snes->TapOn ? &snes->Tap : nullptr);
+		return 1;
+	} catch(...) {
+		return 0;
+	}
+}
+
+// What the tap recorded during the last frame.
+void xs_tap_view(XsSnes* snes, XsTapView* view)
+{
+	SnesTapFrame& tap = snes->Tap;
+	view->Chunks = tap.Chunks.data();
+	view->ChunkCount = (uint32_t)tap.Chunks.size();
+	view->Lines = tap.Lines.data();
+	view->LineCount = (uint32_t)tap.Lines.size();
+	view->Sprites = tap.Sprites.data();
+	view->SpriteCount = (uint32_t)tap.Sprites.size();
+	view->Cgram = tap.Cgram.data();
+	view->CgramSnapshots = (uint32_t)(tap.Cgram.size() / 256);
+}
+
 // Stops the game and frees the emulator.
 void xs_destroy(XsSnes* snes)
 {
@@ -169,6 +232,9 @@ void xs_destroy(XsSnes* snes)
 	try {
 		if(snes->Loaded) {
 			snes->Emu->UnregisterInputProvider(&snes->Input);
+			if(SnesPpu* ppu = GetSnesPpu(snes)) {
+				ppu->SetTileTap(nullptr);
+			}
 		}
 		snes->Emu->Stop(false);
 		snes->Emu->Release();

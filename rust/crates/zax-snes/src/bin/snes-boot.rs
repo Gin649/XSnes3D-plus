@@ -2,8 +2,13 @@
 //!
 //! ```text
 //! snes-boot <rom> [--frames N] [--shots 60,300,...] [--press SCRIPT] [--out DIR] [--name NAME]
-//!           [--firmware DIR]
+//!           [--firmware DIR] [--check-tiles]
 //! ```
+//!
+//! `--check-tiles` turns on the tile tap. At each shot it also writes `NAME-fNNNNN-tiles.png`:
+//! the PPU's picture, the picture rebuilt from the recorded tiles, and the pixels that differ
+//! in red, side by side. It prints `tiles <frame> checked <n> mismatched <n> skipped <n>
+//! records <n>`. Skipped pixels are lines in modes 5, 6 and 7, not rebuilt yet.
 //!
 //! `--firmware` names a folder of chip firmware files under Mesen's names (`dsp1.rom`,
 //! `st018.rom` and so on). Games with those chips, like Super Mario Kart, need them.
@@ -18,7 +23,7 @@ use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
-use zax_snes::{Frame, PressScript, Snes};
+use zax_snes::{Frame, PressScript, Rebuild, Snes};
 
 struct Options {
     rom: PathBuf,
@@ -28,6 +33,7 @@ struct Options {
     out: PathBuf,
     name: String,
     firmware: Option<PathBuf>,
+    check_tiles: bool,
 }
 
 fn main() -> ExitCode {
@@ -50,6 +56,10 @@ fn run() -> Result<(), String> {
     }
 
     let mut snes = Snes::load(&options.rom, &home).map_err(|e| e.to_string())?;
+    if options.check_tiles {
+        snes.set_tile_tap(true).map_err(|e| e.to_string())?;
+    }
+    let mut mismatched_total = 0u64;
     for counter in 0..options.frames {
         snes.run_frame(options.press.at(counter))
             .map_err(|e| e.to_string())?;
@@ -67,11 +77,31 @@ fn run() -> Result<(), String> {
                 frame.hash(),
                 path.display()
             );
+            if let Some(capture) = snes.tile_capture() {
+                let rebuild = capture.rebuild();
+                let path = options
+                    .out
+                    .join(format!("{}-f{done:05}-tiles.png", options.name));
+                write_three_way(&path, &rebuild)?;
+                println!(
+                    "tiles {done} checked {} mismatched {} skipped {} records {}",
+                    rebuild.checked,
+                    rebuild.mismatched,
+                    rebuild.skipped,
+                    capture.records().len()
+                );
+                mismatched_total += u64::from(rebuild.mismatched);
+            }
         }
     }
     drop(snes);
     // Mesen may have written save files; they are not needed.
     let _ = fs::remove_dir_all(&home);
+    if mismatched_total > 0 {
+        return Err(format!(
+            "{mismatched_total} pixels rebuilt from the tiles differ from the picture"
+        ));
+    }
     Ok(())
 }
 
@@ -83,6 +113,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
     let mut out = PathBuf::from(".");
     let mut name = None;
     let mut firmware = None;
+    let mut check_tiles = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let mut value = |flag: &str| args.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -110,12 +141,13 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             "--out" => out = PathBuf::from(value("--out")?),
             "--name" => name = Some(value("--name")?),
             "--firmware" => firmware = Some(PathBuf::from(value("--firmware")?)),
+            "--check-tiles" => check_tiles = true,
             flag if flag.starts_with("--") => return Err(format!("unknown option {flag}")),
             path => rom = Some(PathBuf::from(path)),
         }
     }
     let rom = rom.ok_or(
-        "usage: snes-boot <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--out DIR] [--name NAME] [--firmware DIR]",
+        "usage: snes-boot <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--out DIR] [--name NAME] [--firmware DIR] [--check-tiles]",
     )?;
     if frames == 0 {
         return Err("--frames must be at least 1".into());
@@ -135,6 +167,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
         out,
         name,
         firmware,
+        check_tiles,
     })
 }
 
@@ -156,6 +189,37 @@ fn file_stem(path: &Path) -> String {
         || "snes".to_string(),
         |stem| stem.to_string_lossy().into_owned(),
     )
+}
+
+/// The PPU's picture, the rebuilt one and the differences (red, over a dimmed picture), side
+/// by side with 4-pixel gaps.
+fn write_three_way(path: &Path, rebuild: &Rebuild) -> Result<(), String> {
+    let (width, height) = (rebuild.width as usize, rebuild.height as usize);
+    let gap = 4;
+    let total = width * 3 + gap * 2;
+    let mut rgb = vec![40u8; total * height * 3];
+    for y in 0..height {
+        for x in 0..width {
+            let at = (y * width + x) * 3;
+            let reference = &rebuild.reference[at..at + 3];
+            let rebuilt = &rebuild.rebuilt[at..at + 3];
+            let difference = if reference == rebuilt {
+                [reference[0] / 3, reference[1] / 3, reference[2] / 3]
+            } else {
+                [255, 0, 0]
+            };
+            for (panel, colour) in [reference, rebuilt, &difference[..]].iter().enumerate() {
+                let out = (y * total + panel * (width + gap) + x) * 3;
+                rgb[out..out + 3].copy_from_slice(colour);
+            }
+        }
+    }
+    let frame = Frame {
+        width: u32::try_from(total).map_err(|e| e.to_string())?,
+        height: rebuild.height,
+        rgb,
+    };
+    write_png(path, &frame)
 }
 
 fn write_png(path: &Path, frame: &Frame) -> Result<(), String> {
