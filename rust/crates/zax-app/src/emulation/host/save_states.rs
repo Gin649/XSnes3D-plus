@@ -1,7 +1,7 @@
 //! Save states and rollback (SPEC-07 §3.4, SPEC-09 REQ-PERS-050 to REQ-PERS-058).
 
 use zax_engine3d::state_codec;
-use zax_nes::{builtin_patches, NesCore};
+use crate::snes::SnesCore;
 use zax_render::assets::png_image;
 
 use super::{EmulationHost, GameView, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH};
@@ -30,14 +30,12 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
     }
 
     /// Makes the slots those of `game_id`'s ROM (owner request: only its states are shown), its
-    /// states of the slots shared by every game before moved to its files first, and its movies
-    /// of before renamed after the ROM.
+    /// states of the slots shared by every game before moved to its files first.
     pub(super) fn choose_slots(&mut self, game_id: &str) {
         let rom = self.rom_file_name(game_id);
         if save_slots::move_legacy_states(&self.paths, &mut self.legacy_slots, game_id, &rom) > 0 {
             self.save_slot_index();
         }
-        self.rename_legacy_movies(game_id, &rom);
         self.slots = SaveSlotIndex::for_rom(&self.paths, &rom);
     }
 
@@ -67,26 +65,9 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 return None;
             }
         };
-        // Taken at the game's wait for the next frame: it restores with other components of the
-        // hack applied (an aid on or off).
         let (core, at_idle) = session.core_mut().save_state_at_idle(true).ok()?;
-        let components: Vec<String> = session
-            .core()
-            .applied_components()
-            .into_iter()
-            .map(str::to_owned)
-            .collect();
-        // The pack whose components are applied, its widescreen running or an aid on.
-        let pack = (!components.is_empty())
-            .then(|| session.core().options_patch())
-            .flatten()
-            .and_then(builtin_patches::by_name);
         let camera = save_state_file::write_camera(&self.scene.camera.capture());
         let conversion = state_codec::write(session.engine());
-        let hack = session
-            .core()
-            .original_image()
-            .and_then(builtin_patches::patch_for);
         let mut picture = Vec::new();
         session.copy_nes_picture(&mut picture);
         let thumbnail = save_state_file::thumbnail_jpeg(&picture).unwrap_or_default();
@@ -97,18 +78,16 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             .unwrap_or_default();
         Some(SaveStateContent {
             header: SaveStateHeader {
-                core_id: NesCore::CORE_NAME.to_owned(),
-                core_state_version: NesCore::STATE_VERSION,
+                core_id: SnesCore::CORE_NAME.to_owned(),
+                core_state_version: SnesCore::STATE_VERSION,
                 game_id,
                 rom_sha1: fingerprint,
                 saved_at,
                 slot_id: slot_id.to_owned(),
-                is_hack: Some(hack.is_some()),
-                hack_name: hack.or(pack).map(|patch| patch.name.to_owned()),
-                hack_version: hack
-                    .or(pack)
-                    .map(|patch| format!("{:08X}", patch.version())),
-                hack_components: Some(components),
+                is_hack: Some(false),
+                hack_name: None,
+                hack_version: None,
+                hack_components: Some(Vec::new()),
                 at_idle: Some(at_idle),
                 app_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
                 saved_at_local: Some(save_state_file::local_date_time(saved_at)),

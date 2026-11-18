@@ -897,6 +897,12 @@ impl GameSession {
         restored
     }
 
+    /// Whether no script of this profile reads or drives the core ([`CORE_MEMBERS`]).
+    #[must_use]
+    pub const fn core_follows_the_inputs(&self) -> bool {
+        self.core_follows_the_inputs
+    }
+
     /// Whether a script of this profile changes the core from a frame hook (Q-103).
     #[must_use]
     pub const fn scripts_change_the_core(&self) -> bool {
@@ -1291,6 +1297,7 @@ impl GameSession {
         let batch = captured.batch(first.map_or(&empty, |index| &captured.layers[index]));
         let started = clock.start();
         self.engine.settings_mut().flat_layer = false;
+        self.engine.settings_mut().clipping = layers::SNES_CLIPPING;
         self.scripted(scene, |engine| {
             engine.convert(&batch, counter);
         });

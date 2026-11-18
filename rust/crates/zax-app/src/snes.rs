@@ -182,6 +182,17 @@ impl SnesCore {
         }
     }
 
+    /// Whether `image`, from the file `name`, can be a SNES game: an archive Mesen opens, or a
+    /// ROM of at least 32 KiB (with or without the 512-byte copier header).
+    #[must_use]
+    pub fn looks_like_a_game(image: &[u8], name: &str) -> bool {
+        let lower = name.to_ascii_lowercase();
+        if lower.ends_with(".zip") || lower.ends_with(".7z") {
+            return !image.is_empty();
+        }
+        image.len() >= 0x8000 && image.len() % 0x400 != 0x200 || image.len() >= 0x8200
+    }
+
     /// Whether a game is loaded.
     #[must_use]
     pub const fn is_running(&self) -> bool {
@@ -442,8 +453,21 @@ impl SnesCore {
     }
 
     /// The TV region: Mesen reads it from the game, so the setting changes nothing.
-    pub const fn set_region<T>(&mut self, region: T) {
+    pub fn set_region<T>(&mut self, region: T) {
         let _ = region;
+    }
+
+    /// The core's name in a savestate's header.
+    pub const CORE_NAME: &'static str = "XSnes3D+ Mesen 2.1.1";
+
+    /// The version of the core state in a savestate: Mesen's own state format inside.
+    pub const STATE_VERSION: i32 = 1;
+
+    /// The largest core state a savestate may hold: Mesen's SNES state with its chips (Super FX,
+    /// SA-1) and their memory is under 2 MiB.
+    #[must_use]
+    pub const fn max_state_size(&self) -> usize {
+        4 * 1024 * 1024
     }
 
     /// The most frames of run-ahead the core offers: none yet on the SNES.

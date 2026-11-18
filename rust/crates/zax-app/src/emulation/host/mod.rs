@@ -614,7 +614,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 let source: crate::audio::audio_mixer::AudioSampleSource =
                     Box::new(move |destination| {
                         // A mono read cannot be refused; an empty buffer reads as silence.
-                        reader.read_samples(destination, false).unwrap_or(0)
+                        reader.read_samples(destination, false)
                     });
                 mixer.set_emulation_source(Some(source));
             }
@@ -1326,11 +1326,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             return;
         };
         if let Some(session) = self.session.as_mut().filter(|session| session.has_rom()) {
-            session
-                .core_mut()
-                .bus_mut()
-                .apu_mut()
-                .drop_pending_samples();
+            session.core_mut().drop_pending_samples();
         }
         control.request_resync();
         self.audio_rate.restart();

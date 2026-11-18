@@ -10,7 +10,6 @@ use sdl2::event::{Event, WindowEvent};
 use time::OffsetDateTime;
 use zax_engine3d::draw_list::FrameDrawList;
 use zax_engine3d::frame::ConversionFrame;
-use zax_nes::ppu::SpriteLimit;
 use zax_platform::audio::PREFERRED_SAMPLE_RATE;
 use zax_platform::framebuffer::{self, OffscreenFramebuffer};
 use zax_platform::icon;
@@ -37,7 +36,6 @@ use crate::audio::audio_assets::AudioAssets;
 use crate::audio::stream::{self as audio_stream, AudioLink, AudioStream, ProgramWriter};
 use crate::audio::synth_audio_library::SynthAudioLibrary;
 use crate::audio::{AudioMixer, TrackRandom, UiAudioLibrary};
-use crate::demo_game;
 use crate::editor_mode;
 use crate::emulation::commands::{Command, CommandArgs};
 use crate::emulation::emulation_state::EmulationState;
@@ -295,14 +293,10 @@ impl Running {
         let asset_root = neutral_assets::locate(options.asset_root.as_deref().map(Path::new));
         let paths = resolve_user_data(options);
         let (store, mut model) = load_settings(options, &paths);
-        let demo_rom = install_demo_game(&paths, &model);
         install_bundled_profiles(&paths);
         #[cfg(feature = "shaders")]
         install_shader_pack(&paths);
         let mut catalog = LibraryGameCatalog::open(asset_root.as_deref(), &paths, Box::new(log));
-        if let Some(rom) = demo_rom {
-            catalog.set_rom_path(demo_game::PROFILE_ID, &rom.to_string_lossy());
-        }
         if let Some(rom) = options
             .rom_path
             .as_deref()
@@ -1265,22 +1259,12 @@ fn prompt_context(host: &AppHost, mcp_port: Option<u16>) -> editor_mode::PromptC
         let project = game_id.and_then(|id| editor_mode::project_of(&folder, id));
         let rom_identity = game.as_ref().and_then(|(_, rom)| {
             let image = std::fs::read(rom).ok()?;
-            let mapper = image
-                .get(6..8)
-                .filter(|_| image.starts_with(b"NES\x1a"))
-                .map(|flags| (flags[0] >> 4) | (flags[1] & 0xF0));
-            let region = host.session().map(|session| session.core().region());
             Some(format!(
-                "data CRC {:08x} (No-Intro), mapper {}, {}",
-                zax_nes::builtin_patches::data_crc(&image),
-                mapper.map_or_else(|| "?".to_owned(), |m| m.to_string()),
-                region.map_or_else(|| "?".to_owned(), |r| format!("{r:?}")),
+                "SNES file CRC {:08x}, {} bytes",
+                crate::persistence::rom_crc_cache::crc32(&image),
+                image.len(),
             ))
         });
-        let movie = host
-            .movie_file()
-            .zip(host.movie_position())
-            .map(|(file, (_, length))| (file.to_path_buf(), length));
         let harness = ["zax-harness.exe", "zax-harness"]
             .iter()
             .map(|name| host.paths().executable_directory.join(name))
@@ -1290,7 +1274,7 @@ fn prompt_context(host: &AppHost, mcp_port: Option<u16>) -> editor_mode::PromptC
             game,
             project,
             rom_identity,
-            movie,
+            movie: None,
             mcp_url: mcp_port.map(|port| format!("http://127.0.0.1:{port}/mcp")),
             harness,
             french: strings::language() == UiLanguage::French,
@@ -1329,7 +1313,6 @@ impl Running {
         let Some(rom) = self.host.games().rom_path(&game_id) else {
             return;
         };
-        let movie = self.host.movie_file().map(Path::to_path_buf);
         let name = Path::new(&rom).file_stem().map_or_else(
             || "game".to_owned(),
             |stem| stem.to_string_lossy().into_owned(),
@@ -1373,9 +1356,6 @@ impl Running {
             project.title,
             project.folder.display()
         ));
-        if let Some(movie) = movie {
-            self.host.play_movie_after_launch(&movie.to_string_lossy());
-        }
         self.host.launch_rom_with_profile(&rom, &profile.id);
         let mut context = self.prompt_context();
         context.game = Some((project.title.clone(), rom));
@@ -1856,36 +1836,6 @@ fn install_bundled_profiles(paths: &UserDataPaths) {
         }
         Ok(_) => {}
         Err(error) => log(&format!("The 3D profiles could not be installed: {error}")),
-    }
-}
-
-/// The user folder, and the file copy of the log opened in it. On a handheld, a root the
-/// command line names that refuses writes is replaced by the per-user folder when that one
-/// accepts them (Rust-only: the settings and the saves would otherwise be lost silently).
-/// `FlappyZaxNes` into the ROM folder of the options (or the user data's `roms`) and the user's
-/// profiles, when this version is not there yet; the path of its ROM when it was written now.
-fn install_demo_game(paths: &UserDataPaths, model: &SettingsModel) -> Option<PathBuf> {
-    let folder = model
-        .get(SettingId::UiRomsFolder)
-        .as_text()
-        .trim()
-        .to_owned();
-    let roms = if folder.is_empty() {
-        paths.root.join("roms")
-    } else {
-        PathBuf::from(folder)
-    };
-    match demo_game::install(paths, &roms) {
-        Ok(rom) => {
-            if let Some(rom) = &rom {
-                log(&format!("FlappyZaxNes installed: '{}'.", rom.display()));
-            }
-            rom
-        }
-        Err(error) => {
-            log(&format!("FlappyZaxNes could not be installed: {error}"));
-            None
-        }
     }
 }
 
@@ -2576,10 +2526,6 @@ fn start_game_from_command_line(
     crate::launch_origin::set_from_frontend();
     let full: PathBuf = std::path::absolute(rom).unwrap_or_else(|_| PathBuf::from(rom));
     let full = full.to_string_lossy().into_owned();
-    if let Some(movie) = options.movie_path.as_deref() {
-        let movie = std::path::absolute(movie).unwrap_or_else(|_| PathBuf::from(movie));
-        host.play_movie_after_launch(&movie.to_string_lossy());
-    }
     // A smoke test must never stop on a dialog, so it takes the resolved entry, "2D Mode" when
     // no profile was named, rather than the interactive flow.
     if options.profile.is_some() || options.smoke_test {
@@ -2597,19 +2543,14 @@ fn handle_camera_input(
     real: f32,
     state: &mut RunState,
 ) {
-    // REQ-SCN-018 / REQ-INP-083: the camera controls only act while the game is running —
-    // and, for the editor (EDITOR-1), while a movie is paused, to look around a frame.
-    let paused_movie = host.state() == EmulationState::Paused && host.movie_position().is_some();
-    if host.state() != EmulationState::Running && !paused_movie {
+    // REQ-SCN-018 / REQ-INP-083: the camera controls only act while the game is running.
+    if host.state() != EmulationState::Running {
         state.drag_origin = None;
         return;
     }
-    // REQ-INP-080: a player whose port is in Zapper does not drive the camera.
     let camera_actions = to_camera_actions(routing::camera_sources(
         snapshot.player_one,
         snapshot.player_two,
-        host.port_type(0),
-        host.port_type(1),
     ));
     let scene = host.scene_mut();
     // Rust-only (owner request): going into 2D puts the picture head on.
@@ -2714,47 +2655,6 @@ fn update_cursor(
 const WIDESCREEN_EXTRA_PERCENT: [u16; 14] =
     [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300];
 
-/// The widescreen margin, in NES pixels on each side, that the `video.widescreen` choice offers
-/// a ROM made for the extension: none, enough to fill the view's `size` (width, height, before
-/// any resolution scale) with a 240-line picture, or enough for a fixed ratio; then `extra`
-/// (`video.widescreen_extra`, an index into [`WIDESCREEN_EXTRA_PERCENT`]) wider, so that the 3D
-/// objects at the edges of the view are already whole when they come into sight. Always a
-/// whole number of tiles, at most [`zax_nes::wide::MAX_MARGIN`].
-///
-/// Returns the margins on each side and above and below: the picture keeps the chosen ratio,
-/// so `extra` makes it as much taller as wider (only a margin decoder fills the height).
-fn widescreen_margin(choice: i32, extra: i32, size: (i32, i32)) -> (i32, i32) {
-    #[allow(clippy::cast_precision_loss)] // Window sizes.
-    let ratio = match choice {
-        1 if size.1 > 0 => size.0 as f32 / size.1 as f32,
-        2 => 3.0 / 2.0,
-        3 => 16.0 / 10.0,
-        4 => 16.0 / 9.0,
-        _ => return (0, 0),
-    };
-    let percent = usize::try_from(extra)
-        .ok()
-        .and_then(|index| WIDESCREEN_EXTRA_PERCENT.get(index))
-        .copied()
-        .unwrap_or(0);
-    let bonus = 1.0 + (f32::from(percent) / 100.0);
-    let whole_tiles = |pixels: f32, max: i32| {
-        #[allow(clippy::cast_possible_truncation)] // Clamped right after.
-        let tiles = (pixels.max(0.0) / 8.0).ceil() as i32;
-        (tiles * 8).clamp(0, max)
-    };
-    (
-        whole_tiles(
-            (240.0 * ratio * bonus - 256.0) / 2.0,
-            zax_nes::wide::MAX_MARGIN,
-        ),
-        whole_tiles(
-            240.0 * (bonus - 1.0) / 2.0,
-            zax_nes::wide::MAX_VERTICAL_MARGIN,
-        ),
-    )
-}
-
 #[allow(clippy::too_many_lines)] // The scene of a frame, each source of motion in its order.
 fn update_scene(host: &mut AppHost, state: &mut RunState) {
     let two_dimensional = host.showing_two_dimensional();
@@ -2765,39 +2665,6 @@ fn update_scene(host: &mut AppHost, state: &mut RunState) {
         .get(SettingId::EmuSmoothScrollView)
         .as_bool();
     state.picture_between = false;
-    let (widescreen, widescreen_y) = widescreen_margin(
-        host.settings().get(SettingId::VideoWidescreen).as_int(),
-        host.settings()
-            .get(SettingId::VideoWidescreenExtra)
-            .as_int(),
-        state.view_size,
-    );
-    let strict_edges = host
-        .settings()
-        .get(SettingId::VideoWidescreenStrictEdges)
-        .as_bool();
-    // The colours the NES ones are shown in: the whole process's.
-    zax_engine3d::palette::select_nes_palette(
-        u8::try_from(host.settings().get(SettingId::VideoNesPalette).as_int()).unwrap_or(0),
-    );
-    let hack_options = host.hack_option_bits();
-    // The smooth scrolling from the run-ahead: nothing to draw between two frames at 60 frames a
-    // second or less, nor a real frame to slide from without run-ahead; then nothing is done.
-    let smooth_ahead = host
-        .settings()
-        .get(SettingId::EmuSmoothScrollAhead)
-        .as_bool()
-        && host.settings().get(SettingId::EmuRunAhead).as_int() >= 1
-        && host.display_rate > 61.0;
-    let sprite_limit = match host
-        .settings()
-        .get(SettingId::VideoRemoveSpriteLimit)
-        .as_int()
-    {
-        0 => SpriteLimit::Kept,
-        1 => SpriteLimit::Removed,
-        _ => SpriteLimit::Smart,
-    };
     let mut overscan = crate::overscan::Overscan::default();
     let ntsc = host
         .session()
@@ -2807,14 +2674,6 @@ fn update_scene(host: &mut AppHost, state: &mut RunState) {
     }
     if let Some(session) = host.session_mut() {
         session.set_overscan(overscan);
-        session.core_mut().set_hack_options(hack_options);
-        session.core_mut().set_smooth_scroll_ahead(smooth_ahead);
-        session.core_mut().set_sprite_limit(sprite_limit);
-        session.core_mut().set_widescreen_margin(widescreen);
-        session
-            .core_mut()
-            .set_widescreen_vertical_margin(widescreen_y);
-        session.set_strict_wide_edges(strict_edges);
     }
     let (session, scene) = host.session_and_scene_mut();
     let Some(session) = session else {
@@ -2824,7 +2683,9 @@ fn update_scene(host: &mut AppHost, state: &mut RunState) {
     };
     scene.nes_background_color = session.nes_background_color();
     scene.emulated_time = session.emulated_time();
-    scene.clipping = session.engine().settings().clipping;
+    // The SNES layers further back are grown past the picture's edges (`zax_snes::layers`):
+    // the scene's rectangle leaves them whole.
+    scene.clipping = zax_snes::layers::SCENE_CLIPPING;
     #[allow(clippy::cast_precision_loss)] // 0..=128.
     let margin = session
         .engine()

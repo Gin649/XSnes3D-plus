@@ -126,12 +126,10 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 return;
             }
         };
-        // REQ-LOOP-018: the content is checked by a throw-away core, so a bad file never
-        // disturbs the game in progress.
-        let mut probe = NesCore::new();
-        let validation = probe.load_rom(&rom.image, &rom.name);
-        probe.close_rom();
-        if !validation.success {
+        // REQ-LOOP-018: the content is checked before the game in progress is touched. Only
+        // one Mesen may run at a time, so the SNES check is the file's own (see
+        // `SnesCore::looks_like_a_game`); a file Mesen refuses still fails the launch.
+        if !crate::snes::SnesCore::looks_like_a_game(&rom.image, &rom.name) {
             self.notifications.show_error(INVALID_ROM_MESSAGE);
             self.log(&format!(
                 "{rom_path}: {}",
@@ -389,15 +387,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         job.still_seconds >= LOADING_TIMEOUT_SECONDS
     }
 
-    fn reset_port_types_on_game_change(&mut self, job: &LoadJob) {
-        if !job.different_game {
-            return;
-        }
-        if let Some(session) = &mut self.session {
-            session.reset_port_types();
-        }
-    }
-
     /// Makes the session of the job's game, unless the previous one is kept.
     pub(super) fn ensure_session(
         &mut self,
@@ -530,7 +519,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 if job.reload_profile {
                     self.apply_profile_scene();
                 }
-                self.reset_port_types_on_game_change(job);
                 if let Some(session) = self.session.as_mut() {
                     session.start(&mut self.settings, &mut self.scene);
                 }
@@ -629,7 +617,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         // REQ-INP-060: the core block carries the port types, but they are not part of what is
         // persisted across a game change; they go back to Controller before the Start hook that
         // the script restore runs.
-        self.reset_port_types_on_game_change(job);
         if let Some(session) = self.session.as_mut() {
             if let Err(error) =
                 session.complete_script_restore(&mut self.settings, &mut self.scene, &state.lua)
