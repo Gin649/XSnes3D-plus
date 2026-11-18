@@ -917,10 +917,13 @@ pub fn forced_run_ahead_note(row: OptionRow, forced: bool) -> Option<String> {
 /// The name of a camera preset, in the language in force.
 #[must_use]
 pub fn camera_label(camera: CameraPreset) -> String {
+    if camera == CameraPreset::Flat {
+        return "2D".to_owned();
+    }
     strings::get(match camera {
         CameraPreset::Orbit => keys::MENU_CAMERA_ORBITAL,
         CameraPreset::FirstPerson => keys::MENU_CAMERA_FIRST_PERSON,
-        CameraPreset::ResetView => keys::HANDHELD_CAMERA_RESET,
+        CameraPreset::ResetView | CameraPreset::Flat => keys::HANDHELD_CAMERA_RESET,
     })
 }
 

@@ -1378,11 +1378,16 @@ fn menu_is_select_start(host: &AppHost) -> bool {
 
 /// Puts the camera on `preset`.
 fn apply_camera(preset: CameraPreset, host: &mut AppHost) {
+    // XSnes3D+: "2D" shows the game flat; every other preset is a 3D one.
+    if (preset == CameraPreset::Flat) != host.showing_two_dimensional() {
+        host.enqueue(Command::ToggleTwoDimensional, CommandArgs::default());
+    }
     match preset {
         CameraPreset::Orbit => host.enqueue(Command::SetCameraMode, CommandArgs::of_number(0)),
         CameraPreset::FirstPerson => {
             host.enqueue(Command::SetCameraMode, CommandArgs::of_number(1));
         }
         CameraPreset::ResetView => host.enqueue(Command::ResetView, CommandArgs::default()),
+        CameraPreset::Flat => {}
     }
 }

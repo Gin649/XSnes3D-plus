@@ -48,13 +48,15 @@ pub enum CameraPreset {
     Orbit,
     /// The camera looks from the player (first person).
     FirstPerson,
+    /// XSnes3D+: the game in 2D, as the console shows it (any other preset goes back to 3D).
+    Flat,
     /// The view comes back to its starting place.
     ResetView,
 }
 
 impl CameraPreset {
     /// The presets, in the order the row cycles through them.
-    pub const ALL: [Self; 3] = [Self::Orbit, Self::FirstPerson, Self::ResetView];
+    pub const ALL: [Self; 4] = [Self::Orbit, Self::FirstPerson, Self::Flat, Self::ResetView];
 
     /// The preset `step` places further, wrapping round.
     #[must_use]

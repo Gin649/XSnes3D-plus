@@ -71,6 +71,9 @@ struct SampleRing {
     phase: f64,
     /// The last input frame.
     last: [f32; 2],
+    /// The pacer's nudge: above 0, a little more sound is made per frame (the stream's buffer
+    /// is running low); below 0, a little less.
+    adjustment: f64,
 }
 
 impl Default for SampleRing {
@@ -80,6 +83,7 @@ impl Default for SampleRing {
             rate: f64::from(SAMPLE_RATE),
             phase: 0.0,
             last: [0.0; 2],
+            adjustment: 0.0,
         }
     }
 }
@@ -88,7 +92,7 @@ impl SampleRing {
     /// Adds Mesen's stereo frames, resampled to the stream's rate (straight lines between
     /// frames: Mesen's own output is already filtered).
     fn push(&mut self, samples: &[i16]) {
-        let step = f64::from(SAMPLE_RATE) / self.rate;
+        let step = f64::from(SAMPLE_RATE) / (self.rate * (1.0 + self.adjustment));
         for frame in samples.chunks_exact(2) {
             let current = [f32::from(frame[0]) / 32_768.0, f32::from(frame[1]) / 32_768.0];
             while self.phase < 1.0 {
@@ -167,6 +171,10 @@ impl AudioReader {
         lock(&self.ring).samples.clear();
     }
 
+    fn set_adjustment(&self, adjustment: f64) {
+        lock(&self.ring).adjustment = adjustment;
+    }
+
     fn set_rate(&self, rate: i32) {
         let mut ring = lock(&self.ring);
         ring.rate = f64::from(rate.max(8_000));
@@ -186,6 +194,8 @@ pub struct SnesCore {
     snes: Option<Snes>,
     home: PathBuf,
     image: Option<Vec<u8>>,
+    /// The ROM's file name in the home folder's `Games` (Mesen keeps the battery save under it).
+    name: String,
     frames: i64,
     input: Option<EngineInput>,
     picture: Option<zax_snes::Frame>,
@@ -210,6 +220,7 @@ impl SnesCore {
             snes: None,
             home: default_home(),
             image: None,
+            name: String::new(),
             frames: 0,
             input: None,
             picture: None,
@@ -249,6 +260,7 @@ impl SnesCore {
                 }
                 self.snes = Some(snes);
                 self.image = Some(image.to_vec());
+                self.name = file_name(name);
                 self.frames = 0;
                 RomLoadResult {
                     success: true,
@@ -375,12 +387,23 @@ impl SnesCore {
     ///
     /// No game, or Mesen could not make it; `buffer` is then untouched.
     pub fn save_state_to(&self, include_rom_image: bool, buffer: &mut Vec<u8>) -> Result<(), String> {
-        let _ = include_rom_image;
         let snes = self.snes.as_ref().ok_or("no game is running")?;
         let state = snes.save_state().map_err(|error| error.to_string())?;
         buffer.clear();
         buffer.extend_from_slice(&state);
-        // The frame count goes with it.
+        // A state on disk carries its game (the ROM and its file name), so it can be loaded
+        // when no game runs yet: the resume point and the slots of the game list. The file
+        // name matters, as Mesen keeps the battery save under it. Then, at the end, the
+        // lengths and the frame count, so they are found from the end:
+        // Mesen's state | ROM | name | name length (u32) | ROM length (u64) | frame count (i64).
+        let (rom, name) = match (&self.image, include_rom_image) {
+            (Some(image), true) => (image.as_slice(), self.name.as_bytes()),
+            _ => (&[][..], &[][..]),
+        };
+        buffer.extend_from_slice(rom);
+        buffer.extend_from_slice(name);
+        buffer.extend_from_slice(&u32::try_from(name.len()).unwrap_or(0).to_le_bytes());
+        buffer.extend_from_slice(&(rom.len() as u64).to_le_bytes());
         buffer.extend_from_slice(&self.frames.to_le_bytes());
         Ok(())
     }
@@ -401,14 +424,40 @@ impl SnesCore {
     ///
     /// No game, or the state is not one of this game.
     pub fn try_load_state(&mut self, data: &[u8], offset: usize) -> Result<(), String> {
-        let state = data.get(offset..).ok_or("the state is too short")?;
+        const SHORT: &str = "the state is too short";
+        let state = data.get(offset..).ok_or(SHORT)?;
+        // The layout of [`SnesCore::save_state_to`], read from the end.
+        let tail = |at: usize, size: usize| -> Result<&[u8], String> {
+            let end = state.len().checked_sub(at).ok_or(SHORT)?;
+            let start = end.checked_sub(size).ok_or(SHORT)?;
+            Ok(&state[start..end])
+        };
+        let word = |bytes: &[u8]| {
+            let mut eight = [0u8; 8];
+            eight[..bytes.len()].copy_from_slice(bytes);
+            u64::from_le_bytes(eight)
+        };
+        let frames = word(tail(0, 8)?);
+        let rom_length = usize::try_from(word(tail(8, 8)?)).map_err(|_| SHORT)?;
+        let name_length = usize::try_from(word(tail(16, 4)?)).map_err(|_| SHORT)?;
+        let name = tail(20, name_length)?;
+        let rom = tail(20 + name_length, rom_length)?;
+        let mesen_end = state.len() - 20 - name_length - rom_length;
+        let mesen = &state[..mesen_end];
+        // A state that carries its game loads it first when it is not the one running.
+        if !rom.is_empty() && self.image.as_deref() != Some(rom) {
+            let name = String::from_utf8_lossy(name).into_owned();
+            let loaded = self.load_rom(rom, &name);
+            if !loaded.success {
+                return Err(loaded.error.unwrap_or_else(|| "the game did not load".to_owned()));
+            }
+        }
         let snes = self.snes.as_mut().ok_or("no game is running")?;
-        let split = state.len().checked_sub(8).ok_or("the state is too short")?;
-        let (mesen, count) = state.split_at(split);
         snes.load_state(mesen).map_err(|error| error.to_string())?;
-        let mut bytes = [0u8; 8];
-        bytes.copy_from_slice(count);
-        self.frames = i64::from_le_bytes(bytes);
+        #[allow(clippy::cast_possible_wrap)] // Written from an i64.
+        {
+            self.frames = frames as i64;
+        }
         self.audio.clear();
         Ok(())
     }
@@ -425,8 +474,8 @@ impl SnesCore {
     /// Off and on again: the game is loaded anew.
     pub fn reset(&mut self) {
         if let Some(image) = self.image.take() {
-            let name = "game.sfc";
-            let _ = self.load_rom(&image, name);
+            let name = self.name.clone();
+            let _ = self.load_rom(&image, &name);
         }
     }
 
@@ -505,8 +554,8 @@ impl SnesCore {
         self.ratio_adjustment
     }
 
-    /// Nudges the sound's speed to keep the stream's buffer steady. Kept for the pacer; Mesen's
-    /// own resampler does not take it yet.
+    /// Nudges the sound's speed to keep the stream's buffer steady: the resampling to the
+    /// stream's rate makes that much more (or less) sound from each frame.
     ///
     /// # Errors
     ///
@@ -516,6 +565,7 @@ impl SnesCore {
             return Err(format!("ratio adjustment {value} is too large"));
         }
         self.ratio_adjustment = value;
+        self.audio.set_adjustment(value);
         Ok(())
     }
 
@@ -547,7 +597,8 @@ impl SnesCore {
     /// SA-1) and their memory is under 2 MiB.
     #[must_use]
     pub const fn max_state_size(&self) -> usize {
-        4 * 1024 * 1024
+        // Mesen's state, and the ROM when the state carries it (up to 8 MiB on the SNES).
+        16 * 1024 * 1024
     }
 
     /// The most frames of run-ahead the core offers: none yet on the SNES.

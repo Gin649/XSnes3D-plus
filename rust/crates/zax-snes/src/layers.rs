@@ -110,21 +110,49 @@ impl LayerEngines {
         counter: i32,
         skip: &[u8],
     ) -> Result<(), EngineError> {
+        // Each layer has its own engine and they share nothing, so the layers are converted at
+        // the same time, one thread each (the last one on this thread). On a handheld this is
+        // most of the frame's time.
+        let mut work: Vec<(usize, &mut ConversionEngine)> = Vec::new();
+        let mut wanted = [None; 6];
         for (index, layer) in input.layers.iter().enumerate() {
-            if skip.contains(&layer.layer) {
-                continue;
+            if !skip.contains(&layer.layer) {
+                wanted[usize::from(layer.layer)] = Some(index);
             }
-            let slot = &mut self.engines[usize::from(layer.layer)];
+        }
+        for (slot, index) in self.engines.iter_mut().zip(wanted) {
+            let Some(index) = index else {
+                continue;
+            };
             if slot.is_none() {
                 let mut engine = ConversionEngine::new();
                 prepare_engine(&mut engine)?;
                 *slot = Some(engine);
             }
             if let Some(engine) = slot.as_mut() {
-                convert_layer(engine, input, index, counter)?;
+                work.push((index, engine));
             }
         }
-        Ok(())
+        let Some((last_index, last_engine)) = work.pop() else {
+            return Ok(());
+        };
+        std::thread::scope(|scope| {
+            let others: Vec<_> = work
+                .into_iter()
+                .map(|(index, engine)| {
+                    scope.spawn(move || convert_layer(engine, input, index, counter))
+                })
+                .collect();
+            let mut result = convert_layer(last_engine, input, last_index, counter);
+            for other in others {
+                // A panicking layer is a bug of the engine; it is passed on as it is.
+                let done = other
+                    .join()
+                    .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+                result = result.and(done);
+            }
+            result
+        })
     }
 
     /// Drops the converted frames of every engine (a reset, a savestate put back).
