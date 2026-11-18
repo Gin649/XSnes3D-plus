@@ -12,6 +12,20 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
 - The layer engines and how their tiles are put together (`zax_snes::layers`) are shared by
   `snes-preview` and the app.
 
+## In progress (getting `cargo check -p zax-app` to pass)
+- `zax-app/src/snes.rs`: `SnesCore` (with stand-ins for the NES app's 2D picture path, memory
+  reads for scripts, run-ahead, battery RAM: Mesen keeps its own battery saves).
+- `InputAction` has X, Y, L, R; `routing::core_word` gives a `PadWord` (player 1 low half,
+  player 2 high half, Mesen's bit order).
+- `GameSession`: its engine runs layer 0, `LayerEngines` the others, `build_draw_list` merges;
+  `exchange_draw_list` swaps the merged list.
+- Removed: movies (modules, commands, menus, movie bar, note dialog), hacks/widescreen (host
+  modules, compat cache, handheld and desktop hacks screens, game-options rows), the Zapper,
+  the demo game, port types (commands).
+- Next: the handheld UI's widescreen/hacks parts (`ui/handheld/mod.rs`, `draw.rs`,
+  `rom_list`), `script_reload.rs`, `save_states.rs`, `application.rs`, `mcp/tools.rs`,
+  `app_settings.rs` (NES region), `audio/stream.rs`, achievements (ROM hashing).
+
 ## Plan
 1. `crate::snes` in `zax-app`: the SNES core as the app sees it (`SnesCore`, wrapping
    `zax_snes::Snes`): load from bytes (written to a file in the home folder), run a frame

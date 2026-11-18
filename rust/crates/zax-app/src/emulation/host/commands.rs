@@ -1,7 +1,6 @@
 //! The command model over the host: whether a command can run, its toggle state, and what
 //! running it does (SPEC-10 REQ-UI-205).
 
-use zax_nes::ControllerPortType;
 use zax_render::camera::CameraMode;
 
 use super::{EmulationHost, GameView, HostEvent};
@@ -82,25 +81,11 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             Command::FastForward => self.state == EmulationState::Running,
             Command::SpeedUp => self.settings.game_speed() < speed_setting::MAXIMUM,
             Command::SpeedDown => self.settings.game_speed() > speed_setting::MINIMUM,
-            Command::SetPortType => self.session.is_some() && matches!(args.number, 0 | 1),
-            Command::ToggleHackOption => {
-                usize::try_from(args.number).is_ok_and(|index| index < self.hack_options().len())
-            }
             Command::CancelModal => self.modal_window_open(),
-            Command::ToggleMovieRecording => {
-                !loading && !stopped && self.session.as_ref().is_some_and(GameSession::has_rom)
-            }
-            Command::PlayMovie => {
-                !loading
-                    && self.session.as_ref().is_some_and(GameSession::has_rom)
-                    && args.text.as_deref().is_some_and(|text| !text.is_empty())
-            }
-            Command::StopMovie | Command::AnnotateMovie => !loading && self.movie_mode().is_some(),
-            Command::OpenMovie | Command::ReloadScript => {
+            Command::ReloadScript => {
                 !loading && self.session.as_ref().is_some_and(GameSession::has_rom)
             }
             Command::NewLuaProfile | Command::CopyAgentPrompt => self.editor_allows(command),
-            Command::SeekMovie => !loading && self.movie_timeline.is_some() && args.number >= 0,
             Command::OpenRecentRom
             | Command::Quit
             | Command::SetSpeed
@@ -150,9 +135,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             Command::ToggleFpsCounter => self.settings.show_fps(),
             Command::ToggleEditorMode => self.settings.editor_mode(),
             Command::ToggleMute => self.settings.mute(),
-            Command::ToggleMovieRecording => {
-                self.movie_mode() == Some(zax_nes::movie::MovieMode::Recording)
-            }
             Command::ToggleMenuMusic => self.settings.menu_music(),
             // REQ-UI-210: « Favorites only », a tickable command of the enumeration.
             Command::FilterFavorites => self.favorites_only,
@@ -205,8 +187,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             | Command::SpeedUp
             | Command::SpeedDown
             | Command::SetRegion
-            | Command::ToggleAutoRegion
-            | Command::SetPortType => self.execute_emulation(command, args),
+            | Command::ToggleAutoRegion => self.execute_emulation(command, args),
             Command::ToggleTwoDimensional
             | Command::ResetView
             | Command::SetSkybox
@@ -214,7 +195,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             | Command::ToggleLocalCamera
             | Command::ToggleShadows
             | Command::ToggleReflections
-            | Command::ToggleHackOption
             | Command::ToggleFullscreen
             | Command::ToggleFpsCounter => self.execute_video(command, args),
             Command::SetVolume
@@ -227,16 +207,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             | Command::ShowDataFolder
             | Command::ShowAbout
             | Command::CancelModal => self.request_ui(command, args),
-            Command::ToggleMovieRecording => self.toggle_movie_recording(),
-            Command::PlayMovie => self.play_movie(args.text.as_deref().unwrap_or_default()),
-            Command::StopMovie => self.stop_movie(),
-            Command::SeekMovie => self.seek_movie(args.number),
             Command::ReloadScript => self.reload_script(args.number == 1),
-            Command::OpenMovie => match args.text.as_deref().filter(|text| !text.is_empty()) {
-                Some(path) => self.play_movie(path),
-                None => self.request_ui(Command::OpenMovie, args),
-            },
-            Command::AnnotateMovie => self.annotate_movie(args),
             Command::ToggleEditorMode => self.update_settings(|model| {
                 let value = !model.editor_mode();
                 model.set_editor_mode(value);
@@ -339,18 +310,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 let value = !model.auto_tv_mode();
                 model.set_auto_tv_mode(value);
             }),
-            Command::SetPortType => {
-                if let (Some(session), Ok(port)) =
-                    (self.session.as_mut(), usize::try_from(args.number))
-                {
-                    let kind = if args.number2 == 1 {
-                        ControllerPortType::Zapper
-                    } else {
-                        ControllerPortType::Controller
-                    };
-                    session.set_port_type(port, kind);
-                }
-            }
             _ => {}
         }
     }
@@ -379,7 +338,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 model.set_local_camera(value);
             }),
             Command::SetSkybox => self.update_settings(|model| model.set_skybox(args.number)),
-            Command::ToggleHackOption => self.toggle_hack_option(args.number),
             Command::ToggleShadows => self.update_settings(|model| {
                 let value = !model.shadow();
                 model.set_shadow(value);

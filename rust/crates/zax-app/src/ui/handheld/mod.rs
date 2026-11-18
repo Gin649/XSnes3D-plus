@@ -1131,42 +1131,6 @@ impl HandheldUi {
                 self.overscan = OverscanModel::new(true);
                 self.screen = Screen::Overscan;
             }
-            GameOptionsCommand::Widescreen | GameOptionsCommand::OpenWidescreen => {
-                if let Some(rom) = self
-                    .game_options
-                    .as_ref()
-                    .map(|options| options.rom().clone())
-                {
-                    let title = self.profile_title_of(&rom);
-                    if command == GameOptionsCommand::Widescreen {
-                        self.hold_widescreen(PadButton::A, rom, title, Screen::GameOptions);
-                    } else {
-                        self.open_hacks(
-                            &rom,
-                            title.as_deref(),
-                            Screen::GameOptions,
-                            host,
-                            HacksView::Widescreen,
-                        );
-                    }
-                }
-            }
-            GameOptionsCommand::OpenHacks => {
-                if let Some(rom) = self
-                    .game_options
-                    .as_ref()
-                    .map(|options| options.rom().clone())
-                {
-                    let title = self.profile_title_of(&rom);
-                    self.open_hacks(
-                        &rom,
-                        title.as_deref(),
-                        Screen::GameOptions,
-                        host,
-                        HacksView::Aids,
-                    );
-                }
-            }
         }
     }
 

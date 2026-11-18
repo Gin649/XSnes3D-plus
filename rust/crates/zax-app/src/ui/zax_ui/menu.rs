@@ -10,7 +10,6 @@ use crate::application::AppHost;
 use crate::emulation::commands::{Command, CommandArgs};
 use crate::ui::commands::UiCommand;
 use crate::ui::handheld::game_options::{self, GameOptionsModel, GameRow};
-use crate::ui::handheld::hacks::{HackRow, HacksModel, HacksView};
 use crate::ui::handheld::options::{OptionRow, OptionsPage};
 use crate::ui::handheld::{options, overscan};
 use crate::ui::menu_bar::{Menu, MenuBarModel, MenuItem, MenuItemKind, MenuWarning};
@@ -41,12 +40,7 @@ impl ZaxUi {
                 chosen = chosen.or(draw_items(ui, items, host));
             }
         }
-        let (open, hacks) = self.draw_game_options(ui, host);
-        engaged |= open;
-        if hacks {
-            self.open_hacks(host, HacksView::Widescreen);
-            self.menu_chosen = true;
-        }
+        engaged |= self.draw_game_options(ui, host);
         match chosen {
             Some(Chosen::Host(command, args)) => {
                 Self::activate(host, command, args);
@@ -64,13 +58,13 @@ impl ZaxUi {
     /// it on with everything or off, its settings a window), the hacks (a submenu of the aids), a
     /// submenu per option with its values, "Use Global" first, an entry that puts everything
     /// back, and — since RO-2 part 1 — the game's achievements at the end. Greyed with no game.
-    /// Returns whether the menu is open, and whether the widescreen's settings were asked for.
-    fn draw_game_options(&mut self, ui: &Ui, host: &mut AppHost) -> (bool, bool) {
+    /// Returns whether the menu is open.
+    fn draw_game_options(&mut self, ui: &Ui, host: &mut AppHost) -> bool {
         let title = strings::get(keys::HANDHELD_HINT_GAME_OPTIONS);
         let Some(rom) = host.current_rom_path().map(str::to_owned) else {
             // Greyed: there is no game to set options for, nor achievements to list.
             drop(ui.begin_menu_with_enabled(&title, false));
-            return (false, false);
+            return false;
         };
         let options = host.game_options(&rom);
         let own = options
@@ -80,25 +74,11 @@ impl ZaxUi {
         let menu = ui.begin_menu(&title);
         drop(colour);
         let Some(_menu) = menu else {
-            return (false, false);
+            return false;
         };
-        // The hacks are studied as the menu opens, and kept while it is open.
-        let path = std::path::Path::new(&rom);
-        if ui.is_window_appearing()
-            || self
-                .menu_hacks
-                .as_ref()
-                .is_none_or(|hacks| hacks.rom() != path)
-        {
-            self.menu_hacks = Some(
-                HacksModel::for_rom(host, path, host.current_game_title())
-                    .with_view(HacksView::Aids),
-            );
-        }
         let name = host.current_game_title().unwrap_or_default().to_owned();
         let mut model = GameOptionsModel::new(PathBuf::from(&rom), name, host.settings(), options);
         let mut changed = false;
-        let mut hacks = false;
         // RO-3 §3: the first level is the console main page, row for row and in its order — the
         // widescreen between the overscan and the region, the hacks last, and the two submenus
         // where the console climbs to a page.
@@ -116,18 +96,6 @@ impl ZaxUi {
                     }
                     ui.separator();
                 }
-                GameRow::Widescreen => {
-                    hacks |= self
-                        .menu_hacks
-                        .as_mut()
-                        .is_some_and(|model| draw_widescreen(ui, host, model));
-                }
-                GameRow::Hacks => {
-                    ui.separator();
-                    if let Some(aids) = self.menu_hacks.as_mut() {
-                        draw_aids(ui, host, aids);
-                    }
-                }
                 GameRow::Option(OptionRow::Page(page)) => {
                     ui.separator();
                     changed |= draw_game_page(ui, host, &mut model, *page);
@@ -142,7 +110,7 @@ impl ZaxUi {
         if changed {
             host.set_game_options(&rom, model.options());
         }
-        (true, hacks)
+        true
     }
 }
 
@@ -279,62 +247,6 @@ fn draw_game_overscan(ui: &Ui, model: &mut GameOptionsModel, global: &GameOption
         }
     }
     changed
-}
-
-impl ZaxUi {
-    /// Opens the hacks window on the game in play, showing the rows of `view`.
-    pub(super) fn open_hacks(&mut self, host: &AppHost, view: HacksView) {
-        let Some(rom) = host.current_rom_path() else {
-            return;
-        };
-        self.hacks = Some(
-            HacksModel::for_rom(host, std::path::Path::new(rom), host.current_game_title())
-                .with_view(view),
-        );
-        self.state.hacks = true;
-    }
-}
-
-/// The widescreen of the game in play: a check turning it on with its advanced mode and every
-/// option of it, or off, and an entry that opens its settings in a window. Returns whether the
-/// settings were asked for. RO-3 §3 split this from the aids, which the console main page puts at
-/// the other end of the list.
-fn draw_widescreen(ui: &Ui, host: &mut AppHost, hacks: &mut HacksModel) -> bool {
-    if hacks.is_capable()
-        && ui
-            .menu_item_config(strings::get(keys::HACK_WIDESCREEN))
-            .selected(hacks.widescreen_all_on())
-            .build()
-    {
-        hacks.toggle_widescreen_all();
-        hacks.apply(host);
-    }
-    ui.menu_item(strings::get(keys::MENU_WIDESCREEN_SETTINGS))
-}
-
-/// The hacks of the game in play: a submenu with a check per aid, which works with or without the
-/// widescreen.
-fn draw_aids(ui: &Ui, host: &mut AppHost, hacks: &mut HacksModel) {
-    let mut changed = false;
-    let rows = hacks.rows();
-    let menu = ui.begin_menu_with_enabled(strings::get(keys::MENU_AIDS), !rows.is_empty());
-    if let Some(_menu) = menu {
-        for row in rows {
-            if let HackRow::PatchOption(_) = row {
-                if ui
-                    .menu_item_config(hacks.label(row))
-                    .selected(hacks.is_on(row))
-                    .build()
-                {
-                    hacks.step(row, 1);
-                    changed = true;
-                }
-            }
-        }
-    }
-    if changed {
-        hacks.apply(host);
-    }
 }
 
 /// What the user chose in a menu: a command of the host, or one of the interface.

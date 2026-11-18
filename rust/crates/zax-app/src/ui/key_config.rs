@@ -41,7 +41,6 @@ pub const COMMANDS_NEEDING_ARGUMENTS: [Command; 11] = [
     Command::DeleteSlot,
     Command::SetSpeed,
     Command::SetRegion,
-    Command::SetPortType,
     Command::SetCameraMode,
     Command::SetSkybox,
     Command::SetVolume,

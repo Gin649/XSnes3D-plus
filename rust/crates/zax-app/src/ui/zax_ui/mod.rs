@@ -43,7 +43,6 @@ use crate::input::DesktopInputSource;
 use crate::persistence::app_settings::{AppSettings as _, AppSettingsMut as _};
 use zax_settings::catalogue::SettingId;
 
-use super::handheld::hacks::HacksModel;
 
 /// Space between the notification and the bottom of the window.
 const NOTIFICATION_MARGIN: f32 = 48.0;
@@ -90,8 +89,6 @@ pub enum BrowserPurpose {
     RomsFolder,
     /// A 3dSen installation or bundle to import.
     ThreeDSen,
-    /// A movie to play (EDITOR-1): `.fm2` or Zaxnes's own.
-    Movie,
 }
 
 impl BrowserPurpose {
@@ -141,13 +138,6 @@ pub struct ZaxUi {
     fps_countdown: f32,
     held_keys: Vec<Key>,
     effects: Vec<UiEffect>,
-    /// The note being typed for the frame on screen of the movie (`state.movie_note`).
-    movie_note: String,
-    /// The hacks of the game in play, while their window is open (`state.hacks`).
-    hacks: Option<HacksModel>,
-    /// The hacks of the game in play as the game options menu shows them, studied once as the
-    /// menu opens (the study reads the ROM and its hack packs' signatures).
-    menu_hacks: Option<HacksModel>,
     /// The text of the folder field of the options while it is being typed.
     folder_text: String,
     /// Whether the folder field has the focus (its text is then the one being typed).
@@ -157,8 +147,6 @@ pub struct ZaxUi {
     /// The import dialogue of AMD-056 REQ-UI-214 while it is up, with the plan its first button
     /// would carry out. A refusal and an « Already in Zaxnes » carry a plan that writes nothing.
     import_dialog: Option<(ProfileImportPlan, ProfileImportDialog)>,
-    /// The movie bar (EDITOR-1).
-    movie_bar: movie_bar::MovieBar,
     /// The fields of the shaders window.
     shader_window: shaders::ShaderWindow,
 }
@@ -198,16 +186,12 @@ impl ZaxUi {
             fps_shown: 0.0,
             fps_text: String::from("0.0 FPS"),
             fps_countdown: 0.0,
-            movie_note: String::new(),
-            hacks: None,
-            menu_hacks: None,
             folder_text: String::new(),
             folder_editing: false,
             sign_in: super::achievements_view::SignInForm::default(),
             held_keys: Vec::new(),
             effects: Vec::new(),
             import_dialog: None,
-            movie_bar: movie_bar::MovieBar::default(),
             shader_window: shaders::ShaderWindow::default(),
         }
     }
@@ -304,7 +288,6 @@ impl ZaxUi {
         }
         if self.state.has_current_game {
             pens::draw_pens(ui, frame.host);
-            self.draw_movie_bar(ui, frame.host);
         }
         if self.state.options {
             self.draw_options(ui, frame.host);
@@ -323,12 +306,6 @@ impl ZaxUi {
         }
         if self.state.profile_chooser {
             self.draw_profile_chooser(ui, frame.host);
-        }
-        if self.state.movie_note {
-            self.draw_movie_note(ui, frame.host);
-        }
-        if self.state.hacks {
-            self.draw_hacks(ui, frame.host);
         }
         if self.state.achievements {
             self.draw_achievement_list(ui, frame.host);
@@ -412,7 +389,6 @@ impl ZaxUi {
                 }
             }
             Command::ImportCover => self.open_browser(host, BrowserPurpose::Cover),
-            Command::OpenMovie => self.open_browser(host, BrowserPurpose::Movie),
             Command::CancelModal => self.cancel_topmost_modal(),
             Command::ShowOptions => self.state.options = true,
             Command::ShowKeyConfig => self.state.key_config = true,
@@ -420,10 +396,6 @@ impl ZaxUi {
             Command::ShowDataFolder => self.show_data_folder(host),
             // The host already flipped the setting; the window itself is the caller's job.
             Command::ToggleFullscreen => self.state.fullscreen = host.settings().fullscreen(),
-            Command::AnnotateMovie => {
-                self.movie_note.clear();
-                self.state.movie_note = true;
-            }
             other => self.log(format!(
                 "the interface has nothing to do for '{}'.",
                 other.name()
@@ -561,7 +533,6 @@ impl ZaxUi {
             BrowserPurpose::ThreeDSen => text::import_three_d_sen_title(),
             BrowserPurpose::Profile => text::import_profile_title(),
             BrowserPurpose::RomsFolder => text::roms_folder_title(),
-            BrowserPurpose::Movie => text::open_movie_title(),
         }
     }
 
@@ -572,7 +543,6 @@ impl ZaxUi {
             BrowserPurpose::ThreeDSen => file_browser::three_d_sen_filters(),
             BrowserPurpose::Profile => file_browser::profile_filters(),
             BrowserPurpose::RomsFolder => Vec::new(),
-            BrowserPurpose::Movie => file_browser::movie_filters(),
         }
     }
 
@@ -661,7 +631,6 @@ impl ZaxUi {
         match self.purpose {
             BrowserPurpose::Rom => host.enqueue(Command::OpenRom, CommandArgs::of_text(path)),
             BrowserPurpose::Cover => host.enqueue(Command::ImportCover, CommandArgs::of_text(path)),
-            BrowserPurpose::Movie => host.enqueue(Command::OpenMovie, CommandArgs::of_text(path)),
             BrowserPurpose::ThreeDSen => self.import_three_d_sen(host, path),
             BrowserPurpose::Profile => self.import_profile(host, path),
             BrowserPurpose::RomsFolder => {
@@ -788,9 +757,7 @@ impl ZaxUi {
             // Case 2: "rien". One leaves the box by its buttons only.
             return;
         }
-        if self.state.movie_note {
-            self.state.movie_note = false;
-        } else if self.state.profile_chooser {
+        if self.state.profile_chooser {
             self.state.profile_chooser = false;
         } else if self.state.file_browser {
             self.state.file_browser = false;

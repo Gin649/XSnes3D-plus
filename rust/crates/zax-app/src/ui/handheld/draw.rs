@@ -823,15 +823,6 @@ impl HandheldUi {
                         ("", colour),
                     );
                 }
-                GameRow::Widescreen => painter.row(
-                    slot,
-                    focused,
-                    &strings::get(keys::HACK_WIDESCREEN),
-                    (&strings::get(keys::HANDHELD_HOLD_FOR_SETTINGS), DIM),
-                ),
-                GameRow::Hacks => {
-                    painter.row(slot, focused, &strings::get(keys::MENU_AIDS), (">", DIM));
-                }
                 GameRow::Option(options::OptionRow::Group(key)) => {
                     painter.group_row(slot, &strings::get(key));
                 }

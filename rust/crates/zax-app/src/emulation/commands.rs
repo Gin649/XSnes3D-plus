@@ -134,7 +134,6 @@ commands! {
     SpeedDown => "emulation.speed_down", Shortcut::None, false;
     SetRegion => "emulation.set_region", Shortcut::None, false;
     ToggleAutoRegion => "emulation.auto_region", Shortcut::None, true;
-    SetPortType => "emulation.set_port_type", Shortcut::None, false;
     ToggleTwoDimensional => "video.toggle_2d", Shortcut::Fixed("F11"), true;
     ResetView => "video.reset_view", Shortcut::Key("shortcut.long_press_menu"), false;
     SetSkybox => "video.set_skybox", Shortcut::None, false;
@@ -143,7 +142,6 @@ commands! {
     ToggleShadows => "video.toggle_shadows", Shortcut::None, true;
     // Owner request: the floor reflections as a check box of the Video menu, under the shadows.
     ToggleReflections => "video.toggle_reflections", Shortcut::None, true;
-    ToggleHackOption => "video.toggle_hack_option", Shortcut::None, false;
     ToggleFullscreen => "video.toggle_fullscreen", Shortcut::Key("shortcut.alt_enter"), true;
     ToggleFpsCounter => "video.toggle_fps", Shortcut::None, true;
     SetVolume => "audio.set_volume", Shortcut::None, false;
@@ -155,13 +153,7 @@ commands! {
     ShowKeyConfig => "tools.key_config", Shortcut::None, false;
     ShowDataFolder => "tools.data_folder", Shortcut::None, false;
     ShowAbout => "tools.about", Shortcut::None, false;
-    ToggleMovieRecording => "tools.record_movie", Shortcut::None, true;
-    PlayMovie => "tools.play_movie", Shortcut::None, false;
-    OpenMovie => "tools.open_movie", Shortcut::None, false;
-    StopMovie => "tools.stop_movie", Shortcut::None, false;
-    SeekMovie => "tools.seek_movie", Shortcut::None, false;
     ReloadScript => "tools.reload_script", Shortcut::Fixed("F5"), false;
-    AnnotateMovie => "tools.annotate_movie", Shortcut::Fixed("Ctrl+M"), false;
     ToggleEditorMode => "tools.editor_mode", Shortcut::None, true;
     NewLuaProfile => "tools.new_lua_profile", Shortcut::None, false;
     CopyAgentPrompt => "tools.copy_agent_prompt", Shortcut::None, false;

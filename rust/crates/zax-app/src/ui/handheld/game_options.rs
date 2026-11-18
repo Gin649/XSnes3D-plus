@@ -24,28 +24,20 @@ pub enum GameRow {
     ResetAll,
     /// An option row, drawn and stepped as the global pages draw and step it.
     Option(OptionRow),
-    /// The widescreen of the game: a press turns it on with everything or off, a hold opens its
-    /// settings.
-    Widescreen,
-    /// The hacks of the game: its own screen.
-    Hacks,
 }
 
-/// The rows of the main screen of a game's options, in the order of the owner's mockup (RO-3).
-/// The widescreen moved from next to last to between the overscan and the region; the hacks stay
-/// last.
-pub const GAME_MAIN: [GameRow; 11] = [
+/// The rows of the main screen of a game's options, in the order of the owner's mockup (RO-3),
+/// without the NES app's widescreen and hacks.
+pub const GAME_MAIN: [GameRow; 9] = [
     GameRow::ResetAll,
     GameRow::Option(OptionRow::Volume),
     GameRow::Option(OptionRow::RenderScale),
     GameRow::Option(OptionRow::Shadows),
     GameRow::Option(OptionRow::Palette),
     GameRow::Option(OptionRow::Overscan),
-    GameRow::Widescreen,
     GameRow::Option(OptionRow::Region),
     GameRow::Option(OptionRow::Page(OptionsPage::Optimizations)),
     GameRow::Option(OptionRow::Page(OptionsPage::Advanced)),
-    GameRow::Hacks,
 ];
 
 /// *Optimisations* of a game: the eight performance rows of the global page. The smooth Lua
@@ -150,7 +142,7 @@ pub const fn page_rows(page: OptionsPage) -> &'static [OptionRow] {
 pub fn main_option_rows() -> impl Iterator<Item = OptionRow> {
     GAME_MAIN.into_iter().filter_map(|row| match row {
         GameRow::Option(row) => Some(row),
-        GameRow::ResetAll | GameRow::Widescreen | GameRow::Hacks => None,
+        GameRow::ResetAll => None,
     })
 }
 
@@ -249,13 +241,6 @@ pub enum GameOptionsCommand {
     Save,
     /// Leave the screen.
     Close,
-    /// Open the hacks of the game (its last row, Rust-only).
-    OpenHacks,
-    /// Open the settings of the widescreen of the game.
-    OpenWidescreen,
-    /// A went down on the widescreen row: released, it turns it on with everything or off;
-    /// held, its settings show.
-    Widescreen,
     /// Open the game's overscan (Rust-only).
     OpenOverscan,
 }
@@ -319,16 +304,9 @@ impl GameOptionsModel {
     /// How many rows the main screen has ([`GAME_MAIN`]).
     pub const ROW_COUNT: usize = GAME_MAIN.len();
 
-    /// The row that opens the advanced options of the game. The three index constants are the
-    /// places of the three rows of [`GAME_MAIN`] other code has to reach by name; a unit test
-    /// holds each one to the row it stands for.
-    pub const ADVANCED_ROW: usize = 9;
-
-    /// The row of the widescreen of the game.
-    pub const WIDESCREEN_ROW: usize = 6;
-
-    /// The row that opens the hacks of the game, the last one.
-    pub const HACKS_ROW: usize = 10;
+    /// The row that opens the advanced options of the game; a unit test holds it to the row it
+    /// stands for.
+    pub const ADVANCED_ROW: usize = 8;
 
     /// The index of the selected row: on the main screen 0 is "reset everything", on a page 0 is
     /// its first row.
@@ -575,17 +553,6 @@ impl GameOptionsModel {
             {
                 return Some(GameOptionsCommand::OpenOverscan);
             }
-            PadButton::A | PadButton::Right
-                if !self.in_advanced() && self.selected == Self::HACKS_ROW =>
-            {
-                return Some(GameOptionsCommand::OpenHacks);
-            }
-            PadButton::A if !self.in_advanced() && self.selected == Self::WIDESCREEN_ROW => {
-                return Some(GameOptionsCommand::Widescreen);
-            }
-            PadButton::Right if !self.in_advanced() && self.selected == Self::WIDESCREEN_ROW => {
-                return Some(GameOptionsCommand::OpenWidescreen);
-            }
             PadButton::A if !self.in_advanced() && self.selected == 0 => return self.reset(),
             PadButton::Left => return self.step(-1),
             PadButton::Right | PadButton::A => return self.step(1),
@@ -602,7 +569,7 @@ impl GameOptionsModel {
             Some(rows) => rows.get(self.selected).copied(),
             None => match GAME_MAIN.get(self.selected)? {
                 GameRow::Option(row) => Some(*row),
-                GameRow::ResetAll | GameRow::Widescreen | GameRow::Hacks => None,
+                GameRow::ResetAll => None,
             },
         }
     }
@@ -1023,24 +990,17 @@ mod tests {
                 GameRow::Option(OptionRow::Shadows),
                 GameRow::Option(OptionRow::Palette),
                 GameRow::Option(OptionRow::Overscan),
-                GameRow::Widescreen,
                 GameRow::Option(OptionRow::Region),
                 GameRow::Option(OptionRow::Page(OptionsPage::Optimizations)),
                 GameRow::Option(OptionRow::Page(OptionsPage::Advanced)),
-                GameRow::Hacks,
             ],
             GAME_MAIN
         );
-        assert_eq!(11, GameOptionsModel::ROW_COUNT);
+        assert_eq!(9, GameOptionsModel::ROW_COUNT);
         assert_eq!(
             GameRow::Option(OptionRow::Page(OptionsPage::Advanced)),
             GAME_MAIN[GameOptionsModel::ADVANCED_ROW]
         );
-        assert_eq!(
-            GameRow::Widescreen,
-            GAME_MAIN[GameOptionsModel::WIDESCREEN_ROW]
-        );
-        assert_eq!(GameRow::Hacks, GAME_MAIN[GameOptionsModel::HACKS_ROW]);
     }
 
     /// RO-3 §2 rule 2: a row that opens a page counts the game's own values under it, the pages
