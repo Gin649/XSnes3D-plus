@@ -87,9 +87,12 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
   - `ui::platform::tests::the_standard_buttons_reach_the_handheld_buttons_and_the_imgui_keys`
   - `x_chooses_the_profile_and_a_plays_with_it`
 
-- The renderer's 2D picture path for RGB (the 2D view is blank until then).
-- A SNES memory map for `ReadMem`, `WriteMem` and achievements (work RAM, then save RAM).
-- Leftover NES settings and words (widescreen, region, port menus, "NES" in strings).
+- Done since: the 2D picture is RGBA (four bytes a pixel, alpha 0 not drawn); `ReadMem` and
+  `WriteMem` reach the first 64 KiB of work RAM (bank $7E), achievements the RetroAchievements
+  SNES map; visible "Zaxnes" text, community profiles and 3dSen import are gone; the SNES look;
+  the Android APK workflow (`android-apk.yml`, a pre-release named after `.github/fork/VERSION`).
+  v0.1.0 test build released 2026-11-18, not yet tried on a device.
+- Leftover NES settings (widescreen, region, the NES palette option).
 - Controls: check the labels on the controls pages.
 - Look: XSnes3D+ names, SNES purple, grey and black with VT323.
 - Desktop build, then the Android package.
