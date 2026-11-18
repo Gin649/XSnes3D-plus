@@ -276,7 +276,8 @@ impl TileCapture {
     /// no pixel shows the backdrop.
     #[must_use]
     pub fn sky_color(&self, frame: &crate::Frame) -> Option<[u8; 3]> {
-        let first_row: u16 = if frame.height >= 239 { 0 } else { 1 };
+        // Without overscan the picture starts at line 1; with it, at line 0.
+        let first_row = u16::from(frame.height < 239);
         let mut counts: std::collections::HashMap<[u8; 3], u32> = std::collections::HashMap::new();
         for line in &self.lines {
             let Some(chunk) = self.last_chunk(line.scanline) else {
