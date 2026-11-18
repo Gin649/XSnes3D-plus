@@ -13,6 +13,7 @@
 //! the SNES itself layers them. For each shot and angle it writes
 //! `NAME-fNNNNN-aK.png` (K counts the angles from 0) and prints what it drew.
 
+use std::collections::BTreeMap;
 use std::env;
 use std::fs::{self, File};
 use std::io::BufWriter;
@@ -21,8 +22,9 @@ use std::process::ExitCode;
 
 use zax_engine3d::draw_list::FrameDrawList;
 use zax_engine3d::engine::ConversionEngine;
+use zax_engine3d::frame::ShapeId;
 use zax_engine3d::palette::Rgb24;
-use zax_engine3d::vectors::Vec3;
+use zax_engine3d::vectors::{Mat4, Vec3};
 use zax_profiles::profile::GameProfile;
 use zax_profiles::values::Vec4F;
 use zax_render::geometry::VisibleRect;
@@ -53,7 +55,7 @@ const SNES_CLIPPING: Vec4F = Vec4F::new(0.1, 24.1, 0.1, -7.9);
 /// camera aims at its middle. The layers further back are grown (see `EngineSet::draw_list`)
 /// and reach past the picture's edges, so the rectangle is the picture with a wide border
 /// all round; its middle is the picture's ([`picture_center`]).
-const SCENE_CLIPPING: Vec4F = Vec4F::new(-64.0, -40.0, -64.0, -72.0);
+const SCENE_CLIPPING: Vec4F = Vec4F::new(-400.0, -400.0, -400.0, -432.0);
 
 /// The camera angles of the NES preview: almost head on, and from above and to the left.
 const DEFAULT_ANGLES: &str = "0.81,0.81;22,-30";
@@ -156,10 +158,86 @@ impl EngineSet {
                 empty.clear_tiles();
                 empty
             });
-            merged.append_moved_scaled(list, depth, center, scale);
+            if layer <= 1 && has_floor(input) {
+                place_on_floor(merged, list, input, depth, center, distance);
+            } else {
+                merged.append_moved_scaled(list, depth, center, scale);
+            }
         }
         merged.unwrap_or_default()
     }
+}
+
+/// The scene height of the top of screen line 0 (the engine puts line `y` at `248 - y`).
+const SCENE_TOP: f32 = 248.0;
+
+/// Whether a Mode 7 floor of the frame goes into the distance.
+fn has_floor(input: &EngineInput) -> bool {
+    input.floor.iter().flatten().any(|&far| far > 1.0)
+}
+
+/// Adds a Mode 7 layer's tiles laid along its floor: each line of the floor as far back as
+/// the game draws it (`EngineInput::floor`), grown so it still covers the same part of the
+/// picture from the front. A sprite stands where its lowest line meets the floor, whole.
+fn place_on_floor(
+    merged: &mut FrameDrawList,
+    list: &FrameDrawList,
+    input: &EngineInput,
+    depth: f32,
+    center: Vec3,
+    distance: f32,
+) {
+    let mut feet: BTreeMap<ShapeId, i32> = BTreeMap::new();
+    for tile in list.tiles().iter().filter(|t| !t.tile.background()) {
+        let bottom = feet.entry(tile.instance.shape).or_insert(i32::MIN);
+        *bottom = (*bottom).max(tile.tile.y() + 7);
+    }
+    let floor_at = |line: i32| -> f32 {
+        usize::try_from(line)
+            .ok()
+            .and_then(|line| input.floor.get(line).copied().flatten())
+            .unwrap_or(1.0)
+    };
+    // Where a screen line ends up: its depth and its scene height once grown.
+    let place = |line: i32| {
+        let far = floor_at(line);
+        let depth = depth + distance * (far - 1.0);
+        #[allow(clippy::cast_precision_loss)] // A screen line.
+        let height = center.y + ((SCENE_TOP - line as f32) - center.y) * far;
+        (depth, far, height)
+    };
+    merged.append_placed(list, |tile| {
+        if !tile.tile.background() {
+            // Sprites stand up, where their lowest line meets the floor.
+            let feet_line = feet
+                .get(&tile.instance.shape)
+                .copied()
+                .unwrap_or(tile.tile.y() + 7);
+            let (depth, far, _) = place(feet_line);
+            return FrameDrawList::moved_and_scaled(depth, center, far);
+        }
+        // A floor tile is laid along the slope from its top line to its bottom one, each
+        // edge where that line goes, so the tiles of a floor meet without gaps.
+        let (_, far, _) = place(tile.tile.y() + 4);
+        let (top_depth, _, top_height) = place(tile.tile.y());
+        let (bottom_depth, _, bottom_height) = place(tile.tile.y() + 8);
+        let rise = top_height - bottom_height;
+        let slope = if rise.abs() > 0.01 {
+            (top_depth - bottom_depth) / rise
+        } else {
+            0.0
+        };
+        let middle = tile.tile_center;
+        let placed_middle = Vec3::new(
+            center.x + (middle.x - center.x) * far,
+            f32::midpoint(top_height, bottom_height),
+            middle.z + f32::midpoint(top_depth, bottom_depth),
+        );
+        Mat4::translation(placed_middle)
+            * Mat4::shear_z_by_y(slope)
+            * Mat4::scale_matrix(Vec3::new(far, rise / 8.0, 1.0))
+            * Mat4::translation(Vec3::new(-middle.x, -middle.y, -middle.z))
+    });
 }
 
 /// The frame's layers from the front one to the back one, as the SNES puts them: by the

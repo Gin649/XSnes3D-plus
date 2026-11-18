@@ -46,7 +46,7 @@ pub const BG3_FRONT: u8 = 4;
 pub const BACKDROP: u8 = 5;
 
 /// A frame ready for the engines.
-#[derive(Debug, Clone, PartialEq, Eq)]
+#[derive(Debug, Clone, PartialEq)]
 pub struct EngineInput {
     /// The layers drawn on the main or the sub screen, in layer order. Empty for a frame the tap cannot
     /// read as tiles (the hi-res modes, forced blank all frame).
@@ -58,6 +58,11 @@ pub struct EngineInput {
     /// Mode 1's background 3 priority bit, set on any line that drew background 3: its high
     /// priority tiles then go in front of everything (the status bar or text of most games).
     pub bg3_priority: bool,
+    /// For each screen line (0 up), how much further away it is than the nearest line of its
+    /// Mode 7 floor (1 for the nearest, 2 for twice as far, and so on), from how much of the
+    /// floor each pixel covers; `None` on lines that are not a Mode 7 floor. A Mode 7 picture
+    /// seen from above (a map) has every line at 1.
+    pub floor: Vec<Option<f32>>,
 }
 
 impl EngineInput {
@@ -80,6 +85,14 @@ impl EngineInput {
 
 /// A background tile's key: its top, its x and its tile map entry.
 type BackgroundKey = (i16, i16, u16);
+
+/// A Mode 7 picture counts as a floor going into the distance when its furthest line covers
+/// this much more than its nearest.
+const FLOOR_MIN_SPREAD: f32 = 1.1;
+
+/// The furthest a floor line is put, in times the distance of its nearest line (the lines by
+/// the horizon would otherwise go almost endlessly far).
+const FLOOR_MAX_DISTANCE: f32 = 3.0;
 
 /// The tile map entry in the key of a Mode 7 screen tile, which has none of its own.
 const MODE7_TILE: u16 = 0xFFFF;
@@ -251,8 +264,48 @@ impl TileCapture {
             colors,
             bg_mode,
             bg3_priority,
+            floor: self.floor_distances(),
         }
     }
+    /// [`EngineInput::floor`]: the Mode 7 lines of background 1, cut into floors (runs of
+    /// lines next to each other), each line's distance as its scale over the floor's smallest.
+    fn floor_distances(&self) -> Vec<Option<f32>> {
+        let mut scale = vec![None; 240];
+        for line in self.mode7.iter().filter(|l| l.layer == 0) {
+            let [a, _, c, _] = line.matrix;
+            let step = f32::hypot(f32::from(a), f32::from(c)) / 256.0;
+            let y = usize::from(line.scanline).wrapping_sub(1);
+            if step > 0.0 && y < scale.len() {
+                scale[y] = Some(step);
+            }
+        }
+        let mut floor = vec![None; scale.len()];
+        let mut start = 0;
+        while start < scale.len() {
+            if scale[start].is_none() {
+                start += 1;
+                continue;
+            }
+            let end = (start..scale.len())
+                .find(|&y| scale[y].is_none())
+                .unwrap_or(scale.len());
+            let steps: Vec<f32> = scale[start..end].iter().flatten().copied().collect();
+            let nearest = steps.iter().copied().fold(f32::MAX, f32::min);
+            let furthest = steps.iter().copied().fold(0.0, f32::max);
+            // A floor seen from straight above has the same scale on every line.
+            let tilted = furthest > nearest * FLOOR_MIN_SPREAD;
+            for y in start..end {
+                floor[y] = Some(if tilted {
+                    scale[y].map_or(1.0, |s| (s / nearest).clamp(1.0, FLOOR_MAX_DISTANCE))
+                } else {
+                    1.0
+                });
+            }
+            start = end;
+        }
+        floor
+    }
+
     /// Games change colours partway down the picture (Mario Kart's top strip, many status
     /// bars), but the engines have one palette per frame: the one in force at the end. A tile
     /// drawn with other colours is pointed at entries that hold its colours: the same colours
@@ -650,7 +703,40 @@ impl TileCapture {
 
 #[cfg(test)]
 mod tests {
-    use super::{behind_layer_1, shown_pixels};
+    use super::{behind_layer_1, shown_pixels, FLOOR_MAX_DISTANCE};
+    use crate::tap::{RawMode7Line, TileCapture};
+
+    fn mode7_line(scanline: u16, a: i16) -> RawMode7Line {
+        RawMode7Line {
+            scanline,
+            layer: 0,
+            padding: 0,
+            matrix: [a, 0, 0, a],
+            color: [0; 256],
+        }
+    }
+
+    #[test]
+    fn a_floor_goes_back_as_its_scale_grows() {
+        // A road: each line up covers more of the map than the one below it.
+        let lines = (101..=200)
+            .map(|s| mode7_line(s, (300 - s) as i16))
+            .collect();
+        let floor = TileCapture::with_mode7(lines).floor_distances();
+        assert_eq!(floor[50], None);
+        // Line 199 (scanline 200) is the nearest, scale 100; line 149 has scale 150.
+        assert!((floor[199].unwrap() - 1.0).abs() < 1e-4);
+        assert!((floor[149].unwrap() - 1.5).abs() < 1e-4);
+        // Lines by the horizon are kept within reach.
+        assert!(floor[100].unwrap() <= FLOOR_MAX_DISTANCE);
+    }
+
+    #[test]
+    fn a_map_seen_from_above_stays_flat() {
+        let lines = (1..=100).map(|s| mode7_line(s, 256)).collect();
+        let floor = TileCapture::with_mode7(lines).floor_distances();
+        assert!(floor.iter().flatten().all(|&far| (far - 1.0).abs() < 1e-6));
+    }
 
     #[test]
     fn pixels_off_screen_or_behind_a_window_are_dropped() {

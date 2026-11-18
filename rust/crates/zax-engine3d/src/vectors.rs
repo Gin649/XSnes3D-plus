@@ -260,6 +260,15 @@ impl Mat4 {
         m
     }
 
+    /// `XSnes3D+`: the shear that moves a point back by `k` times its height (z += k y),
+    /// which turns an upright tile into a slope.
+    #[must_use]
+    pub fn shear_z_by_y(k: f32) -> Self {
+        let mut m = Self::IDENTITY;
+        m.cells[2][1] = k;
+        m
+    }
+
     /// Rotation about X by `degrees` (REQ-E3D-407).
     #[must_use]
     pub fn rotation_x(degrees: f32) -> Self {

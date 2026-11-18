@@ -200,17 +200,31 @@ impl FrameDrawList {
     /// x and y), so that a layer moved back still covers the same part of the picture seen
     /// from the camera.
     pub fn append_moved_scaled(&mut self, other: &Self, depth: f32, center: Vec3, scale: f32) {
-        let placed = Mat4::translation(Vec3::new(0.0, 0.0, depth))
-            * Mat4::translation(center)
-            * Mat4::scale_matrix(Vec3::new(scale, scale, 1.0))
-            * Mat4::translation(Vec3::new(-center.x, -center.y, -center.z));
+        let placed = Self::moved_and_scaled(depth, center, scale);
+        self.append_placed(other, |_| placed);
+    }
+
+    /// `XSnes3D+`: adds the tiles of `other`, each moved by the scene transformation `place`
+    /// gives it.
+    pub fn append_placed(&mut self, other: &Self, place: impl Fn(&DrawTile) -> Mat4) {
         for tile in &other.tiles {
+            let placed = place(tile);
             let mut tile = tile.clone();
             tile.transform = placed * tile.transform;
             tile.anchor = placed.transform_point(tile.anchor);
             tile.tile_center = placed.transform_point(tile.tile_center);
             self.tiles.push(tile);
         }
+    }
+
+    /// `XSnes3D+`: the scene transformation that moves a tile back by `depth` and grows it by
+    /// `scale` about `center` in x and y.
+    #[must_use]
+    pub fn moved_and_scaled(depth: f32, center: Vec3, scale: f32) -> Mat4 {
+        Mat4::translation(Vec3::new(0.0, 0.0, depth))
+            * Mat4::translation(center)
+            * Mat4::scale_matrix(Vec3::new(scale, scale, 1.0))
+            * Mat4::translation(Vec3::new(-center.x, -center.y, -center.z))
     }
 
     /// `XSnes3D+`: removes every tile, keeping the palette, counter and time.

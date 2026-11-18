@@ -75,14 +75,16 @@ pub(crate) struct RawSprite {
     pub padding2: u16,
 }
 
-/// One Mode 7 line of background 1 or 2: each pixel's colour number, 0 where clear. For
-/// background 2 bit 7 is the pixel's priority.
+/// One Mode 7 line of background 1 or 2: each pixel's colour number, 0 where clear (for
+/// background 2 bit 7 is the pixel's priority), and the line's Mode 7 matrix.
 #[repr(C)]
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct RawMode7Line {
     pub scanline: u16,
     pub layer: u8,
     pub padding: u8,
+    /// The line's Mode 7 matrix A, B, C, D (8.8 fixed point).
+    pub matrix: [i16; 4],
     pub color: [u8; 256],
 }
 
@@ -91,7 +93,7 @@ const _: () = assert!(std::mem::size_of::<RawTile>() == 12);
 const _: () = assert!(std::mem::size_of::<RawChunk>() == 184);
 const _: () = assert!(std::mem::size_of::<RawLine>() == 2100);
 const _: () = assert!(std::mem::size_of::<RawSprite>() == 16);
-const _: () = assert!(std::mem::size_of::<RawMode7Line>() == 260);
+const _: () = assert!(std::mem::size_of::<RawMode7Line>() == 268);
 
 /// The shim's `XsTapView`.
 #[repr(C)]
@@ -263,6 +265,18 @@ impl TileCapture {
                 mode7: copy(view.mode7, view.mode7_count as usize),
                 cgram: copy(view.cgram, view.cgram_snapshots as usize * 256),
             }
+        }
+    }
+
+    /// A capture holding only Mode 7 lines, for tests.
+    #[cfg(test)]
+    pub(crate) fn with_mode7(mode7: Vec<RawMode7Line>) -> Self {
+        Self {
+            chunks: Vec::new(),
+            lines: Vec::new(),
+            sprites: Vec::new(),
+            mode7,
+            cgram: Vec::new(),
         }
     }
 

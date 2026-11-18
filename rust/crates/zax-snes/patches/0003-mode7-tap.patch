@@ -1,8 +1,8 @@
 diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
-index 783e8a8..cb08866 100644
+index 783e8a8..fbd9e19 100644
 --- a/Core/SNES/SnesPpu.cpp
 +++ b/Core/SNES/SnesPpu.cpp
-@@ -1281,6 +1281,20 @@ void SnesPpu::RenderTilemapMode7()
+@@ -1281,6 +1281,23 @@ void SnesPpu::RenderTilemapMode7()
  
  	xValue += xStep * _drawStartX;
  	yValue += yStep * _drawStartX;
@@ -16,6 +16,9 @@ index 783e8a8..cb08866 100644
 +			SnesTapMode7Line line = {};
 +			line.Scanline = _scanline;
 +			line.Layer = layerIndex;
++			for(int i = 0; i < 4; i++) {
++				line.Matrix[i] = _state.Mode7.Matrix[i];
++			}
 +			lines.push_back(line);
 +		}
 +		tapColors = lines.back().Color;
@@ -23,7 +26,7 @@ index 783e8a8..cb08866 100644
  	
  	uint8_t pixelFlags = ((_state.ColorMathEnabled >> layerIndex) & 0x01) ? PixelFlags::AllowColorMath : 0;
  
-@@ -1333,6 +1347,10 @@ void SnesPpu::RenderTilemapMode7()
+@@ -1333,6 +1350,10 @@ void SnesPpu::RenderTilemapMode7()
  			}
  		}
  
@@ -35,29 +38,31 @@ index 783e8a8..cb08866 100644
  			uint16_t paletteColor;
  			if(directColorMode) {
 diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
-index ba071e5..abf49f6 100644
+index ba071e5..3b48eef 100644
 --- a/Core/SNES/SnesTileTap.h
 +++ b/Core/SNES/SnesTileTap.h
-@@ -55,6 +55,18 @@ struct SnesTapSprite
+@@ -55,6 +55,20 @@ struct SnesTapSprite
  };
  static_assert(sizeof(SnesTapSprite) == 16, "SnesTapSprite layout changed");
  
 +// One Mode 7 line of background 1 or 2: the colour number of each pixel before windows,
 +// priorities and colour maths, 0 where the layer is clear. For background 2 (EXTBG) bit 7 is
-+// the pixel's priority.
++// the pixel's priority. Matrix holds the line's Mode 7 matrix (A, B, C, D, 8.8 fixed point):
++// how far the picture moves per screen pixel, which tells how far away a floor's line is.
 +struct SnesTapMode7Line
 +{
 +	uint16_t Scanline;
 +	uint8_t Layer;
 +	uint8_t Padding;
++	int16_t Matrix[4];
 +	uint8_t Color[256];
 +};
-+static_assert(sizeof(SnesTapMode7Line) == 260, "SnesTapMode7Line layout changed");
++static_assert(sizeof(SnesTapMode7Line) == 268, "SnesTapMode7Line layout changed");
 +
  // One frame's worth of records.
  struct SnesTapData
  {
-@@ -62,9 +74,11 @@ struct SnesTapData
+@@ -62,9 +76,11 @@ struct SnesTapData
  	vector<SnesTapLine> Lines;
  	vector<SnesTapSprite> Sprites;
  	vector<uint16_t> Cgram;
