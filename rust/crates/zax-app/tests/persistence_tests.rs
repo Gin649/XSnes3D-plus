@@ -358,9 +358,9 @@ fn write_zip(path: &Path, entries: &[(&str, &[u8])]) {
 fn req_loop_022_a_zip_uses_its_first_entry() {
     let root = TemporaryRoot::new("zax-pers-");
     let archive = root.path().join("Foo.zip");
-    write_zip(&archive, &[("bar.nes", &SyntheticRom::build(None, false))]);
+    write_zip(&archive, &[("bar.sfc", &SyntheticRom::build(None, false))]);
     let result = rom_file::read(&archive).unwrap();
-    assert_eq!("Foo.nes", result.name);
+    assert_eq!("Foo.sfc", result.name);
     assert_eq!(16 + 32 * 1024 + 8 * 1024, result.image.len());
 }
 
@@ -388,7 +388,7 @@ fn req_loop_023_archive_failures_report_the_exact_messages() {
 #[test]
 fn req_loop_023_a_missing_file_reports_the_system_message() {
     let root = TemporaryRoot::new("zax-pers-");
-    let message = rom_file::read(&root.path().join("absent.nes")).unwrap_err();
+    let message = rom_file::read(&root.path().join("absent.sfc")).unwrap_err();
     assert_ne!(message.as_str(), "");
     assert_ne!(INVALID_ROM_MESSAGE, message);
 }
@@ -396,7 +396,7 @@ fn req_loop_023_a_missing_file_reports_the_system_message() {
 #[test]
 fn req_pers_060_the_battery_ram_survives_a_restart() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::battery_writer(0x5A), "battery.nes");
+    let rom = harness.write_rom(&SyntheticRom::battery_writer(0x5A), "battery.sfc");
     harness.catalog().add("bat", Some(&rom));
     harness.run_with(Command::LaunchGame, CommandArgs::of_text("bat"));
     harness.run_frames(10);

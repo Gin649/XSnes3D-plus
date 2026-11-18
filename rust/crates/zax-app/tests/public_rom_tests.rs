@@ -15,7 +15,7 @@ use zax_app::emulation::commands::{Command, CommandArgs};
 use zax_app::emulation::emulation_state::EmulationState;
 use zax_app::input::InputAction;
 
-const NESTEST: &str = "other/nestest.nes";
+const NESTEST: &str = "other/nestest.sfc";
 
 /// The full path of a ROM under `rust/test-roms`, or `None` after saying what is missing.
 fn public_rom(relative: &str) -> Option<PathBuf> {

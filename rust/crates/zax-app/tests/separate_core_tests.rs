@@ -100,7 +100,7 @@ end
         ),
         ..ProfileScript::default()
     });
-    let rom = harness.write_rom(&SyntheticRom::counter(), "g1.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "g1.sfc");
     harness
         .catalog()
         .add_with("g1", Some(&rom), Some(profile), false, None);

@@ -11,7 +11,7 @@ fn parse(arguments: &[&str]) -> AppOptions {
 fn app_options_parses_the_options_of_the_slice() {
     let options = parse(&[
         "--rom",
-        "game.nes",
+        "game.sfc",
         "--profile",
         "Balloon Fight",
         "--size",
@@ -22,7 +22,7 @@ fn app_options_parses_the_options_of_the_slice() {
         "--no-audio",
     ]);
 
-    assert_eq!(options.rom_path.as_deref(), Some("game.nes"));
+    assert_eq!(options.rom_path.as_deref(), Some("game.sfc"));
     assert_eq!(options.profile.as_deref(), Some("Balloon Fight"));
     assert_eq!(options.width, 1600);
     assert_eq!(options.height, 900);
@@ -106,7 +106,7 @@ fn the_rust_only_options_parse_and_are_listed_apart_from_the_csharp_usage() {
     let options = parse(&["--handheld", "--roms", "/storage/roms"]);
     assert!(options.handheld);
     assert_eq!(Some("/storage/roms"), options.roms_directory.as_deref());
-    assert!(!parse(&["--rom", "a.nes"]).handheld);
+    assert!(!parse(&["--rom", "a.sfc"]).handheld);
     assert_eq!(
         Err(OptionsError::MissingValue { option: "--roms" }),
         AppOptions::parse(&["--roms"])

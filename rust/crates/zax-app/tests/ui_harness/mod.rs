@@ -233,7 +233,7 @@ impl UiHarness {
 
     /// Starts the game `game_id` from a synthetic ROM.
     pub fn launch(&mut self, game_id: &str) {
-        let rom = self.write_rom("game.nes");
+        let rom = self.write_rom("game.sfc");
         self.host.games_mut().set_rom_path(game_id, &rom);
         self.run_with(Command::LaunchGame, CommandArgs::of_text(game_id));
     }

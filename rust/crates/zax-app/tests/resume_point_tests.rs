@@ -26,7 +26,7 @@ fn core_state(harness: &LoopHarness) -> Vec<u8> {
 /// Puts the game `g1` back in the library of the next launch, before the host is built: the order
 /// of the real application, where the library is read first.
 fn with_g1(options: &mut common::HostOptions, root: &Path) {
-    let rom = root.join("g1.nes");
+    let rom = root.join("g1.sfc");
     std::fs::write(&rom, SyntheticRom::counter()).unwrap();
     options.games.add("g1", Some(&rom.to_string_lossy()));
 }

@@ -256,7 +256,7 @@ fn q_066_a_reset_to_the_default_ends_the_override() {
 #[test]
 fn req_ui_209_the_2d_toggle_and_full_screen_keep_the_swap_interval() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "a.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "a.sfc");
     harness.catalog().add("a", Some(&rom));
 
     let mut surface = FakeDisplaySurface::default();

@@ -18,7 +18,7 @@ use zax_platform::input::Key;
 #[test] // REQ-INP-101, REQ-UI-004
 fn req_inp_101_a_menu_press_during_a_load_is_dropped() {
     let mut harness = UiHarness::new(&["Arkanoid"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
     harness
         .host
         .settings_store_mut()

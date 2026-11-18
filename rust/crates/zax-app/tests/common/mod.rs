@@ -424,7 +424,7 @@ impl LoopHarness {
                 ..zax_profiles::script::ProfileScript::default()
             });
         }
-        let rom = self.write_rom(image, &format!("{game_id}.nes"));
+        let rom = self.write_rom(image, &format!("{game_id}.sfc"));
         self.catalog()
             .add_with(game_id, Some(&rom), Some(profile), false, None);
         self.run_with(Command::LaunchGame, CommandArgs::of_text(game_id));
@@ -501,7 +501,7 @@ impl LoopHarness {
     }
 
     pub fn launch(&mut self, game_id: &str) {
-        let rom = self.write_rom(&SyntheticRom::counter(), &format!("{game_id}.nes"));
+        let rom = self.write_rom(&SyntheticRom::counter(), &format!("{game_id}.sfc"));
         self.catalog().add(game_id, Some(&rom));
         self.run_with(Command::LaunchGame, CommandArgs::of_text(game_id));
     }

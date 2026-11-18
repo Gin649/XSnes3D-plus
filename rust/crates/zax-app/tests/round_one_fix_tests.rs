@@ -131,7 +131,7 @@ impl LibraryHarness {
     }
 
     fn launch_mine(&mut self) {
-        let rom = self.paths.root.join("game.nes");
+        let rom = self.paths.root.join("game.sfc");
         std::fs::write(&rom, SyntheticRom::counter()).unwrap();
         self.host
             .launch_rom_with_profile(&rom.to_string_lossy(), "mine");

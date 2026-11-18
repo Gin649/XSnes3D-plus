@@ -19,7 +19,7 @@ use zax_app::emulation::notification_center::NotificationSeverity;
 /// A harness with a game, and a launch under way whose mesh wait is held at `progress`.
 fn launching_with_progress(progress: f32) -> LoopHarness {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("g1", Some(&rom));
     harness.host.load_progress_stall = Some(progress);
     harness
@@ -131,7 +131,7 @@ fn req_loop_073_an_ordinary_launch_is_untouched() {
     // The watchdog must not change a load that works: the stall is `None` and every stage
     // completes in one tick, so the clock is reset at every step.
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("g1", Some(&rom));
     harness.launch("g1");
     assert_eq!(EmulationState::Running, harness.host.state());

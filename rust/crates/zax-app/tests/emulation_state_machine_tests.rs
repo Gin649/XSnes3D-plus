@@ -32,7 +32,7 @@ fn req_loop_001_the_host_starts_stopped_with_no_current_game() {
 #[test]
 fn req_loop_021_a_launch_runs_no_frame_before_running() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("g1", Some(&rom));
     harness
         .host
@@ -99,7 +99,7 @@ fn req_loop_006_pausing_captures_the_game_view() {
 #[test]
 fn req_loop_007_commands_are_deferred_during_a_load() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("g1", Some(&rom));
     harness
         .host
@@ -131,7 +131,7 @@ fn req_loop_007_commands_are_deferred_during_a_load() {
 #[test]
 fn req_loop_023_an_invalid_rom_reports_the_exact_message() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(b"this is not a ROM", "fake.nes");
+    let rom = harness.write_rom(b"this is not a ROM", "fake.sfc");
     harness.catalog().add("bad", Some(&rom));
     harness.run_with(Command::LaunchGame, CommandArgs::of_text("bad"));
     assert_eq!(EmulationState::Stopped, harness.host.state());
@@ -155,7 +155,7 @@ fn req_loop_018_a_failed_open_keeps_the_running_game() {
     let frames = session.core().frame_count();
     let counter = session.core().read_memory(0x0010);
     assert!(frames > 0);
-    let truncated = harness.write_rom(&[0x4E, 0x45, 0x53, 0x1A, 0x02], "truncated.nes");
+    let truncated = harness.write_rom(&[0x4E, 0x45, 0x53, 0x1A, 0x02], "truncated.sfc");
     harness.catalog().add("bad", Some(&truncated));
     harness.run_with(Command::LaunchGame, CommandArgs::of_text("bad"));
     assert_eq!(EmulationState::Running, harness.host.state());

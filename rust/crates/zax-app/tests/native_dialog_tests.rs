@@ -66,7 +66,7 @@ impl Scripted {
 #[test]
 fn the_native_dialog_replaces_the_browser_and_its_answer_is_used() {
     let mut test = scripted(true);
-    let rom = test.harness.write_rom("game.nes");
+    let rom = test.harness.write_rom("game.sfc");
     test.harness.run(Command::OpenRom);
 
     assert!(test.harness.ui.state.native_dialog);

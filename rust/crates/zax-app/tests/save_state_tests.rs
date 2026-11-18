@@ -278,7 +278,7 @@ fn req_pers_053_a_slot_loads_without_the_rom_file() {
     harness.run_frames(30);
     // The ROM file disappears and the association is cleared; the game stays chosen (owner
     // request: its slots are shown only then).
-    std::fs::remove_file(harness.root.path().join("g1.nes")).unwrap();
+    std::fs::remove_file(harness.root.path().join("g1.sfc")).unwrap();
     harness.catalog().add("g1", None);
     harness.run_with(Command::LoadSlot, CommandArgs::of_number(7));
     assert_eq!(EmulationState::Running, harness.host.state());

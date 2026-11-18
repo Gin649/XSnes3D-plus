@@ -78,7 +78,7 @@ fn play(harness: &mut UiHarness, handheld: &mut HandheldUi) {
 fn the_list_shows_the_roms_in_order_with_the_profile_that_matches_by_name() {
     let (harness, handheld) = start(
         &["Castle Quest"],
-        &["Zed.nes", "Castle Quest (U).nes", "x.txt"],
+        &["Zed.sfc", "Castle Quest (U).sfc", "x.txt"],
     );
     let entries = handheld.roms().entries();
     let names: Vec<&str> = entries.iter().map(|entry| entry.name.as_str()).collect();
@@ -96,7 +96,7 @@ fn the_list_shows_the_roms_in_order_with_the_profile_that_matches_by_name() {
 
 #[test]
 fn a_plays_the_game_in_2d_and_the_screen_gives_way_to_it() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     assert!(handheld.is_modal());
     tap(&mut harness, &mut handheld, PadButton::A);
     assert_eq!(Some("2d"), harness.host.current_game_id());
@@ -111,7 +111,7 @@ fn a_plays_the_game_in_2d_and_the_screen_gives_way_to_it() {
 fn the_2d_picture_is_seen_head_on_and_leaves_the_camera_alone() {
     // The profiles of the harness hold no pattern: the game shows in 2D from the start, head on
     // (owner request: always from the front, filling the height).
-    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.nes"]);
+    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.sfc"]);
     tap(&mut harness, &mut handheld, PadButton::A);
     press(&mut harness, &mut handheld, &[]);
     assert_eq!(Screen::InGame, handheld.screen());
@@ -143,7 +143,7 @@ fn the_2d_picture_is_seen_head_on_and_leaves_the_camera_alone() {
 
 #[test]
 fn x_chooses_the_profile_and_a_plays_with_it() {
-    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.nes"]);
+    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.sfc"]);
     tap(&mut harness, &mut handheld, PadButton::X);
     assert_eq!(Screen::Profiles, handheld.screen());
     // The matching profile comes first: choosing it goes back to the list without playing
@@ -159,7 +159,7 @@ fn x_chooses_the_profile_and_a_plays_with_it() {
 
 #[test]
 fn b_leaves_the_profiles_without_playing() {
-    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.nes"]);
+    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.sfc"]);
     tap(&mut harness, &mut handheld, PadButton::X);
     tap(&mut harness, &mut handheld, PadButton::B);
     assert_eq!(Screen::Home, handheld.screen());
@@ -168,7 +168,7 @@ fn b_leaves_the_profiles_without_playing() {
 
 #[test]
 fn the_menu_button_pauses_and_b_resumes() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     assert_eq!(EmulationState::Paused, harness.host.state());
     tap(&mut harness, &mut handheld, PadButton::B);
@@ -178,7 +178,7 @@ fn the_menu_button_pauses_and_b_resumes() {
 
 #[test]
 fn save_state_writes_the_chosen_slot_and_the_game_goes_on() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     tap(&mut harness, &mut handheld, PadButton::Down); // save state
     tap(&mut harness, &mut handheld, PadButton::Right); // slot 2
@@ -196,7 +196,7 @@ fn save_state_writes_the_chosen_slot_and_the_game_goes_on() {
 
 #[test]
 fn the_load_screen_loads_a_state_and_leaves_an_empty_slot_alone() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     tap(&mut harness, &mut handheld, PadButton::Down); // save state
     tap(&mut harness, &mut handheld, PadButton::A);
@@ -226,7 +226,7 @@ fn the_load_screen_loads_a_state_and_leaves_an_empty_slot_alone() {
 
 #[test]
 fn quit_to_the_rom_list_stops_the_game() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     // Quit to ROM list is the ninth row (no Rewind row on the handheld; Widescreen and Hacks
     // before it).
@@ -241,7 +241,7 @@ fn quit_to_the_rom_list_stops_the_game() {
 
 #[test]
 fn exit_to_the_launcher_quits_the_application() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     tap(&mut harness, &mut handheld, PadButton::Up); // wraps to the last row
     tap(&mut harness, &mut handheld, PadButton::A);
@@ -251,7 +251,7 @@ fn exit_to_the_launcher_quits_the_application() {
 
 #[test]
 fn the_exit_combination_ends_with_the_settings_and_the_slot_index_written() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     harness
         .host
@@ -273,7 +273,7 @@ fn the_exit_combination_ends_with_the_settings_and_the_slot_index_written() {
 
 #[test]
 fn select_and_start_held_for_a_second_quit_and_a_tap_does_not() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     let mut pad = PadState::new();
     pad.set(PadButton::Select, true);
     pad.set(PadButton::Start, true);
@@ -291,7 +291,7 @@ fn select_and_start_held_for_a_second_quit_and_a_tap_does_not() {
 
 #[test]
 fn the_options_change_the_settings_of_the_host() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     tap(&mut harness, &mut handheld, PadButton::Y);
     assert_eq!(Screen::Options, handheld.screen());
     tap(&mut harness, &mut handheld, PadButton::Down); // volume
@@ -332,8 +332,8 @@ fn the_options_change_the_settings_of_the_host() {
 
 #[test]
 fn the_options_of_a_game_hold_only_what_changes_and_play_with_it() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes", "Other.nes"]);
-    let rom = harness.root.path().join("roms").join("Game.nes");
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc", "Other.sfc"]);
+    let rom = harness.root.path().join("roms").join("Game.sfc");
     let rom = rom.to_string_lossy().into_owned();
     let shadows = harness.host.settings().shadow();
     tap(&mut harness, &mut handheld, PadButton::Select);
@@ -377,7 +377,7 @@ fn the_options_of_a_game_hold_only_what_changes_and_play_with_it() {
 
 #[test]
 fn the_options_of_the_menu_go_back_to_the_menu() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
     // Options is the sixth row (no Rewind row on the handheld).
     for _ in 0..5 {
@@ -391,7 +391,7 @@ fn the_options_of_the_menu_go_back_to_the_menu() {
 
 #[test]
 fn select_and_start_tapped_open_the_menu_only_when_the_setting_says_so() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     tap(&mut harness, &mut handheld, PadButton::A);
     press(&mut harness, &mut handheld, &[]);
     assert_eq!(Screen::InGame, handheld.screen());
@@ -416,7 +416,7 @@ fn select_and_start_tapped_open_the_menu_only_when_the_setting_says_so() {
 
 #[test]
 fn every_screen_draws_at_the_three_sizes_of_the_devices() {
-    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.nes", "Zed.nes"]);
+    let (mut harness, mut handheld) = start(&["Castle Quest"], &["Castle Quest.sfc", "Zed.sfc"]);
     let mut imgui = ImGuiHarness::new();
     for size in [[640.0, 480.0], [720.0, 480.0], [720.0, 720.0]] {
         imgui.context_mut().io_mut().display_size = size;
@@ -452,7 +452,7 @@ fn every_screen_draws_at_the_three_sizes_of_the_devices() {
 /// goes on.
 #[test]
 fn the_state_screens_open_over_the_game_and_the_desktop_takes_the_game_back() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     assert!(
         !handheld.open_states(StatesMode::Load, &mut harness.host),
         "no game"
@@ -482,10 +482,10 @@ fn the_state_screens_open_over_the_game_and_the_desktop_takes_the_game_back() {
 /// A ROM folder chosen in the options: the list shows its games from then on.
 #[test]
 fn another_rom_folder_lists_its_games() {
-    let (harness, mut handheld) = start(&[], &["Old.nes"]);
+    let (harness, mut handheld) = start(&[], &["Old.sfc"]);
     let other = harness.root.path().join("other");
     std::fs::create_dir_all(&other).unwrap();
-    std::fs::write(other.join("New.nes"), SyntheticRom::counter()).unwrap();
+    std::fs::write(other.join("New.sfc"), SyntheticRom::counter()).unwrap();
     handheld.set_roms_directory(&harness.host, other.clone());
     assert_eq!(other.as_path(), handheld.roms_directory());
     let names: Vec<&str> = handheld
@@ -501,8 +501,8 @@ fn another_rom_folder_lists_its_games() {
 /// widescreen of the game stays.
 #[test]
 fn the_game_options_keep_the_hacks_of_the_game() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
-    let rom = harness.root.path().join("roms").join("Game.nes");
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
+    let rom = harness.root.path().join("roms").join("Game.sfc");
     let rom = rom.to_string_lossy().into_owned();
     let widescreen = (SettingId::VideoWidescreen, SettingValue::Enum(4));
     harness
@@ -530,8 +530,8 @@ fn ro_3_the_advanced_options_of_a_game_are_a_hub_of_pages() {
     use zax_app::ui::handheld::game_options::{GameOptionsModel, GAME_ADVANCED_HUB};
     use zax_app::ui::handheld::options::{OptionRow, OptionsPage};
 
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
-    let rom = harness.root.path().join("roms").join("Game.nes");
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
+    let rom = harness.root.path().join("roms").join("Game.sfc");
     let rom = rom.to_string_lossy().into_owned();
     let global = harness.host.settings().get(SettingId::VideoAntiAlias);
 

@@ -125,7 +125,7 @@ fn req_ui_200_every_entry_of_the_table_exists_and_names_a_command() {
         .settings_store_mut()
         .expect("a settings store")
         .games_mut()
-        .note_rom_opened("C:\\roms\\game.nes");
+        .note_rom_opened("C:\\roms\\game.sfc");
 
     // One expectation per row of the table of REQ-UI-200: the menu it belongs to and the
     // command it must invoke.
@@ -275,14 +275,14 @@ fn req_ui_200_the_recent_rom_submenu_lists_the_ten_last_files() {
             .settings_store_mut()
             .expect("a settings store")
             .games_mut()
-            .note_rom_opened(&format!("C:\\roms\\rom{index}.nes"));
+            .note_rom_opened(&format!("C:\\roms\\rom{index}.sfc"));
     }
 
     let recent = submenu_of(&mut harness, &text::menu_file(), &text::recent_roms());
     assert_eq!(10, recent.len());
     // The file name of a Windows path, whatever the platform running the test.
     assert!(
-        recent[0].label.ends_with("rom11.nes"),
+        recent[0].label.ends_with("rom11.sfc"),
         "{}",
         recent[0].label
     );
@@ -384,7 +384,7 @@ fn the_game_options_menu_follows_the_game_in_play() {
     assert_eq!(None, harness.host.current_rom_path());
 
     let shadows = harness.host.settings().shadow();
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
     harness.host.set_game_options(
         &rom,
         vec![(SettingId::RenderShadow, SettingValue::Bool(!shadows))],

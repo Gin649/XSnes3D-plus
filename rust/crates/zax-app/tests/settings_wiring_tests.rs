@@ -161,18 +161,18 @@ fn the_recent_roms_and_the_rom_profile_choices_survive_a_restart() {
     let mut settings = SettingsModel::new();
     let mut store = SettingsStore::new(&root.paths);
     store.load(&mut settings, at(0));
-    store.games_mut().note_rom_opened(r"D:\roms\a.nes");
-    store.games_mut().note_rom_opened(r"D:\roms\b.nes");
-    store.games_mut().set_profile_for(r"D:\roms\b.nes", "42");
+    store.games_mut().note_rom_opened(r"D:\roms\a.sfc");
+    store.games_mut().note_rom_opened(r"D:\roms\b.sfc");
+    store.games_mut().set_profile_for(r"D:\roms\b.sfc", "42");
     store.save(&settings);
     assert!(root.paths.root.join("games.json").is_file());
     let mut reread = SettingsStore::new(&root.paths);
     reread.load(&mut SettingsModel::new(), at(0));
     assert_eq!(
-        vec![r"D:\roms\b.nes", r"D:\roms\a.nes"],
+        vec![r"D:\roms\b.sfc", r"D:\roms\a.sfc"],
         reread.games().recent_roms()
     );
-    assert_eq!(Some("42"), reread.games().profile_for(r"D:\roms\b.nes"));
+    assert_eq!(Some("42"), reread.games().profile_for(r"D:\roms\b.sfc"));
 }
 
 #[test]
@@ -186,7 +186,7 @@ fn the_game_list_coexists_with_the_library() {
     let mut settings = SettingsModel::new();
     let mut store = SettingsStore::new(&root.paths);
     store.load(&mut settings, at(0));
-    store.games_mut().note_rom_opened(r"D:\roms\a.nes");
+    store.games_mut().note_rom_opened(r"D:\roms\a.sfc");
     store.save(&settings);
     assert!(std::fs::read_to_string(&root.paths.library_file)
         .unwrap()
@@ -233,7 +233,7 @@ fn empty_tile(harness: &LoopHarness) -> bool {
 #[test]
 fn launching_a_different_game_reapplies_the_profile_settings() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("a", Some(&rom));
     harness.catalog().add("b", Some(&rom));
     harness.run_with(Command::LaunchGame, CommandArgs::of_text("a"));
@@ -267,7 +267,7 @@ fn launching_a_different_game_reapplies_the_profile_settings() {
 #[test]
 fn a_game_load_forces_the_background_flag_and_resets_the_layer_shadows() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("a", Some(&rom));
     harness.host.update_settings(|model| {
         model.set_layer(SettingId::SceneUseNesBgColor, false, SettingLayer::Profile);
@@ -292,7 +292,7 @@ fn a_game_load_forces_the_background_flag_and_resets_the_layer_shadows() {
 #[test]
 fn a_write_reaches_the_scene_and_the_conversion_slice() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("a", Some(&rom));
     harness.run_with(Command::LaunchGame, CommandArgs::of_text("a"));
     harness.host.update_settings(|model| {
@@ -328,7 +328,7 @@ fn a_write_reaches_the_scene_and_the_conversion_slice() {
 #[test]
 fn a_game_load_puts_both_ports_back_to_gamepad() {
     let mut harness = LoopHarness::create();
-    let rom = harness.write_rom(&SyntheticRom::counter(), "game.nes");
+    let rom = harness.write_rom(&SyntheticRom::counter(), "game.sfc");
     harness.catalog().add("a", Some(&rom));
     harness.host.update_settings(|model| {
         model.set(

@@ -49,7 +49,7 @@ fn set_profile_for(harness: &mut UiHarness, rom: &str, game_id: &str) {
 #[test]
 fn req_ui_201_the_first_open_asks_for_a_profile_and_the_second_does_not() {
     let mut harness = UiHarness::new(&["Arkanoid", "Balloon Fight"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
 
     // First opening: no profile is known for the file, so the chooser opens and nothing starts.
     harness.run_with(Command::OpenRom, CommandArgs::of_text(&rom));
@@ -105,7 +105,7 @@ fn req_ui_201_the_chooser_searches_by_title() {
 #[test]
 fn req_ui_201_a_forgotten_profile_reopens_the_chooser() {
     let mut harness = UiHarness::new(&["Arkanoid"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
 
     set_profile_for(&mut harness, &rom, "gone");
     harness.run_with(Command::OpenRom, CommandArgs::of_text(&rom));
@@ -144,7 +144,7 @@ fn req_ui_201_the_menu_entry_opens_the_file_dialog() {
 #[test]
 fn req_ui_200_the_recent_roms_are_remembered_and_pruned() {
     let mut harness = UiHarness::new(&["Arkanoid"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
     set_profile_for(&mut harness, &rom, "g0");
 
     harness.run_with(Command::OpenRom, CommandArgs::of_text(&rom));
@@ -178,7 +178,7 @@ fn req_ui_200_the_recent_roms_are_remembered_and_pruned() {
 #[test]
 fn req_ui_200_the_2d_toggle_is_a_hot_switch_of_the_rendering() {
     let mut harness = UiHarness::new(&["Arkanoid"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
     set_profile_for(&mut harness, &rom, "g0");
 
     harness.run_with(Command::OpenRom, CommandArgs::of_text(&rom));
@@ -212,7 +212,7 @@ fn req_ui_200_the_2d_toggle_is_a_hot_switch_of_the_rendering() {
 #[test]
 fn req_scn_055_the_2d_mode_entry_shows_the_pixel_frame_whatever_the_toggle() {
     let mut harness = UiHarness::new(&["Arkanoid"]);
-    let rom = harness.write_rom("game.nes");
+    let rom = harness.write_rom("game.sfc");
     set_profile_for(&mut harness, &rom, UiHarness::two_dimensional_mode_id());
 
     harness.run_with(Command::OpenRom, CommandArgs::of_text(&rom));
