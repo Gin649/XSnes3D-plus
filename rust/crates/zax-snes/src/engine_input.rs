@@ -28,12 +28,17 @@ use crate::tap::TileCapture;
 /// One background layer's tiles for its engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct LayerInput {
-    /// Background layer 1 to 4, as 0 to 3.
+    /// Background layer 1 to 4, as 0 to 3, or [`BG3_FRONT`].
     pub layer: u8,
     /// The layer's tiles, sprites first for layer 0, then the background tiles top to bottom
     /// and left to right.
     pub records: Vec<TileRecord>,
 }
+
+/// `LayerInput::layer` of mode 1's background 3 tiles that its priority bit puts in front of
+/// everything (the text or status bar of most games). The layer's other tiles stay layer 2,
+/// at the back, as on the console.
+pub const BG3_FRONT: u8 = 4;
 
 /// A frame ready for the engines.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -45,8 +50,8 @@ pub struct EngineInput {
     pub colors: Box<[Rgb24; 256]>,
     /// The background mode at the end of the frame.
     pub bg_mode: u8,
-    /// Mode 1's background 3 priority bit at the end of the frame: when set, background 3's
-    /// high priority tiles go in front of everything (the status bar or text of most games).
+    /// Mode 1's background 3 priority bit, set on any line that drew background 3: its high
+    /// priority tiles then go in front of everything (the status bar or text of most games).
     pub bg3_priority: bool,
 }
 
@@ -156,7 +161,12 @@ impl TileCapture {
             }
         }
         let bg_mode = last.map_or(0, |c| c.bg_mode);
-        let bg3_priority = last.is_some_and(|c| c.bg3_priority != 0);
+        // Games often set the bit only for their status bar's lines (Super Mario World), so a
+        // frame counts when any mode 1 line drew background 3 with it.
+        let bg3_priority = self
+            .chunks
+            .iter()
+            .any(|c| c.bg_mode == 1 && c.bg3_priority != 0 && c.main_layers & 0x04 != 0);
 
         let (layers, used, sprites_on) = self.background_tiles();
         let sprites = if sprites_on {
@@ -201,9 +211,9 @@ impl TileCapture {
     /// The background rows put together per layer, which layers were drawn, and whether
     /// sprites were on the main screen.
     #[allow(clippy::type_complexity)] // Three plain results.
-    fn background_tiles(&self) -> ([BTreeMap<BackgroundKey, Builder>; 4], [bool; 4], bool) {
-        let mut layers: [BTreeMap<BackgroundKey, Builder>; 4] = Default::default();
-        let mut used = [false; 4];
+    fn background_tiles(&self) -> ([BTreeMap<BackgroundKey, Builder>; 5], [bool; 5], bool) {
+        let mut layers: [BTreeMap<BackgroundKey, Builder>; 5] = Default::default();
+        let mut used = [false; 5];
         let mut sprites_on = false;
         for line in &self.lines {
             let Some(chunk) = self
@@ -246,8 +256,20 @@ impl TileCapture {
                         base + palette_number * (1 << bpp)
                     };
                     let key = (y - shown_row, x, tile.tilemap);
-                    let order = layers[layer].len();
-                    let builder = layers[layer].entry(key).or_insert_with(|| Builder {
+                    // Mode 1's background 3 with its priority bit: the tiles that have their own
+                    // priority bit set go in front of everything, the others stay at the back.
+                    let target = if layer == 2
+                        && chunk.bg_mode == 1
+                        && chunk.bg3_priority != 0
+                        && tile.tilemap & 0x2000 != 0
+                    {
+                        used[usize::from(BG3_FRONT)] = true;
+                        usize::from(BG3_FRONT)
+                    } else {
+                        layer
+                    };
+                    let order = layers[target].len();
+                    let builder = layers[target].entry(key).or_insert_with(|| Builder {
                         flip_x: tile.tilemap & 0x4000 != 0,
                         flip_y,
                         palette: palette.min(255) as u8,

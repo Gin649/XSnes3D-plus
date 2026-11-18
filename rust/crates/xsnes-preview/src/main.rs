@@ -28,12 +28,16 @@ use zax_render::scene::{SceneFrame, SceneState};
 use zax_render::SceneRenderer;
 use zax_settings::catalogue::SettingId;
 use zax_settings::model::SettingsModel;
-use zax_snes::{EngineInput, PressScript, Snes};
+use zax_snes::{EngineInput, PressScript, Snes, BG3_FRONT};
 
 /// How far back each background layer sits behind the one in front of it, in scene units
 /// (pixels). Larger than the deepest object one engine makes (its layers L1 to L4 reach 36
 /// plus the object's own depth), so the layers never cross.
-const LAYER_STEP: f32 = 48.0;
+const LAYER_STEP: f32 = 16.0;
+
+/// How much closer than the NES app's default the camera comes, so the SNES picture fills more
+/// of the view.
+const CAMERA_CLOSER: f32 = 0.8;
 
 /// The camera angles of the NES preview: almost head on, and from above and to the left.
 const DEFAULT_ANGLES: &str = "0.81,0.81;22,-30";
@@ -60,17 +64,18 @@ fn main() -> ExitCode {
     }
 }
 
-/// One set of engines, one per background layer (indexed by layer 0 to 3).
+/// One set of engines, one per background layer (indexed by layer 0 to 3), and one for the
+/// front part of mode 1's background 3 ([`BG3_FRONT`]).
 struct EngineSet {
     smart: bool,
-    engines: [Option<ConversionEngine>; 4],
+    engines: [Option<ConversionEngine>; 5],
 }
 
 impl EngineSet {
     fn new(smart: bool) -> Self {
         Self {
             smart,
-            engines: [None, None, None, None],
+            engines: [None, None, None, None, None],
         }
     }
 
@@ -90,10 +95,9 @@ impl EngineSet {
                 *slot = Some(engine);
             }
             if let Some(engine) = slot.as_mut() {
-                // Mode 1's background 3 in front holds the game's text or status bar: Smart 3D
-                // keeps the whole layer as flat panels.
-                engine.settings_mut().flat_layer =
-                    layer.layer == 2 && input.bg_mode == 1 && input.bg3_priority;
+                // The front part of mode 1's background 3 holds the game's text or status bar:
+                // Smart 3D keeps it as flat panels.
+                engine.settings_mut().flat_layer = layer.layer == BG3_FRONT;
                 engine.convert(&input.batch(layer), counter);
                 engine.publish();
             }
@@ -129,13 +133,13 @@ impl EngineSet {
 
 /// The frame's layers from the front one to the back one, as the SNES puts them: by the
 /// layer's priority in the mode (Mesen's `RenderMode0` to `RenderMode4`, the higher of a
-/// layer's two priorities), so mode 1's background 3 comes first when its priority bit is set
-/// (the text or status bar of most games).
+/// layer's two priorities), with the front part of mode 1's background 3 ([`BG3_FRONT`])
+/// before everything.
 fn front_to_back(input: &EngineInput) -> Vec<u8> {
-    let priorities: [u8; 4] = match input.bg_mode {
-        0 => [11, 10, 5, 4],
-        1 => [9, 8, if input.bg3_priority { 11 } else { 3 }, 0],
-        _ => [7, 5, 0, 0],
+    let priorities: [u8; 5] = match input.bg_mode {
+        0 => [11, 10, 5, 4, 0],
+        1 => [9, 8, 3, 0, 12],
+        _ => [7, 5, 0, 0, 0],
     };
     let mut layers: Vec<u8> = input.layers.iter().map(|l| l.layer).collect();
     layers.sort_by_key(|&layer| std::cmp::Reverse(priorities[usize::from(layer)]));
@@ -227,6 +231,9 @@ fn scene_state(rx: f32, ry: f32, list: &FrameDrawList) -> SceneState {
     scene.use_nes_background_color = true;
     scene.nes_background_color = list.palette()[0];
     scene.camera.current_mut().angles = Vector3::new(rx, ry, 0.0);
+    // The NES app's distance leaves a wide border around the SNES picture; come closer.
+    let distance = scene.camera.reset_distance() * CAMERA_CLOSER;
+    scene.camera.current_mut().set_distance(distance);
     scene.camera.snap_to_setpoints();
     scene.game_running = true;
     scene
