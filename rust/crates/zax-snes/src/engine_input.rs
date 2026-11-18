@@ -167,7 +167,10 @@ impl TileCapture {
 
         let mut out = Vec::new();
         for (layer, tiles) in layers.iter().enumerate() {
-            if !used[layer] {
+            // Sprites ride with layer 1; on a frame without it (a Mode 7 frame: Mario Kart's
+            // race, Super Metroid's Ceres station) they still get layer 1's engine, alone.
+            let sprites_alone = layer == 0 && !used[0] && !sprites.is_empty();
+            if !used[layer] && !sprites_alone {
                 continue;
             }
             let mut records = Vec::new();
