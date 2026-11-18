@@ -45,7 +45,8 @@ pub(crate) struct RawChunk {
     pub forced_blank: u8,
     pub mosaic_size: u8,
     pub mosaic_enabled: u8,
-    pub padding: u8,
+    /// Layers on the sub screen (bits as `main_layers`), blended in by colour maths.
+    pub sub_layers: u8,
     pub hscroll: [u16; 4],
     pub cgram_index: u32,
     pub window_masked: [[u8; 32]; 5],

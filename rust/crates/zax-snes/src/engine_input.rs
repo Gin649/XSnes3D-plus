@@ -38,7 +38,7 @@ pub struct LayerInput {
 /// A frame ready for the engines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineInput {
-    /// The layers drawn on the main screen, in layer order. Empty for a frame the tap cannot
+    /// The layers drawn on the main or the sub screen, in layer order. Empty for a frame the tap cannot
     /// read as tiles (Mode 7, the hi-res modes, forced blank all frame).
     pub layers: Vec<LayerInput>,
     /// The frame's 256 colours, from the palette in force at the end of the frame.
@@ -200,14 +200,16 @@ impl TileCapture {
             if chunk.forced_blank != 0 {
                 continue;
             }
-            sprites_on |= chunk.main_layers & 0x10 != 0;
+            sprites_on |= (chunk.main_layers | chunk.sub_layers) & 0x10 != 0;
             let Some(rules) = layer_bpp(chunk.bg_mode) else {
                 continue;
             };
             let y = line.scanline as i16 - 1;
             for (layer, rule) in rules.iter().enumerate() {
                 let Some((bpp, base)) = *rule else { continue };
-                if chunk.main_layers & (1 << layer) == 0 {
+                // A layer only on the sub screen (blended in, as Super Mario World's hills) is
+                // part of the scene too.
+                if (chunk.main_layers | chunk.sub_layers) & (1 << layer) == 0 {
                     continue;
                 }
                 used[layer] = true;

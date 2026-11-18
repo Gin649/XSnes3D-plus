@@ -1,8 +1,8 @@
 diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
-index 3c72452..600c5f6 100644
+index 3c72452..783e8a8 100644
 --- a/Core/SNES/SnesPpu.cpp
 +++ b/Core/SNES/SnesPpu.cpp
-@@ -392,12 +392,99 @@ void SnesPpu::FetchTileData()
+@@ -392,12 +392,100 @@ void SnesPpu::FetchTileData()
  	}
  }
  
@@ -17,6 +17,7 @@ index 3c72452..600c5f6 100644
 +	chunk.BgMode = _state.BgMode;
 +	chunk.Bg3Priority = _state.Mode1Bg3Priority ? 1 : 0;
 +	chunk.MainLayers = _state.MainScreenLayers & _configVisibleLayers;
++	chunk.SubLayers = _state.SubScreenLayers & _configVisibleLayers;
 +	chunk.DirectColor = _state.DirectColorMode ? 1 : 0;
 +	chunk.ForcedBlank = _state.ForcedBlank ? 1 : 0;
 +	chunk.MosaicSize = _state.MosaicSize;
@@ -102,7 +103,7 @@ index 3c72452..600c5f6 100644
  
  			if(_scanline == 0) {
  				_overscanFrame = _state.OverscanMode;
-@@ -760,6 +847,9 @@ void SnesPpu::FetchSpriteTile(bool secondCycle)
+@@ -760,6 +848,9 @@ void SnesPpu::FetchSpriteTile(bool secondCycle)
  	if(!secondCycle) {
  		_currentSprite.FetchAddress = (_currentSprite.FetchAddress + 8) & 0x7FFF;
  	} else {
@@ -112,7 +113,7 @@ index 3c72452..600c5f6 100644
  		int16_t xPos = _currentSprite.DrawX;
  		for(int x = 0; x < 8; x++) {
  			if(xPos + x < 0 || xPos + x > 255) {
-@@ -901,6 +991,10 @@ void SnesPpu::RenderScanline()
+@@ -901,6 +992,10 @@ void SnesPpu::RenderScanline()
  			RenderBgColor();
  		}
  
@@ -123,7 +124,7 @@ index 3c72452..600c5f6 100644
  		ApplyColorMath();
  		ApplyBrightness<true>();
  		ApplyHiResMode();
-@@ -1499,6 +1593,14 @@ void SnesPpu::ProcessWindowMaskSettings(uint8_t value, uint8_t offset)
+@@ -1499,6 +1594,14 @@ void SnesPpu::ProcessWindowMaskSettings(uint8_t value, uint8_t offset)
  
  void SnesPpu::SendFrame()
  {
@@ -185,7 +186,7 @@ index 0d73374..0b700ab 100644
  
 diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
 new file mode 100644
-index 0000000..b42046a
+index 0000000..ba071e5
 --- /dev/null
 +++ b/Core/SNES/SnesTileTap.h
 @@ -0,0 +1,94 @@
@@ -212,7 +213,7 @@ index 0000000..b42046a
 +	uint8_t ForcedBlank;
 +	uint8_t MosaicSize;
 +	uint8_t MosaicEnabled; // bits 0-3, one per background layer
-+	uint8_t Padding;
++	uint8_t SubLayers; // as MainLayers, for the sub screen (blended in by colour maths)
 +	uint16_t HScroll[4];
 +	uint32_t CgramIndex; // which palette snapshot was in force (SnesTapFrame::Cgram, 256 per snapshot)
 +	uint8_t WindowMasked[5][32]; // per layer (4 = sprites), one bit per pixel hidden by a window
