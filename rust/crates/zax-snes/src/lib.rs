@@ -26,6 +26,16 @@ extern "C" {
     fn xs_create(home_folder: *const c_char) -> *mut RawSnes;
     fn xs_load_rom(snes: *mut RawSnes, path: *const c_char) -> c_int;
     fn xs_set_buttons(snes: *mut RawSnes, buttons: u16);
+    fn xs_set_port_buttons(snes: *mut RawSnes, port: u32, buttons: u16);
+    fn xs_take_audio(
+        snes: *mut RawSnes,
+        out: *mut i16,
+        max_frames: u32,
+        sample_rate: *mut u32,
+    ) -> u32;
+    fn xs_reset(snes: *mut RawSnes) -> c_int;
+    fn xs_save_state(snes: *mut RawSnes, size: *mut u32) -> *const u8;
+    fn xs_load_state(snes: *mut RawSnes, data: *const u8, size: u32) -> c_int;
     fn xs_run_frame(snes: *mut RawSnes) -> c_int;
     fn xs_frame(
         snes: *mut RawSnes,
@@ -57,6 +67,8 @@ pub enum SnesError {
     Busy,
     /// The tile tap could not be switched on or off.
     Tap,
+    /// A savestate could not be made or put back.
+    State,
 }
 
 impl fmt::Display for SnesError {
@@ -68,6 +80,7 @@ impl fmt::Display for SnesError {
             Self::Frame => write!(f, "the SNES emulator failed while running a frame"),
             Self::Busy => write!(f, "another SNES emulator is still running in this process"),
             Self::Tap => write!(f, "the tile tap could not be switched"),
+            Self::State => write!(f, "the savestate could not be made or put back"),
         }
     }
 }
@@ -170,6 +183,71 @@ impl Snes {
             return Err(SnesError::Frame);
         }
         self.frames += 1;
+        Ok(())
+    }
+
+    /// Sets the buttons of the second player's pad (port 2), used from the next frame.
+    pub fn set_player_2(&mut self, buttons: Buttons) {
+        // SAFETY: `raw` is alive for as long as `self`.
+        unsafe { xs_set_port_buttons(self.raw, 1, buttons.bits()) };
+    }
+
+    /// Moves the sound made since the last call to the end of `out`: 16-bit stereo samples,
+    /// left then right. Returns their sample rate.
+    pub fn take_audio(&mut self, out: &mut Vec<i16>) -> u32 {
+        let mut chunk = [0i16; 2 * 1024];
+        let mut rate = 0;
+        loop {
+            // SAFETY: `raw` is alive; `chunk` holds 1024 stereo frames.
+            let frames =
+                unsafe { xs_take_audio(self.raw, chunk.as_mut_ptr(), 1024, &raw mut rate) };
+            out.extend_from_slice(&chunk[..frames as usize * 2]);
+            if frames < 1024 {
+                return rate;
+            }
+        }
+    }
+
+    /// Presses the console's reset button.
+    ///
+    /// # Errors
+    ///
+    /// [`SnesError::Frame`] when Mesen reports an error.
+    pub fn reset(&mut self) -> Result<(), SnesError> {
+        // SAFETY: `raw` is alive for as long as `self`.
+        if unsafe { xs_reset(self.raw) } != 1 {
+            return Err(SnesError::Frame);
+        }
+        Ok(())
+    }
+
+    /// The whole console state, to put back later with [`Snes::load_state`].
+    ///
+    /// # Errors
+    ///
+    /// [`SnesError::State`] when Mesen cannot make it.
+    pub fn save_state(&mut self) -> Result<Vec<u8>, SnesError> {
+        let mut size = 0;
+        // SAFETY: `raw` is alive; the shim returns `size` bytes valid until the next save.
+        let data = unsafe { xs_save_state(self.raw, &raw mut size) };
+        if data.is_null() {
+            return Err(SnesError::State);
+        }
+        // SAFETY: see above; the bytes are copied right away.
+        Ok(unsafe { std::slice::from_raw_parts(data, size as usize) }.to_vec())
+    }
+
+    /// Puts back a state [`Snes::save_state`] made.
+    ///
+    /// # Errors
+    ///
+    /// [`SnesError::State`] when Mesen refuses it (another game, a damaged state).
+    pub fn load_state(&mut self, state: &[u8]) -> Result<(), SnesError> {
+        let size = u32::try_from(state.len()).map_err(|_| SnesError::State)?;
+        // SAFETY: `raw` is alive; `state` is valid for `size` bytes during the call.
+        if unsafe { xs_load_state(self.raw, state.as_ptr(), size) } != 1 {
+            return Err(SnesError::State);
+        }
         Ok(())
     }
 

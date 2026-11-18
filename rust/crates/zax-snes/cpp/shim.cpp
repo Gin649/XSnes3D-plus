@@ -7,7 +7,9 @@
 #include <atomic>
 #include <cstdint>
 #include <memory>
+#include <sstream>
 #include <string>
+#include <vector>
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/SettingTypes.h"
@@ -15,6 +17,9 @@
 #include "Shared/BaseControlDevice.h"
 #include "Shared/Interfaces/IConsole.h"
 #include "Shared/Interfaces/IInputProvider.h"
+#include "Shared/Interfaces/IAudioDevice.h"
+#include "Shared/Audio/SoundMixer.h"
+#include "Shared/SaveStateManager.h"
 #include "SNES/SnesConsole.h"
 #include "SNES/SnesPpu.h"
 #include "SNES/SnesTileTap.h"
@@ -23,25 +28,57 @@
 
 namespace {
 
-// Hands the host's buttons to the controller in port 1 whenever the game reads it.
+// Hands the host's buttons to the controllers in ports 1 and 2 whenever the game reads them.
 // The bits follow Mesen's SNES controller: A, B, X, Y, L, R, Select, Start, Up, Down,
 // Left, Right in bits 0 to 11.
 class HostInput : public IInputProvider
 {
 public:
-	std::atomic<uint16_t> Buttons { 0 };
+	std::atomic<uint16_t> Buttons[2] = { 0, 0 };
 
 	bool SetInput(BaseControlDevice* device) override
 	{
-		if(device->GetPort() != 0 || device->GetControllerType() != ControllerType::SnesController) {
+		uint8_t port = device->GetPort();
+		if(port > 1 || device->GetControllerType() != ControllerType::SnesController) {
 			return false;
 		}
-		uint16_t held = Buttons.load();
+		uint16_t held = Buttons[port].load();
 		for(uint8_t bit = 0; bit < 12; bit++) {
 			device->SetBitValue(bit, ((held >> bit) & 1) != 0);
 		}
 		return true;
 	}
+};
+
+// Keeps the sound Mesen mixes each frame (16-bit stereo) until the host takes it.
+class HostAudio : public IAudioDevice
+{
+public:
+	std::vector<int16_t> Samples;
+	uint32_t SampleRate = 48000;
+
+	void PlayBuffer(int16_t* soundBuffer, uint32_t bufferSize, uint32_t sampleRate, bool isStereo) override
+	{
+		SampleRate = sampleRate;
+		if(isStereo) {
+			Samples.insert(Samples.end(), soundBuffer, soundBuffer + bufferSize * 2);
+		} else {
+			for(uint32_t i = 0; i < bufferSize; i++) {
+				Samples.push_back(soundBuffer[i]);
+				Samples.push_back(soundBuffer[i]);
+			}
+		}
+		// A host that never takes the sound does not let it pile up (about one second).
+		if(Samples.size() > 2 * 96000) {
+			Samples.erase(Samples.begin(), Samples.end() - 2 * 96000);
+		}
+	}
+	void Stop() override { Samples.clear(); }
+	void Pause() override {}
+	void ProcessEndOfFrame() override {}
+	string GetAvailableDevices() override { return ""; }
+	void SetAudioDevice(string deviceName) override {}
+	AudioStatistics GetStatistics() override { return {}; }
 };
 
 } // namespace
@@ -50,6 +87,9 @@ struct XsSnes
 {
 	std::unique_ptr<Emulator> Emu;
 	HostInput Input;
+	HostAudio Audio;
+	// The last savestate made by xs_save_state.
+	std::string State;
 	bool Loaded = false;
 	// The tile tap, filled during each frame when TapOn (see SnesTileTap.h).
 	SnesTapFrame Tap;
@@ -99,9 +139,10 @@ XsSnes* xs_create(const char* home_folder)
 		emulation.RunAheadFrames = 0;
 		settings->SetEmulationConfig(emulation);
 
-		// A SNES pad in port 1, and memory that powers on as zeros so every run is the same.
+		// SNES pads in ports 1 and 2, and memory that powers on as zeros so every run is the same.
 		SnesConfig snesConfig = settings->GetSnesConfig();
 		snesConfig.Port1.Type = ControllerType::SnesController;
+		snesConfig.Port2.Type = ControllerType::SnesController;
 		snesConfig.RamPowerOnState = RamState::AllZeros;
 		snesConfig.EnableRandomPowerOnState = false;
 		// Draw every frame: at unlimited speed Mesen would otherwise skip drawing some.
@@ -112,6 +153,9 @@ XsSnes* xs_create(const char* home_folder)
 		PreferencesConfig preferences = settings->GetPreferences();
 		preferences.DisableGameSelectionScreen = true;
 		settings->SetPreferences(preferences);
+
+		// The sound goes to the host (xs_take_audio).
+		snes->Emu->GetSoundMixer()->RegisterAudioDevice(&snes->Audio);
 
 		return snes;
 	} catch(...) {
@@ -144,7 +188,73 @@ int xs_load_rom(XsSnes* snes, const char* path)
 // Sets the port 1 buttons used from the next time the game reads the pad.
 void xs_set_buttons(XsSnes* snes, uint16_t buttons)
 {
-	snes->Input.Buttons.store(buttons);
+	snes->Input.Buttons[0].store(buttons);
+}
+
+// Sets the buttons of the pad in port (0 or 1).
+void xs_set_port_buttons(XsSnes* snes, uint32_t port, uint16_t buttons)
+{
+	if(port < 2) {
+		snes->Input.Buttons[port].store(buttons);
+	}
+}
+
+// Moves up to max_frames frames of sound (16-bit stereo, left first) into out, oldest first,
+// and gives their sample rate. Returns how many frames were moved.
+uint32_t xs_take_audio(XsSnes* snes, int16_t* out, uint32_t max_frames, uint32_t* sample_rate)
+{
+	std::vector<int16_t>& samples = snes->Audio.Samples;
+	uint32_t frames = (uint32_t)std::min<size_t>(samples.size() / 2, max_frames);
+	std::copy(samples.begin(), samples.begin() + frames * 2, out);
+	samples.erase(samples.begin(), samples.begin() + frames * 2);
+	*sample_rate = snes->Audio.SampleRate;
+	return frames;
+}
+
+// Presses the console's reset button. Returns 1 on success.
+int xs_reset(XsSnes* snes)
+{
+	if(!snes->Loaded) {
+		return 0;
+	}
+	try {
+		snes->Emu->Reset();
+		return 1;
+	} catch(...) {
+		return 0;
+	}
+}
+
+// Saves the whole console state. The bytes stay valid until the next xs_save_state.
+// Returns null on failure.
+const uint8_t* xs_save_state(XsSnes* snes, uint32_t* size)
+{
+	if(!snes->Loaded) {
+		return nullptr;
+	}
+	try {
+		std::stringstream stream;
+		snes->Emu->GetSaveStateManager()->SaveState(stream);
+		snes->State = stream.str();
+		*size = (uint32_t)snes->State.size();
+		return (const uint8_t*)snes->State.data();
+	} catch(...) {
+		return nullptr;
+	}
+}
+
+// Puts back a state xs_save_state made. Returns 1 on success.
+int xs_load_state(XsSnes* snes, const uint8_t* data, uint32_t size)
+{
+	if(!snes->Loaded) {
+		return 0;
+	}
+	try {
+		std::stringstream stream(std::string((const char*)data, size));
+		return snes->Emu->GetSaveStateManager()->LoadState(stream) ? 1 : 0;
+	} catch(...) {
+		return 0;
+	}
 }
 
 // Runs one frame. Returns 1 on success.
