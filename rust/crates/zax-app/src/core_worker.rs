@@ -9,12 +9,12 @@ use std::sync::mpsc::{channel, Receiver, Sender};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
-use zax_nes::NesCore;
+use crate::snes::{PadWord, SnesCore};
 
 /// One frame to run: the core, the input word of the frame, and the run-ahead in force.
 struct Job {
-    core: Box<NesCore>,
-    word: u16,
+    core: Box<SnesCore>,
+    word: PadWord,
     /// Frames of run-ahead (AMD-041 REQ-LOOP-064), 0 for an ordinary frame. The whole sequence
     /// of REQ-LOOP-065 runs on this thread, which is the unit the thread already was: one real
     /// frame. The core comes back in the **displayed** frame's state, and the session puts the
@@ -25,8 +25,8 @@ struct Job {
 /// A frame the thread ran: the core back, and the time the frame took.
 pub struct FinishedFrame {
     /// The core, which the session owns again.
-    pub core: Box<NesCore>,
-    /// How long `NesCore::run_frame` took on the emulation thread.
+    pub core: Box<SnesCore>,
+    /// How long `SnesCore::run_frame` took on the emulation thread.
     pub elapsed: Duration,
 }
 
@@ -80,7 +80,7 @@ impl CoreWorker {
     /// # Errors
     ///
     /// The thread has stopped; the core is returned untouched.
-    pub fn start(&self, core: Box<NesCore>, word: u16, run_ahead: u8) -> Result<(), Box<NesCore>> {
+    pub fn start(&self, core: Box<SnesCore>, word: PadWord, run_ahead: u8) -> Result<(), Box<SnesCore>> {
         match &self.jobs {
             Some(jobs) => jobs
                 .send(Job {

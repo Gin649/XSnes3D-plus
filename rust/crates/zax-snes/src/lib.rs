@@ -7,7 +7,7 @@
 use std::ffi::{c_char, c_int, CString};
 use std::fmt;
 use std::path::Path;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 pub mod engine_input;
 pub mod layers;
@@ -49,9 +49,14 @@ extern "C" {
     fn xs_destroy(snes: *mut RawSnes);
 }
 
+// SAFETY: the emulator is only ever used by one thread at a time (`&mut self` for every call
+// that runs it); Mesen ties nothing to the thread that made it when it runs without its own
+// emulation thread, so the app may hand a `Snes` to its emulation thread and back.
+unsafe impl Send for Snes {}
+
 /// Mesen keeps some state in globals (its home folder, its message log), so only one
-/// emulator may exist at a time. This lock is held for each emulator's whole life.
-static ONE_AT_A_TIME: Mutex<()> = Mutex::new(());
+/// emulator may exist at a time. This flag is set for each emulator's whole life.
+static IN_USE: AtomicBool = AtomicBool::new(false);
 
 /// What went wrong.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -133,7 +138,6 @@ pub struct Snes {
     raw: *mut RawSnes,
     frames: u32,
     tap_on: bool,
-    _guard: std::sync::MutexGuard<'static, ()>,
 }
 
 impl Snes {
@@ -144,19 +148,24 @@ impl Snes {
     /// [`SnesError::Busy`] while another [`Snes`] is alive, [`SnesError::Create`] or
     /// [`SnesError::Load`] when Mesen fails, [`SnesError::BadPath`] for a path with a zero byte.
     pub fn load(rom: &Path, home_folder: &Path) -> Result<Self, SnesError> {
-        let guard = ONE_AT_A_TIME.try_lock().map_err(|_| SnesError::Busy)?;
         let home = c_path(home_folder)?;
         let rom_path = c_path(rom)?;
+        if IN_USE
+            .compare_exchange(false, true, Ordering::AcqRel, Ordering::Acquire)
+            .is_err()
+        {
+            return Err(SnesError::Busy);
+        }
         // SAFETY: `home` is a valid C string for the call; the shim copies it.
         let raw = unsafe { xs_create(home.as_ptr()) };
         if raw.is_null() {
+            IN_USE.store(false, Ordering::Release);
             return Err(SnesError::Create);
         }
         let snes = Self {
             raw,
             frames: 0,
             tap_on: false,
-            _guard: guard,
         };
         // SAFETY: `raw` came from `xs_create` and is not freed until `drop`.
         if unsafe { xs_load_rom(snes.raw, rom_path.as_ptr()) } != 1 {
@@ -320,6 +329,7 @@ impl Drop for Snes {
     fn drop(&mut self) {
         // SAFETY: `raw` came from `xs_create` and is freed only here.
         unsafe { xs_destroy(self.raw) };
+        IN_USE.store(false, Ordering::Release);
     }
 }
 

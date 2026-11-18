@@ -14,7 +14,6 @@ pub mod menu_navigation;
 pub mod press_tracker;
 pub mod rebinding_session;
 pub mod routing;
-pub mod zapper;
 
 pub use binding_set::BindingSet;
 pub use binding_target::{BindingDeviceKind, BindingTarget};

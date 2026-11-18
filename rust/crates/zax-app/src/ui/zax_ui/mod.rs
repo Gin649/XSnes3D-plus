@@ -8,10 +8,8 @@
 
 mod achievements;
 mod dialogs;
-mod hacks;
 mod key_config;
 mod menu;
-mod movie_bar;
 mod options;
 mod overlay;
 mod pens;

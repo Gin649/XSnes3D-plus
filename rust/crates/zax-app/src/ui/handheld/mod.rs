@@ -8,12 +8,10 @@
 pub mod achievement_grid;
 pub mod achievements;
 pub mod advanced;
-pub mod compat;
 pub mod defaults;
 mod draw;
 pub mod exit_combo;
 pub mod game_options;
-pub mod hacks;
 pub mod keyboard;
 pub mod layout;
 pub mod options;

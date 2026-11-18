@@ -1,6 +1,7 @@
 #![forbid(unsafe_code)]
 
-//! zax-app: the application loop of Zaxnes (port of `Zax.App`, without the user interface).
+//! zax-app: the application loop of XSnes3D+ (copied from the Xnes3D+ app, its NES core
+//! replaced by the SNES one in [`snes`]).
 
 pub mod achievements;
 pub mod android_bridge;
@@ -10,7 +11,6 @@ pub mod application;
 pub mod audio;
 pub mod bundled_profiles;
 pub mod core_worker;
-pub mod demo_game;
 pub mod editor_mode;
 pub mod emulation;
 mod flags;
@@ -36,6 +36,7 @@ pub mod render_skip;
 pub mod scene_script_bridge;
 pub mod shader_pack;
 pub mod single_instance;
+pub mod snes;
 pub mod three_d_sen_command;
 pub mod ui;
 pub mod user_data_paths;

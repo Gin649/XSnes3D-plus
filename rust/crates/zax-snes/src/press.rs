@@ -30,6 +30,13 @@ impl Buttons {
         ("right", 1 << 11),
     ];
 
+    /// Buttons from raw bits in the order above (A in bit 0 to Right in bit 11); higher bits
+    /// are dropped.
+    #[must_use]
+    pub const fn from_bits(bits: u16) -> Self {
+        Self(bits & 0x0FFF)
+    }
+
     /// The raw bits handed to the core.
     #[must_use]
     pub fn bits(self) -> u16 {

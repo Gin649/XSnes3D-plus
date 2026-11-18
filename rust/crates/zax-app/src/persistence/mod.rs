@@ -4,7 +4,6 @@ pub mod app_settings;
 pub mod battery_ram_store;
 pub mod command_line_settings;
 pub mod game_art;
-pub mod hack_compat_cache;
 pub mod input_binding_store;
 pub mod resume_point;
 pub mod rom_crc_cache;

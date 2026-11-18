@@ -41,7 +41,7 @@ flag_set! {
 
 /// Number of bindable actions: the 19 of SPEC-08 §4.1 plus the soft reset AMD-044 REQ-INP-125
 /// adds to the extended-action table.
-pub const COUNT: usize = 20;
+pub const COUNT: usize = 24;
 /// Number of players.
 pub const PLAYER_COUNT: usize = 2;
 
@@ -55,6 +55,10 @@ pub const ALL: [InputAction; COUNT] = [
     InputAction::B,
     InputAction::SELECT,
     InputAction::START,
+    InputAction::X,
+    InputAction::Y,
+    InputAction::L,
+    InputAction::R,
     InputAction::ROT_LEFT,
     InputAction::ROT_RIGHT,
     InputAction::ROT_UP,
@@ -81,6 +85,10 @@ pub fn name_of(action: InputAction) -> &'static str {
         "B",
         "Select",
         "Start",
+        "X",
+        "Y",
+        "L",
+        "R",
         "RotLeft",
         "RotRight",
         "RotUp",
@@ -110,10 +118,31 @@ pub fn parse(name: &str) -> Option<InputAction> {
         .find(|action| name_of(*action).eq_ignore_ascii_case(name))
 }
 
-/// The byte the NES controller sees.
+/// The buttons the SNES pad sees, in Mesen's order: A, B, X, Y, L, R, Select, Start, Up,
+/// Down, Left, Right in bits 0 to 11.
 #[must_use]
-pub const fn controller_byte(mask: InputAction) -> u8 {
-    (mask.bits() & InputAction::CONTROLLER_BYTE.bits()).to_le_bytes()[0]
+pub fn pad_bits(mask: InputAction) -> u16 {
+    const ORDER: [InputAction; 12] = [
+        InputAction::A,
+        InputAction::B,
+        InputAction::X,
+        InputAction::Y,
+        InputAction::L,
+        InputAction::R,
+        InputAction::SELECT,
+        InputAction::START,
+        InputAction::UP,
+        InputAction::DOWN,
+        InputAction::LEFT,
+        InputAction::RIGHT,
+    ];
+    let mut bits = 0;
+    for (bit, action) in ORDER.iter().enumerate() {
+        if mask.contains(*action) {
+            bits |= 1 << bit;
+        }
+    }
+    bits
 }
 
 /// The camera movements of `mask`, for the renderer's controls.
