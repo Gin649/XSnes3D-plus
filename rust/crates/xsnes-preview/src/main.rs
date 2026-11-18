@@ -22,7 +22,10 @@ use std::process::ExitCode;
 use zax_engine3d::draw_list::FrameDrawList;
 use zax_engine3d::engine::ConversionEngine;
 use zax_engine3d::palette::Rgb24;
+use zax_engine3d::vectors::Vec3;
 use zax_profiles::profile::GameProfile;
+use zax_profiles::values::Vec4F;
+use zax_render::geometry::VisibleRect;
 use zax_render::numerics::Vector3;
 use zax_render::offscreen::{ContextApi, OffscreenContext};
 use zax_render::scene::{SceneFrame, SceneState};
@@ -38,7 +41,19 @@ const LAYER_STEP: f32 = 16.0;
 
 /// How much closer than the NES app's default the camera comes, so the SNES picture fills more
 /// of the view.
-const CAMERA_CLOSER: f32 = 0.8;
+const CAMERA_CLOSER: f32 = 0.85;
+
+/// The edges of the picture the engines leave out, left, bottom, right and top, as the engine
+/// counts them (`ConversionSettings::clipping`, a 256 by 240 picture). The NES app hides 8
+/// lines at the top and 8 columns on the right, which the SNES shows; the SNES picture has
+/// 224 lines, so the 16 below it are left out.
+const SNES_CLIPPING: Vec4F = Vec4F::new(0.1, 24.1, 0.1, -7.9);
+
+/// The scene's clipping: the renderer cuts everything outside this rectangle, and the
+/// camera aims at its middle. The layers further back are grown (see `EngineSet::draw_list`)
+/// and reach past the picture's edges, so the rectangle is the picture with a wide border
+/// all round; its middle is the picture's ([`picture_center`]).
+const SCENE_CLIPPING: Vec4F = Vec4F::new(-64.0, -40.0, -64.0, -72.0);
 
 /// The camera angles of the NES preview: almost head on, and from above and to the left.
 const DEFAULT_ANGLES: &str = "0.81,0.81;22,-30";
@@ -96,6 +111,7 @@ impl EngineSet {
                     .load_profile(&GameProfile::create_empty(), true)
                     .map_err(|error| error.to_string())?;
                 engine.two_dimensional_mode = false;
+                engine.settings_mut().clipping = SNES_CLIPPING;
                 *slot = Some(engine);
             }
             if let Some(engine) = slot.as_mut() {
@@ -107,6 +123,7 @@ impl EngineSet {
                     engine
                         .load_profile(&GameProfile::create_empty(), true)
                         .map_err(|error| error.to_string())?;
+                    engine.settings_mut().clipping = SNES_CLIPPING;
                 }
                 // The front part of mode 1's background 3 holds the game's text or status bar,
                 // and the sky is a painted wall: Smart 3D keeps both as flat panels.
@@ -119,29 +136,29 @@ impl EngineSet {
         Ok(())
     }
 
-    /// The scene's tiles: the frame's layers, front to back, each moved back by its rank.
-    fn draw_list(&mut self, input: &EngineInput) -> FrameDrawList {
-        let mut merged = FrameDrawList::default();
-        let mut first = true;
+    /// The scene's tiles: the frame's layers, front to back, each moved back by its rank
+    /// and grown so that, seen from a camera `distance` away from the picture, it still covers
+    /// the same part of the picture as on the console.
+    fn draw_list(&mut self, input: &EngineInput, distance: f32) -> FrameDrawList {
+        let mut merged: Option<FrameDrawList> = None;
+        let center = picture_center();
         for (rank, layer) in front_to_back(input).into_iter().enumerate() {
             let Some(engine) = self.engines[usize::from(layer)].as_mut() else {
                 continue;
             };
             let list = engine.build_draw_list();
-            #[allow(clippy::cast_precision_loss)] // At most 4 layers.
+            #[allow(clippy::cast_precision_loss)] // At most 6 layers.
             let depth = rank as f32 * LAYER_STEP;
-            if first {
-                merged = list.clone();
-                if depth != 0.0 {
-                    merged = FrameDrawList::default();
-                    merged.append_moved(list, depth);
-                }
-                first = false;
-            } else {
-                merged.append_moved(list, depth);
-            }
+            let scale = (distance + depth) / distance.max(1.0);
+            let merged = merged.get_or_insert_with(|| {
+                // The list's palette, counter and time; the tiles are added below.
+                let mut empty = list.clone();
+                empty.clear_tiles();
+                empty
+            });
+            merged.append_moved_scaled(list, depth, center, scale);
         }
-        merged
+        merged.unwrap_or_default()
     }
 }
 
@@ -208,8 +225,8 @@ fn run() -> Result<(), String> {
             .ok_or_else(|| format!("no picture after frame {done}"))?;
         // The sky as the finished picture shows it (games often blend it in).
         let sky = capture.sky_color(&flat);
-        let plain_list = plain.draw_list(&input);
-        let smart_list = smart.draw_list(&input);
+        let plain_list = plain.draw_list(&input, camera_distance());
+        let smart_list = smart.draw_list(&input, camera_distance());
         for (index, &(rx, ry)) in options.angles.iter().enumerate() {
             let mut panels = Vec::new();
             for list in [&plain_list, &smart_list] {
@@ -241,6 +258,18 @@ fn run() -> Result<(), String> {
     Ok(())
 }
 
+/// The camera's distance from the picture: the NES app's default, brought closer.
+fn camera_distance() -> f32 {
+    let fov = SettingsModel::new().get(SettingId::CameraFov).as_float();
+    zax_render::geometry::reset_distance(fov) * CAMERA_CLOSER
+}
+
+/// The middle of the visible picture, in scene coordinates, where the camera aims.
+fn picture_center() -> Vec3 {
+    let center = VisibleRect::from_clipping(SNES_CLIPPING).center();
+    Vec3::new(center.x, center.y, 0.0)
+}
+
 /// The scene settings the NES app starts with, the camera at `rx`, `ry` degrees.
 fn scene_state(rx: f32, ry: f32, list: &FrameDrawList) -> SceneState {
     let model = SettingsModel::new();
@@ -255,8 +284,9 @@ fn scene_state(rx: f32, ry: f32, list: &FrameDrawList) -> SceneState {
     scene.nes_background_color = list.palette()[0];
     scene.camera.current_mut().angles = Vector3::new(rx, ry, 0.0);
     // The NES app's distance leaves a wide border around the SNES picture; come closer.
-    let distance = scene.camera.reset_distance() * CAMERA_CLOSER;
+    let distance = camera_distance();
     scene.camera.current_mut().set_distance(distance);
+    scene.clipping = SCENE_CLIPPING;
     scene.camera.snap_to_setpoints();
     scene.game_running = true;
     scene
@@ -387,4 +417,20 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
         name,
         size,
     })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{picture_center, SCENE_CLIPPING};
+    use zax_render::geometry::VisibleRect;
+
+    #[test]
+    fn the_camera_aims_at_the_middle_of_the_picture() {
+        // The renderer aims at the middle of the scene's rectangle; the layers are grown about
+        // the picture's middle. Both must be the same point, or the layers drift apart.
+        let scene = VisibleRect::from_clipping(SCENE_CLIPPING).center();
+        let picture = picture_center();
+        assert!((scene.x - picture.x).abs() < 0.01);
+        assert!((scene.y - picture.y).abs() < 0.01);
+    }
 }

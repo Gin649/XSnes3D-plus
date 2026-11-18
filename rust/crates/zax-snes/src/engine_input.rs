@@ -97,6 +97,9 @@ struct Builder {
     hidden: bool,
     palette: u8,
     order: usize,
+    /// The palette snapshot in force when the tile was drawn; `None` for a tile whose colours
+    /// are the whole palette (8 bits per pixel, Mode 7).
+    snapshot: Option<u32>,
 }
 
 impl Builder {
@@ -210,6 +213,7 @@ impl TileCapture {
         };
 
         let mut out = Vec::new();
+        let mut snapshots: Vec<Vec<Option<u32>>> = Vec::new();
         for (layer, tiles) in layers.iter().enumerate() {
             // Sprites ride with layer 1; on a frame without it they still get layer 1's
             // engine, alone.
@@ -218,21 +222,28 @@ impl TileCapture {
                 continue;
             }
             let mut records = Vec::new();
+            let mut layer_snapshots = Vec::new();
             if layer == 0 {
                 // Sprites first, in the order they were met; the index is that order.
                 let mut in_order: Vec<_> = sprites.iter().collect();
                 in_order.sort_by_key(|(_, builder)| builder.order);
                 for (index, ((top, x, ..), builder)) in in_order.into_iter().enumerate() {
                     records.push(builder.record(*x, *top, index as i32, false));
+                    layer_snapshots.push(builder.snapshot);
                 }
             }
             for (index, ((top, x, _), builder)) in tiles.iter().enumerate() {
                 records.push(builder.record(*x, *top, index as i32, true));
+                layer_snapshots.push(builder.snapshot);
             }
             out.push(LayerInput {
                 layer: layer as u8,
                 records,
             });
+            snapshots.push(layer_snapshots);
+        }
+        if let Some(last) = last {
+            self.match_palettes(&mut out, &snapshots, &mut colors, last.cgram_index);
         }
 
         EngineInput {
@@ -242,6 +253,117 @@ impl TileCapture {
             bg3_priority,
         }
     }
+    /// Games change colours partway down the picture (Mario Kart's top strip, many status
+    /// bars), but the engines have one palette per frame: the one in force at the end. A tile
+    /// drawn with other colours is pointed at entries that hold its colours: the same colours
+    /// somewhere else in the palette, or entries no tile of the frame uses, filled in.
+    fn match_palettes(
+        &self,
+        layers: &mut [LayerInput],
+        snapshots: &[Vec<Option<u32>>],
+        colors: &mut [Rgb24; 256],
+        last_snapshot: u32,
+    ) {
+        let rgb = |bgr: u16| {
+            let [r, g, b] = bgr555_to_rgb(bgr);
+            Rgb24::new(r, g, b)
+        };
+        // The colour values (1 up) a record shows.
+        let values_of = |record: &TileRecord| {
+            let mut values = [false; 256];
+            for row in 0..8 {
+                for column in 0..8 {
+                    if let Some(value) = record.source_pixel(column, row) {
+                        values[usize::from(value)] = value != 0;
+                    }
+                }
+            }
+            values
+        };
+        let shows = |record: &TileRecord, snapshot: u32, colors: &[Rgb24; 256], start: usize| {
+            let Some(palette) = self.palette(snapshot) else {
+                return true;
+            };
+            values_of(record).iter().enumerate().all(|(value, &used)| {
+                let from = usize::from(record.palette) + value;
+                let to = start + value;
+                !used || (from < 256 && to < 256 && colors[to] == rgb(palette[from]))
+            })
+        };
+
+        // Entries the tiles already right show stay as they are.
+        let mut taken = [false; 256];
+        taken[0] = true;
+        let mut wrong = Vec::new();
+        for (layer_index, layer) in layers.iter().enumerate() {
+            for (record_index, record) in layer.records.iter().enumerate() {
+                let snapshot = snapshots[layer_index][record_index];
+                match snapshot {
+                    Some(snapshot)
+                        if snapshot != last_snapshot
+                            && !shows(record, snapshot, colors, usize::from(record.palette)) =>
+                    {
+                        wrong.push((layer_index, record_index, snapshot));
+                    }
+                    _ => {
+                        for (value, &used) in values_of(record).iter().enumerate() {
+                            if used {
+                                taken[(usize::from(record.palette) + value).min(255)] = true;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        // One new place per palette block of a snapshot.
+        let mut moved: Vec<((u32, u8), u8)> = Vec::new();
+        for (layer_index, record_index, snapshot) in wrong {
+            let record = &layers[layer_index].records[record_index];
+            let key = (snapshot, record.palette);
+            if let Some(&(_, start)) = moved.iter().find(|(k, _)| *k == key) {
+                if shows(record, snapshot, colors, usize::from(start)) {
+                    layers[layer_index].records[record_index].palette = start;
+                    continue;
+                }
+            }
+            let Some(palette) = self.palette(snapshot) else {
+                continue;
+            };
+            let values = values_of(record);
+            let size = values.iter().rposition(|&used| used).unwrap_or(0) + 1;
+            // The same colours elsewhere, or free entries to hold them.
+            let start = (0..=256 - size)
+                .find(|&start| shows(record, snapshot, colors, start))
+                .or_else(|| {
+                    (0..=256 - size).find(|&start| {
+                        values
+                            .iter()
+                            .enumerate()
+                            .all(|(value, &used)| !used || !taken[start + value])
+                    })
+                });
+            let Some(start) = start else { continue };
+            // A block of 16 colours or fewer: all of it moves, so later tiles of the same
+            // block find their colours too.
+            let block = if size <= 16 {
+                usize::from(record.palette)..usize::from(record.palette) + size
+            } else {
+                0..0
+            };
+            for (value, &used) in values.iter().enumerate() {
+                let from = usize::from(record.palette) + value;
+                let in_block = block.contains(&from) && value != 0;
+                if (used || in_block) && from < 256 && !taken[start + value] {
+                    colors[start + value] = rgb(palette[from]);
+                    taken[start + value] = true;
+                }
+            }
+            layers[layer_index].records[record_index].palette = start as u8;
+            moved.push((key, start as u8));
+        }
+    }
+
     /// Adds the sky to `input` as a layer of its own ([`BACKDROP`]), from the finished
     /// picture `frame`: whole tiles whose rows are each line's sky colour. Its colours go in
     /// palette entries no tile of the frame uses (all layers share one palette). Nothing is
@@ -405,6 +527,7 @@ impl TileCapture {
                         flip_y,
                         palette: palette.min(255) as u8,
                         order,
+                        snapshot: (bpp != 8).then_some(chunk.cgram_index),
                         ..Builder::default()
                     });
                     let keep = shown_pixels(x, flip_x, |screen_x| {
@@ -506,6 +629,7 @@ impl TileCapture {
                     hidden: behind_layer_1(mode, sprite.priority),
                     palette: 128 + sprite.palette * 16,
                     order,
+                    snapshot: chunk.map(|c| c.cgram_index),
                     ..Builder::default()
                 });
                 let keep = shown_pixels(sprite.x, sprite.horizontal_mirror != 0, |screen_x| {

@@ -196,6 +196,28 @@ impl FrameDrawList {
         }
     }
 
+    /// `XSnes3D+`: as [`Self::append_moved`], and also grown by `scale` about `center` (in
+    /// x and y), so that a layer moved back still covers the same part of the picture seen
+    /// from the camera.
+    pub fn append_moved_scaled(&mut self, other: &Self, depth: f32, center: Vec3, scale: f32) {
+        let placed = Mat4::translation(Vec3::new(0.0, 0.0, depth))
+            * Mat4::translation(center)
+            * Mat4::scale_matrix(Vec3::new(scale, scale, 1.0))
+            * Mat4::translation(Vec3::new(-center.x, -center.y, -center.z));
+        for tile in &other.tiles {
+            let mut tile = tile.clone();
+            tile.transform = placed * tile.transform;
+            tile.anchor = placed.transform_point(tile.anchor);
+            tile.tile_center = placed.transform_point(tile.tile_center);
+            self.tiles.push(tile);
+        }
+    }
+
+    /// `XSnes3D+`: removes every tile, keeping the palette, counter and time.
+    pub fn clear_tiles(&mut self) {
+        self.tiles.clear();
+    }
+
     /// The frame counter of the frame (REQ-E3D-043).
     #[must_use]
     pub const fn frame_counter(&self) -> i32 {
