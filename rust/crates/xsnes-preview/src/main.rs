@@ -4,6 +4,7 @@
 //! ```text
 //! snes-preview <rom> [--frames N] [--shots 600,1200] [--press SCRIPT] [--firmware DIR]
 //!              [--angles 0.81,0.81;22,-30] [--out DIR] [--name NAME] [--size 512x448]
+//!              [--timing]
 //! ```
 //!
 //! Each background layer of the SNES picture goes to its own 3D engine (the engine knows one
@@ -19,6 +20,7 @@ use std::fs::{self, File};
 use std::io::BufWriter;
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
+use std::time::{Duration, Instant};
 
 use zax_engine3d::draw_list::FrameDrawList;
 use zax_engine3d::engine::ConversionEngine;
@@ -70,6 +72,8 @@ struct Options {
     out: PathBuf,
     name: String,
     size: (i32, i32),
+    /// Print how long each stage took per frame.
+    timing: bool,
 }
 
 fn main() -> ExitCode {
@@ -84,6 +88,30 @@ fn main() -> ExitCode {
 
 /// How many tile images one engine may hold before it starts afresh.
 const IMAGE_LIMIT: usize = 3_000;
+
+/// Time spent per stage over the run, for `--timing`.
+#[derive(Default)]
+struct Timing {
+    frames: u32,
+    emulate: Duration,
+    tiles: Duration,
+    engines: Duration,
+}
+
+impl Timing {
+    /// Prints the average milliseconds per frame of each stage.
+    fn print(&self) {
+        let per_frame =
+            |total: Duration| total.as_secs_f64() * 1000.0 / f64::from(self.frames.max(1));
+        println!(
+            "timing over {} frames, ms per frame: emulation {:.2}, tiles {:.2}, Smart 3D engines {:.2}",
+            self.frames,
+            per_frame(self.emulate),
+            per_frame(self.tiles),
+            per_frame(self.engines),
+        );
+    }
+}
 
 /// One set of engines, one per background layer (indexed by layer 0 to 3), one for the front
 /// part of mode 1's background 3 ([`BG3_FRONT`]) and one for the sky ([`BACKDROP`]).
@@ -280,20 +308,29 @@ fn run() -> Result<(), String> {
     let mut plain = EngineSet::new(false);
     let mut smart = EngineSet::new(true);
 
+    let mut timing = Timing::default();
     for counter in 0..options.frames {
+        let started = Instant::now();
         snes.run_frame(options.press.at(counter))
             .map_err(|e| e.to_string())?;
+        timing.emulate += started.elapsed();
+        let started = Instant::now();
         let Some(capture) = snes.tile_capture() else {
             continue;
         };
         let mut input = capture.engine_input();
         if let Some(frame) = snes.frame() {
-            capture.apply_finished_colors(&mut input, &frame);
-            capture.add_backdrop(&mut input, &frame);
+            let look = capture.look(&frame);
+            capture.apply_finished_colors(&mut input, &look);
+            capture.add_backdrop(&mut input, &frame, &look);
         }
+        timing.tiles += started.elapsed();
         let counter_i32 = i32::try_from(counter).unwrap_or(i32::MAX);
-        plain.convert(&input, counter_i32)?;
+        let started = Instant::now();
         smart.convert(&input, counter_i32)?;
+        timing.engines += started.elapsed();
+        timing.frames += 1;
+        plain.convert(&input, counter_i32)?;
 
         let done = counter + 1;
         if !options.shots.contains(&done) {
@@ -331,6 +368,9 @@ fn run() -> Result<(), String> {
                 path.display()
             );
         }
+    }
+    if options.timing {
+        timing.print();
     }
     drop(snes);
     let _ = fs::remove_dir_all(&home);
@@ -424,6 +464,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
     let mut out = PathBuf::from(".");
     let mut name = None;
     let mut size = (512, 448);
+    let mut timing = false;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let mut value = |flag: &str| args.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -451,6 +492,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             "--firmware" => firmware = Some(PathBuf::from(value("--firmware")?)),
             "--angles" => angles_text = value("--angles")?,
             "--out" => out = PathBuf::from(value("--out")?),
+            "--timing" => timing = true,
             "--name" => name = Some(value("--name")?),
             "--size" => {
                 let text = value("--size")?;
@@ -466,7 +508,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             path => rom = Some(PathBuf::from(path)),
         }
     }
-    let rom = rom.ok_or("usage: snes-preview <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--firmware DIR] [--angles X,Y;X,Y] [--out DIR] [--name NAME] [--size WxH]")?;
+    let rom = rom.ok_or("usage: snes-preview <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--firmware DIR] [--angles X,Y;X,Y] [--out DIR] [--name NAME] [--size WxH] [--timing]")?;
     if shots.is_empty() {
         shots.push(frames);
     }
@@ -495,6 +537,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
         out,
         name,
         size,
+        timing,
     })
 }
 

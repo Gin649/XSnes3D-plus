@@ -244,6 +244,8 @@ pub struct TileCapture {
     pub(crate) lines: Vec<RawLine>,
     pub(crate) sprites: Vec<RawSprite>,
     pub(crate) mode7: Vec<RawMode7Line>,
+    /// For each scanline, the position in `mode7` of its background 1 and 2 lines.
+    mode7_index: Vec<[Option<u32>; 2]>,
     cgram: Vec<u16>,
 }
 
@@ -258,26 +260,43 @@ impl TileCapture {
         // SAFETY: the caller guarantees each pointer is valid for its count; a count of 0
         // never reads its pointer.
         unsafe {
-            Self {
+            let mut capture = Self {
                 chunks: copy(view.chunks, view.chunk_count as usize),
                 lines: copy(view.lines, view.line_count as usize),
                 sprites: copy(view.sprites, view.sprite_count as usize),
                 mode7: copy(view.mode7, view.mode7_count as usize),
+                mode7_index: Vec::new(),
                 cgram: copy(view.cgram, view.cgram_snapshots as usize * 256),
+            };
+            capture.index_mode7();
+            capture
+        }
+    }
+
+    /// Fills `mode7_index`; a scanline drawn in several pieces keeps its last record.
+    fn index_mode7(&mut self) {
+        let mut index = vec![[None; 2]; 264];
+        for (position, line) in self.mode7.iter().enumerate() {
+            if let Some(slot) = index.get_mut(usize::from(line.scanline)) {
+                slot[usize::from(line.layer & 1)] = Some(position as u32);
             }
         }
+        self.mode7_index = index;
     }
 
     /// A capture holding only Mode 7 lines, for tests.
     #[cfg(test)]
     pub(crate) fn with_mode7(mode7: Vec<RawMode7Line>) -> Self {
-        Self {
+        let mut capture = Self {
             chunks: Vec::new(),
             lines: Vec::new(),
             sprites: Vec::new(),
             mode7,
+            mode7_index: Vec::new(),
             cgram: Vec::new(),
-        }
+        };
+        capture.index_mode7();
+        capture
     }
 
     /// Lines recorded.
@@ -335,67 +354,6 @@ impl TileCapture {
             .into_iter()
             .max_by_key(|(color, count)| (*count, std::cmp::Reverse(*color)))
             .map(|(color, _)| color)
-    }
-
-    /// The sky of each line of the finished picture `frame`, as [`Self::sky_color`] finds it
-    /// for the whole picture: per scanline, the most common colour of the pixels where the
-    /// main screen shows only the backdrop. Lines without such a pixel are left out.
-    #[must_use]
-    pub fn sky_by_line(&self, frame: &crate::Frame) -> Vec<(u16, [u8; 3])> {
-        let pixels = self.sky_pixels(frame);
-        let mut result = Vec::new();
-        for (scanline, row) in pixels.chunks(256).enumerate() {
-            let mut counts: Vec<([u8; 3], u32)> = Vec::new();
-            for color in row.iter().flatten() {
-                match counts.iter_mut().find(|(c, _)| c == color) {
-                    Some((_, count)) => *count += 1,
-                    None => counts.push((*color, 1)),
-                }
-            }
-            if let Some((color, _)) = counts
-                .into_iter()
-                .max_by_key(|(color, count)| (*count, std::cmp::Reverse(*color)))
-            {
-                result.push((scanline as u16, color));
-            }
-        }
-        result
-    }
-
-    /// The finished picture's colour at each pixel where the main screen shows only the
-    /// backdrop, 256 per scanline (scanlines 0 to 239), `None` elsewhere. A layer blended in
-    /// from the sub screen (Super Mario World's hills) is not sky.
-    #[must_use]
-    pub fn sky_pixels(&self, frame: &crate::Frame) -> Vec<Option<[u8; 3]>> {
-        let first_row = u16::from(frame.height < 239);
-        let mut result = vec![None; 256 * 240];
-        for line in self.lines.iter().filter(|l| l.scanline < 240) {
-            let Some(y) = line.scanline.checked_sub(first_row) else {
-                continue;
-            };
-            let sprites = self.sprite_line(line.scanline);
-            let mut main_mosaic = [MosaicLatch::default(); 4];
-            let mut sub_mosaic = [MosaicLatch::default(); 4];
-            for chunk in self.chunks.iter().filter(|c| c.scanline == line.scanline) {
-                for x in chunk.start_x..=chunk.end_x {
-                    let main =
-                        self.pixel_source(chunk, line, &sprites, &mut main_mosaic, x, Screen::Main);
-                    let sub = self.pixel_source(
-                        chunk,
-                        line,
-                        &sprites,
-                        &mut sub_mosaic,
-                        x,
-                        Screen::SubOnly,
-                    );
-                    if main == Some(Source::Entry(0)) && sub == Some(Source::Entry(0)) {
-                        result[usize::from(line.scanline) * 256 + usize::from(x)] =
-                            frame.pixel(u32::from(x), u32::from(y));
-                    }
-                }
-            }
-        }
-        result
     }
 
     /// The last chunk drawn on `scanline`: the settings a line's tiles are filed under.
@@ -696,11 +654,8 @@ enum Source {
 impl TileCapture {
     /// The Mode 7 colour numbers of background `layer` (0 or 1) on `scanline`.
     pub(crate) fn mode7_line(&self, scanline: u16, layer: u8) -> Option<&[u8; 256]> {
-        self.mode7
-            .iter()
-            .rev()
-            .find(|l| l.scanline == scanline && l.layer == layer)
-            .map(|l| &l.color)
+        let position = self.mode7_index.get(usize::from(scanline))?[usize::from(layer & 1)]?;
+        self.mode7.get(position as usize).map(|l| &l.color)
     }
 
     /// Where one pixel of a Mode 7 line comes from, as Mesen's `RenderMode7`.
@@ -760,46 +715,60 @@ impl TileCapture {
         best.map_or(Source::Entry(0), |(_, source)| source)
     }
 
-    /// The colour each palette entry shows in the finished picture `frame`, after colour
-    /// maths (transparency, glows, fog) and brightness: for every entry of the palette in
-    /// force at the end of the frame, the most common finished colour of the pixels it
-    /// drew, `None` for an entry seen on fewer than [`FINISHED_MIN_PIXELS`] pixels. A layer
-    /// only on the sub screen counts where the main screen shows the backdrop, which is
-    /// where it is blended in.
+    /// How the finished picture `frame` looks, worked out in one pass over its pixels:
+    /// [`Look::finished`] and [`Look::sky`].
     #[must_use]
-    pub fn finished_colors(&self, frame: &crate::Frame) -> Vec<Option<[u8; 3]>> {
+    pub fn look(&self, frame: &crate::Frame) -> Look {
         let mut counts: Vec<Vec<([u8; 3], u32)>> = vec![Vec::new(); 256];
+        let mut sky = vec![None; 256 * 240];
         let first_row = u16::from(frame.height < 239);
         let last = self
             .chunks
             .iter()
             .max_by_key(|c| (c.scanline, c.end_x))
             .map(|c| c.cgram_index);
-        for line in &self.lines {
+        // The chunks of each scanline (the PPU records them in drawing order).
+        let mut chunks_of: Vec<Vec<&RawChunk>> = vec![Vec::new(); 241];
+        for chunk in &self.chunks {
+            if let Some(slot) = chunks_of.get_mut(usize::from(chunk.scanline)) {
+                slot.push(chunk);
+            }
+        }
+        for line in self.lines.iter().filter(|l| l.scanline < 240) {
             let Some(y) = line.scanline.checked_sub(first_row) else {
                 continue;
             };
             let sprites = self.sprite_line(line.scanline);
             let mut main_mosaic = [MosaicLatch::default(); 4];
             let mut sub_mosaic = [MosaicLatch::default(); 4];
-            for chunk in self.chunks.iter().filter(|c| c.scanline == line.scanline) {
+            for chunk in &chunks_of[usize::from(line.scanline)] {
+                // A sub screen layer with mosaic needs every pixel for its mosaic to stay right.
+                let sub_every_pixel = chunk.mosaic_enabled & chunk.sub_layers != 0;
                 for x in chunk.start_x..=chunk.end_x {
                     let main =
                         self.pixel_source(chunk, line, &sprites, &mut main_mosaic, x, Screen::Main);
-                    let sub = self.pixel_source(
-                        chunk,
-                        line,
-                        &sprites,
-                        &mut sub_mosaic,
-                        x,
-                        Screen::SubOnly,
-                    );
-                    if Some(chunk.cgram_index) != last {
+                    let sub = if sub_every_pixel || main == Some(Source::Entry(0)) {
+                        self.pixel_source(
+                            chunk,
+                            line,
+                            &sprites,
+                            &mut sub_mosaic,
+                            x,
+                            Screen::SubOnly,
+                        )
+                    } else {
+                        None
+                    };
+                    let Some(colour) = frame.pixel(u32::from(x), u32::from(y)) else {
                         continue;
-                    }
+                    };
                     // Where the main screen shows the backdrop, a layer only on the sub screen
-                    // is what shows through.
+                    // is what shows through; where neither shows anything, the sky does.
                     let entry = match (main, sub) {
+                        (Some(Source::Entry(0)), Some(Source::Entry(0))) => {
+                            sky[usize::from(line.scanline) * 256 + usize::from(x)] = Some(colour);
+                            continue;
+                        }
                         (Some(Source::Entry(0)), Some(Source::Entry(entry)))
                         | (Some(Source::Entry(entry)), _)
                             if entry != 0 =>
@@ -808,9 +777,9 @@ impl TileCapture {
                         }
                         _ => continue,
                     };
-                    let Some(colour) = frame.pixel(u32::from(x), u32::from(y)) else {
+                    if Some(chunk.cgram_index) != last {
                         continue;
-                    };
+                    }
                     let seen = &mut counts[entry];
                     match seen.iter_mut().find(|(c, _)| *c == colour) {
                         Some((_, count)) => *count += 1,
@@ -819,7 +788,7 @@ impl TileCapture {
                 }
             }
         }
-        counts
+        let finished = counts
             .into_iter()
             .map(|seen| {
                 seen.into_iter()
@@ -827,11 +796,52 @@ impl TileCapture {
                     .max_by_key(|&(colour, count)| (count, std::cmp::Reverse(colour)))
                     .map(|(colour, _)| colour)
             })
-            .collect()
+            .collect();
+        Look { finished, sky }
     }
 }
 
-/// How many pixels a palette entry must draw before [`TileCapture::finished_colors`] trusts
+/// How a finished picture looks, beside the tiles that drew it ([`TileCapture::look`]).
+#[derive(Debug, Clone)]
+pub struct Look {
+    /// The colour each palette entry shows in the finished picture, after colour maths
+    /// (transparency, glows, fog) and brightness: for every entry of the palette in force at
+    /// the end of the frame, the most common finished colour of the pixels it drew, `None`
+    /// for an entry seen on fewer than [`FINISHED_MIN_PIXELS`] pixels. A layer only on the
+    /// sub screen counts where the main screen shows the backdrop, which is where it is
+    /// blended in.
+    pub finished: Vec<Option<[u8; 3]>>,
+    /// The finished picture's colour at each pixel where neither screen shows anything but
+    /// the backdrop, 256 per scanline (scanlines 0 to 239), `None` elsewhere.
+    pub sky: Vec<Option<[u8; 3]>>,
+}
+
+impl Look {
+    /// The sky of each line: per scanline, the most common colour of its sky pixels. Lines
+    /// without one are left out.
+    #[must_use]
+    pub fn sky_by_line(&self) -> Vec<(u16, [u8; 3])> {
+        let mut result = Vec::new();
+        for (scanline, row) in self.sky.chunks(256).enumerate() {
+            let mut counts: Vec<([u8; 3], u32)> = Vec::new();
+            for color in row.iter().flatten() {
+                match counts.iter_mut().find(|(c, _)| c == color) {
+                    Some((_, count)) => *count += 1,
+                    None => counts.push((*color, 1)),
+                }
+            }
+            if let Some((color, _)) = counts
+                .into_iter()
+                .max_by_key(|(color, count)| (*count, std::cmp::Reverse(*color)))
+            {
+                result.push((scanline as u16, color));
+            }
+        }
+        result
+    }
+}
+
+/// How many pixels a palette entry must draw before [`Look::finished`] trusts
 /// the colour they show.
 pub const FINISHED_MIN_PIXELS: u32 = 4;
 

@@ -15,7 +15,7 @@ pub mod tap;
 
 pub use engine_input::{EngineInput, LayerInput, BACKDROP, BG3_FRONT};
 pub use press::{Buttons, PressScript};
-pub use tap::{Rebuild, SnesTileRecord, TileCapture, TileLayer};
+pub use tap::{Look, Rebuild, SnesTileRecord, TileCapture, TileLayer};
 
 #[repr(C)]
 struct RawSnes {

@@ -23,7 +23,7 @@ use zax_engine3d::input::{FrameBatch, TileRecord, STANDARD_ROWS};
 use zax_engine3d::palette::Rgb24;
 
 use crate::bgr555_to_rgb;
-use crate::tap::{RawChunk, TileCapture};
+use crate::tap::{Look, RawChunk, TileCapture};
 
 /// One background layer's tiles for its engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -418,11 +418,11 @@ impl TileCapture {
     }
 
     /// Gives `input`'s colours the look of the finished picture `frame`: each palette entry
-    /// takes the colour it shows there ([`TileCapture::finished_colors`]), so layers blended
+    /// takes the colour it shows there ([`Look::finished`]), so layers blended
     /// with colour maths (see-through water, fog, glows, a layer only on the sub screen) and
     /// screen fades keep their look in 3D. Entry 0, the backdrop, is left alone.
-    pub fn apply_finished_colors(&self, input: &mut EngineInput, frame: &crate::Frame) {
-        for (entry, colour) in self.finished_colors(frame).into_iter().enumerate().skip(1) {
+    pub fn apply_finished_colors(&self, input: &mut EngineInput, look: &Look) {
+        for (entry, colour) in look.finished.iter().copied().enumerate().skip(1) {
             if let Some([r, g, b]) = colour {
                 input.colors[entry] = Rgb24::new(r, g, b);
             }
@@ -434,9 +434,9 @@ impl TileCapture {
     /// palette entries no tile of the frame uses (all layers share one palette). Nothing is
     /// added when the sky is one colour all the way down (the scene's background colour shows
     /// it then) or cannot be found.
-    pub fn add_backdrop(&self, input: &mut EngineInput, frame: &crate::Frame) {
-        let pixels = self.sky_pixels(frame);
-        let sky = self.sky_by_line(frame);
+    pub fn add_backdrop(&self, input: &mut EngineInput, frame: &crate::Frame, look: &Look) {
+        let pixels = &look.sky;
+        let sky = look.sky_by_line();
         let Some(&(_, first)) = sky.first() else {
             return;
         };
