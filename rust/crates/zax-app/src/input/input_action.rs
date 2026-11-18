@@ -5,7 +5,7 @@ use zax_render::controls::CameraAction;
 use crate::flags::flag_set;
 
 flag_set! {
-    /// A set of input actions: the eight NES buttons, the six camera movements and the five
+    /// A set of input actions: the twelve SNES buttons, the six camera movements and the six
     /// hotkeys.
     pub struct InputAction(u32) {
         const A = 0x01;
@@ -30,8 +30,13 @@ flag_set! {
         /// Soft reset — the RESET button of the console (AMD-044 REQ-INP-125). The next free
         /// code of the extended-action table, with no default keyboard or gamepad binding.
         const SOFT_RESET = 0x80000;
-        /// The eight bits the NES controller sees.
-        const CONTROLLER_BYTE = 0xFF;
+        /// The four SNES buttons the NES pad did not have.
+        const X = 0x0010_0000;
+        const Y = 0x0020_0000;
+        const L = 0x0040_0000;
+        const R = 0x0080_0000;
+        /// The twelve buttons of the SNES pad.
+        const PAD_MASK = 0xFF | 0x0010_0000 | 0x0020_0000 | 0x0040_0000 | 0x0080_0000;
         /// The six camera movements.
         const CAMERA_MASK = 0x100 | 0x200 | 0x400 | 0x800 | 0x1000 | 0x2000;
         /// The six hotkeys (AMD-044 REQ-INP-125 adds the soft reset).

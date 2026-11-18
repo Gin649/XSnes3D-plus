@@ -236,7 +236,7 @@ impl Snes {
     /// # Errors
     ///
     /// [`SnesError::State`] when Mesen cannot make it.
-    pub fn save_state(&mut self) -> Result<Vec<u8>, SnesError> {
+    pub fn save_state(&self) -> Result<Vec<u8>, SnesError> {
         let mut size = 0;
         // SAFETY: `raw` is alive; the shim returns `size` bytes valid until the next save.
         let data = unsafe { xs_save_state(self.raw, &raw mut size) };

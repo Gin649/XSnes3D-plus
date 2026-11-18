@@ -6,7 +6,6 @@ use std::path::Path;
 
 use zax_engine3d::settings::RenderAlgorithm;
 use zax_engine3d::state_codec;
-use zax_nes::{NesCore, NesRegion};
 use zax_profiles::enums::TvRegionMode;
 use zax_settings::catalogue::SettingId;
 use zax_settings::values::SettingValue;
@@ -145,8 +144,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             store.games_mut().note_rom_opened(&rom_path);
             store.schedule_write(self.elapsed);
         }
-        // The ROM is studied as it starts: the list of the ROMs shows whether a hack fits it.
-        self.certify_rom(Path::new(&rom_path), &rom.image);
         let mut job = LoadJob::new(LoadKind::Launch);
         job.game = Some(game);
         job.rom = Some(rom);
@@ -354,13 +351,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             }
             Step::Finished => {
                 self.loading = false;
-                // `--movie` (EDITOR-1): the movie given on the command line plays once the game
-                // it is for has started.
-                if job.kind == LoadKind::Launch {
-                    if let Some(path) = self.movie_after_launch.take() {
-                        self.play_movie(&path);
-                    }
-                }
             }
             Step::Failed(message) => {
                 self.fail_job(&message);
@@ -405,7 +395,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         }
         if let Some(session) = &mut self.session {
             session.reset_port_types();
-            self.zapper.reset();
         }
     }
 
@@ -516,22 +505,21 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 let Some(rom) = job.rom.as_ref() else {
                     return Step::Failed(INVALID_ROM_MESSAGE.to_owned());
                 };
-                let builtin_patches = self.builtin_patches_wanted();
-                let advanced = self.advanced_patches_wanted();
-                let forced = self.forced_patch();
+                let home = self.paths.root.join("snes");
                 let result = match self.session.as_mut() {
                     Some(session) => {
-                        session.core_mut().set_builtin_patches(builtin_patches);
-                        session.core_mut().set_advanced_patches(advanced);
-                        session.core_mut().set_forced_patch(forced);
+                        session.core_mut().set_home(home);
                         session.load_rom(&rom.image, &rom.name)
                     }
                     None => return Step::Failed(INVALID_ROM_MESSAGE.to_owned()),
                 };
                 if !result.success {
+                    if let Some(error) = &result.error {
+                        self.log(error);
+                    }
                     return Step::Failed(INVALID_ROM_MESSAGE.to_owned());
                 }
-                self.apply_region_on_load(result.region, job.reload_profile, &game);
+                self.apply_region_on_load();
                 self.attach_battery(true);
                 job.stage = 2;
                 Step::Continue
@@ -622,16 +610,9 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         game: &ResolvedGame,
         state: &SaveStateContent,
     ) -> Step {
-        let builtin_patches = self.builtin_patches_wanted();
-        let advanced = self.advanced_patches_wanted();
-        let forced = self.forced_patch();
         let Some(session) = self.session.as_mut() else {
             return Step::Failed(CORRUPTED_MESSAGE.to_owned());
         };
-        // The state carries the original ROM: the hack applies to it as the setting says now.
-        session.core_mut().set_builtin_patches(builtin_patches);
-        session.core_mut().set_advanced_patches(advanced);
-        session.core_mut().set_forced_patch(forced);
         if let Err(error) = session.restore_core(&state.core) {
             self.log(&format!("savestate refused: {error}"));
             return Step::Failed(CORRUPTED_MESSAGE.to_owned());
@@ -734,11 +715,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         // ring here, and the classic output of AUDIO-2 has nothing else that would — its mixer
         // keeps no gate and no ramp. On the default output `resynchronise_audio` below empties it
         // too, so this is simply the first of two idempotent calls there (AUDIO-2).
-        session
-            .core_mut()
-            .bus_mut()
-            .apu_mut()
-            .drop_pending_samples();
+        session.core_mut().drop_pending_samples();
         self.rollback.clear();
         self.frame_steps.clear();
         self.fast_forward.clear();
@@ -755,29 +732,9 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         Step::Finished
     }
 
-    /// Q-031: the region of the ROM when the automatic mode is on, the profile's otherwise.
-    fn apply_region_on_load(
-        &mut self,
-        detected: NesRegion,
-        profile_reloaded: bool,
-        game: &ResolvedGame,
-    ) {
-        if self.settings.auto_tv_mode() {
-            self.settings.apply_detected_region(detected);
-        } else if profile_reloaded {
-            if let Some(settings) = game.profile.settings.as_ref() {
-                let mode = match settings.tv_mode {
-                    TvRegionMode::Pal => TvRegionSetting::Pal,
-                    TvRegionMode::Dendy => TvRegionSetting::Dendy,
-                    TvRegionMode::Multi => TvRegionSetting::Multi,
-                    _ => TvRegionSetting::Ntsc,
-                };
-                self.settings.set_tv_mode(mode);
-            }
-        }
-        if let Some(session) = &mut self.session {
-            session.core_mut().set_region(self.settings.region());
-        }
+    /// The SNES finds its own region (Mesen reads it from the game): only the speed and the
+    /// settings that follow are brought up to date.
+    fn apply_region_on_load(&mut self) {
         self.dispatch_setting_changes();
         self.apply_speed();
     }
@@ -791,162 +748,27 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         crate::scene_script_bridge::push_settings(&self.settings, scene);
     }
 
-    /// How `state` stands against the built-in hack as the settings have it.
+    /// How `state` stands against a built-in hack: the SNES has none, so every state fits.
     #[must_use]
-    pub fn state_patch_status(&self, state: &SaveStateContent) -> SlotPatchStatus {
-        // Only a ROM a built-in patch is made for has components to apply.
-        let Some(patch) = NesCore::state_builtin_patch(&state.core, 0) else {
-            return SlotPatchStatus::Fits;
-        };
-        let saved = state_components(state);
-        // The hack's code of another version would run on this memory.
-        if !saved.is_empty() {
-            let current = format!("{:08X}", patch.version());
-            if state
-                .header
-                .hack_version
-                .as_ref()
-                .is_some_and(|version| !version.eq_ignore_ascii_case(&current))
-            {
-                return SlotPatchStatus::OtherVersion;
-            }
-        }
-        let mut now = self.components_set(patch);
-        let mut saved = saved;
-        // A file older than the components knows of the widescreen only.
-        if state.header.hack_components.is_none() {
-            now.retain(|component| component == zax_nes::hack_pack::WIDESCREEN);
-        }
-        now.sort();
-        saved.sort();
-        // A pack whose states carry across (its states section): a state made at the game's wait
-        // for the next frame goes on with the hack as it is set, no question asked, in the
-        // directions the pack allows (made with the widescreen and loaded without it, or the
-        // other way round; only aids differing, either way allowed will do).
-        let states = patch.states();
-        let wide = zax_nes::hack_pack::WIDESCREEN;
-        let carries = state.header.at_idle == Some(true)
-            && match (
-                saved.iter().any(|component| component == wide),
-                now.iter().any(|component| component == wide),
-            ) {
-                (true, false) => states.to_off,
-                (false, true) => states.to_on,
-                _ => states.to_off || states.to_on,
-            };
-        if now == saved || carries {
-            SlotPatchStatus::Fits
-        } else {
-            SlotPatchStatus::OtherComponents
-        }
+    pub const fn state_patch_status(&self, _state: &SaveStateContent) -> SlotPatchStatus {
+        SlotPatchStatus::Fits
     }
 
-    /// The components of `patch`'s hack pack a game of it gets as set now: its widescreen while
-    /// the patch applies, and each aid whose option is on.
-    pub(super) fn components_set(
-        &self,
-        patch: &'static zax_nes::builtin_patches::BuiltinPatch,
-    ) -> Vec<String> {
-        let mut components = Vec::new();
-        if self.patch_applies(patch) {
-            components.push(zax_nes::hack_pack::WIDESCREEN.to_owned());
-        }
-        components.extend(
-            self.patch_options(patch)
-                .into_iter()
-                .filter(|(option, on)| *on && patch.is_aid(option.key))
-                .map(|(option, _)| option.key.to_owned()),
-        );
-        components
+    /// [`EmulationHost::state_patch_status`] of the state of slot `slot_id`.
+    #[must_use]
+    pub const fn slot_patch_status(&self, _slot_id: &str) -> SlotPatchStatus {
+        SlotPatchStatus::Fits
     }
 
-    /// [`EmulationHost::state_patch_status`] of the state of slot `slot_id`; remembered per slot,
-    /// save time and setting, so that a menu can ask every frame.
-    pub fn slot_patch_status(&self, slot_id: &str) -> SlotPatchStatus {
-        let Some(record) = self
-            .slots
-            .find(slot_id)
-            .filter(|record| record.is_occupied())
-        else {
-            return SlotPatchStatus::Fits;
-        };
-        let enabled = self.builtin_patches_wanted();
-        let key = (slot_id.to_owned(), record.saved_at, enabled);
-        if let Some(&status) = self.slot_patch_cache.borrow().get(&key) {
-            return status;
-        }
-        let status = std::fs::read(self.slot_state_file(slot_id))
-            .ok()
-            .and_then(|bytes| save_state_file::try_read(&bytes))
-            .map_or(SlotPatchStatus::Fits, |state| {
-                self.state_patch_status(&state)
-            });
-        self.slot_patch_cache.borrow_mut().insert(key, status);
-        status
-    }
-
-    /// Sets the components of the built-in hack as the state of `slot_id` had them, then loads it:
-    /// the second answer to the question [`EmulationHost::load_slot`] asks for a state made with
-    /// other components.
+    /// Loads the state of `slot_id` (the NES app first set its hack as the state had it).
     pub(super) fn load_slot_aligned(&mut self, slot_id: &str) {
-        let state = std::fs::read(self.slot_state_file(slot_id))
-            .ok()
-            .and_then(|bytes| save_state_file::try_read(&bytes));
-        let Some((state, patch)) = state.and_then(|state| {
-            let patch = NesCore::state_builtin_patch(&state.core, 0)?;
-            Some((state, patch))
-        }) else {
-            self.load_slot_checked(slot_id, false);
-            return;
-        };
-        let saved = state_components(&state);
-        let widescreen = saved
-            .iter()
-            .any(|component| component == zax_nes::hack_pack::WIDESCREEN);
-        // The patch follows the widescreen of the game (owner request); an advanced patch is its
-        // own mode of the widescreen, which stays on for it.
-        if widescreen {
-            self.settings
-                .set(SettingId::EmuBuiltinPatches, SettingValue::Bool(true));
-        }
-        if patch.advanced {
-            if widescreen {
-                self.set_game_widescreen(true);
-            }
-            self.set_game_advanced(widescreen);
-        } else {
-            self.set_game_widescreen(widescreen);
-        }
-        // The aids, when the file tells them.
-        if state.header.hack_components.is_some() {
-            for option in patch.options {
-                if patch.is_aid(option.key) {
-                    let on = saved.iter().any(|component| component == option.key);
-                    self.set_patch_option(patch, option.key, on);
-                }
-            }
-        }
-        self.dispatch_setting_changes();
         self.load_slot_checked(slot_id, false);
     }
 
     pub(super) fn current_rom_fingerprint(&self) -> Option<String> {
         let session = self.session.as_ref()?;
-        let core = session.core();
-        // A ROM patched in memory by a built-in patch is identified by the player's ROM, so
-        // that its battery RAM survives a new version of the patch.
-        if let Some(original) = core.original_image() {
-            let rom = zax_nes::rom::RomImage::try_load(original, "").ok()?;
-            return Some(save_state_file::rom_fingerprint(
-                rom.prg_rom(),
-                rom.chr_rom(),
-            ));
-        }
-        let cartridge = core.cartridge()?;
-        Some(save_state_file::rom_fingerprint(
-            cartridge.rom().prg_rom(),
-            cartridge.rom().chr_rom(),
-        ))
+        let image = session.core().original_image()?;
+        Some(save_state_file::rom_fingerprint(image, &[]))
     }
 
     fn attach_battery(&mut self, import_saved: bool) {
@@ -981,20 +803,4 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         self.stop_current_game(true, true);
         self.notifications.show_error(message);
     }
-}
-
-/// The components of the built-in hack a state was made with: those its header tells, or for a
-/// file older than the field the widescreen when the hack ran.
-fn state_components(state: &SaveStateContent) -> Vec<String> {
-    state.header.hack_components.clone().unwrap_or_else(|| {
-        let hack = state
-            .header
-            .is_hack
-            .unwrap_or_else(|| NesCore::state_uses_widescreen(&state.core, 0).unwrap_or(false));
-        if hack {
-            vec![zax_nes::hack_pack::WIDESCREEN.to_owned()]
-        } else {
-            Vec::new()
-        }
-    })
 }

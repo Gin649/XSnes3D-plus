@@ -470,7 +470,6 @@ impl GameSession {
             CoreMachine {
                 core: &mut self.core,
                 input: &mut self.input,
-                snapshot: None,
             }
             .set_port_types(first, second);
         }
@@ -631,16 +630,12 @@ impl GameSession {
     /// Nominal frames per second of the core's region.
     #[must_use]
     pub fn nominal_frame_rate(&self) -> i32 {
-        self.core.timing().nominal_frames_per_second
+        self.core.nominal_frame_rate()
     }
 
-    /// Loads a ROM image into the core (REQ-LOOP-021 step 4). The core patches a ROM a
-    /// built-in patch was made for (the file is left alone).
+    /// Loads a ROM image into the core (REQ-LOOP-021 step 4).
     pub fn load_rom(&mut self, image: &[u8], name: &str) -> RomLoadResult {
         let result = self.core.load_rom(image, name);
-        if let Some(patch) = self.core.builtin_patch() {
-            crate::app_log::line(&format!("{name}: built-in patch applied ({patch})."));
-        }
         if result.success {
             self.frame_counter = 0;
         }
@@ -765,10 +760,6 @@ impl GameSession {
         clock.add_thread(Thread::Emulation, finished.elapsed);
         let captured = self.capture_batch(clock);
         self.pipeline.pending = Some(captured);
-        self.pipeline
-            .memory
-            .ram
-            .copy_from_slice(self.core.bus().ram());
         self.pipeline.picture_height = self.core.wide_picture_into(&mut self.pipeline.picture);
         self.pipeline.picture_shift = self.core.picture_shift();
         self.pipeline.picture_motion = self.core.picture_motion();
@@ -1416,26 +1407,9 @@ impl GameSession {
     /// The colour of the first palette entry of the newest frame, behind the NES picture.
     #[must_use]
     pub fn nes_background_color(&self) -> Rgb24 {
-        // With the 3D paused (`emu.pause_3d_in_2d`) no frame is converted: the core's own
-        // backdrop, not the last converted frame's (grey around a game started in 2D, or after
-        // its widescreen was turned off). A profile whose scripts reach into the core is still
-        // converted while paused (`convert_batch_lent`): its frames hold the colour, the core's
-        // snapshot not (a grey sky in SMB3's 2D on a handheld). The kept frame's palette comes
-        // first: the core may be on its own thread, its copy here not the frame's.
-        if self.paused_3d && self.pipeline.ahead_allowed {
-            let backdrop = self.skipped_batch.as_ref().map_or_else(
-                || self.core.ppu().snapshot_palette()[0],
-                |((palette, _), ..)| palette[0],
-            ) & 0x3F;
-            return zax_engine3d::palette::nes_color(usize::from(backdrop));
-        }
-        let state = self.engine.state();
-        state
-            .published_frame()
-            .unwrap_or_else(|| state.converting_frame())
-            .palette()
-            .color(0)
-            .unwrap_or_default()
+        // The sky of the core's last picture: games often paint it with colour maths, so
+        // the finished picture, not palette entry 0, is where it is.
+        self.core.background_color()
     }
 
     /// Emulated time of the newest frame, in seconds.
