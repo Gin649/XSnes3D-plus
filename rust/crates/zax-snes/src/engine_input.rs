@@ -80,6 +80,8 @@ struct Builder {
     planes: [u64; 8],
     flip_x: bool,
     flip_y: bool,
+    /// A sprite drawn behind background layer 1 (the NES "behind background" flag).
+    hidden: bool,
     palette: u8,
     order: usize,
 }
@@ -108,7 +110,7 @@ impl Builder {
             index,
             self.flip_x,
             self.flip_y,
-            false,
+            self.hidden,
             self.palette,
             background,
         )
@@ -127,6 +129,18 @@ fn layer_bpp(mode: u8) -> Option<[Option<(u8, u16)>; 4]> {
         4 => [Some((8, 0)), Some((2, 0)), None, None],
         _ => return None,
     })
+}
+
+/// True when a sprite of priority `priority` (0 to 3) is drawn behind background layer 1's
+/// ordinary tiles in background mode `mode` (the sprite priorities against layer 1's lower
+/// priority, as Mesen's `RenderMode0` to `RenderMode4` set them).
+fn behind_layer_1(mode: u8, priority: u8) -> bool {
+    let (sprites, layer_1): ([u8; 4], u8) = match mode {
+        0 => ([3, 6, 9, 12], 8),
+        1 => ([2, 4, 7, 10], 6),
+        _ => ([2, 4, 6, 8], 3),
+    };
+    sprites[usize::from(priority & 3)] < layer_1
 }
 
 impl TileCapture {
@@ -264,9 +278,16 @@ impl TileCapture {
                     flip_y,
                 );
                 let order = sprites.len();
+                let mode = self
+                    .chunks
+                    .iter()
+                    .rev()
+                    .find(|c| c.scanline == sprite.fetch_scanline + 1)
+                    .map_or(1, |c| c.bg_mode);
                 let builder = sprites.entry(key).or_insert_with(|| Builder {
                     flip_x: sprite.horizontal_mirror != 0,
                     flip_y,
+                    hidden: behind_layer_1(mode, sprite.priority),
                     palette: 128 + sprite.palette * 16,
                     order,
                     ..Builder::default()
@@ -276,5 +297,22 @@ impl TileCapture {
         }
 
         sprites
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::behind_layer_1;
+
+    #[test]
+    fn low_priority_sprites_go_behind_layer_1() {
+        // Mode 1: priorities 0 and 1 behind, 2 and 3 in front.
+        assert!(behind_layer_1(1, 0));
+        assert!(behind_layer_1(1, 1));
+        assert!(!behind_layer_1(1, 2));
+        assert!(!behind_layer_1(1, 3));
+        // Modes 2 to 4: only priority 0 behind.
+        assert!(behind_layer_1(3, 0));
+        assert!(!behind_layer_1(3, 1));
     }
 }

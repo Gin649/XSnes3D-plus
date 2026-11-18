@@ -57,7 +57,13 @@ impl SegmentContext<'_> {
         let mut instance = PatternInstance::new();
         // Xnes3D+: with no profile, Smart 3D gives the shape settings of its own.
         if crate::smart3d::enabled() {
-            crate::smart3d::apply(crate::smart3d::classify(frame, shape), &mut instance);
+            // XSnes3D+: a SNES text or status bar layer is flat throughout.
+            let kind = if self.settings.flat_layer {
+                crate::smart3d::Kind::StatusBar
+            } else {
+                crate::smart3d::classify(frame, shape)
+            };
+            crate::smart3d::apply(kind, &mut instance);
         }
         pattern.add_instance(instance);
         let id = self.patterns.add(pattern, self.images);

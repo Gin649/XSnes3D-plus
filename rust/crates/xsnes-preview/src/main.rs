@@ -90,6 +90,10 @@ impl EngineSet {
                 *slot = Some(engine);
             }
             if let Some(engine) = slot.as_mut() {
+                // Mode 1's background 3 in front holds the game's text or status bar: Smart 3D
+                // keeps the whole layer as flat panels.
+                engine.settings_mut().flat_layer =
+                    layer.layer == 2 && input.bg_mode == 1 && input.bg3_priority;
                 engine.convert(&input.batch(layer), counter);
                 engine.publish();
             }

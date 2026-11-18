@@ -191,6 +191,10 @@ pub struct ConversionSettings {
     pub same_background_palette: bool,
     /// Whether sprite pass S2 requires an equal palette attribute (REQ-E3D-131).
     pub same_sprite_palette: bool,
+    /// `XSnes3D+`: with Smart 3D on, every shape this engine learns is a thin flat panel with no
+    /// shadow (Smart 3D's status bar kind). Set for the engine of a SNES layer that holds the
+    /// game's text or status bar.
+    pub flat_layer: bool,
     /// Adjacency tolerance in pixels of sprite pass S2 (REQ-E3D-130, REQ-E3D-131).
     pub sprite_tolerance: i32,
     /// Global mesh algorithm (REQ-E3D-340). A user setting: it is never taken from a profile.
@@ -216,6 +220,7 @@ impl Default for ConversionSettings {
             scan_direction: 0,
             same_background_palette: false,
             same_sprite_palette: false,
+            flat_layer: false,
             sprite_tolerance: 0,
             render_algorithm: RenderAlgorithm::Greedy,
             default_layer: ZLayer::L1,
