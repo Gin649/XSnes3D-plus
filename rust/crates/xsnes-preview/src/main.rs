@@ -21,6 +21,7 @@ use std::process::ExitCode;
 
 use zax_engine3d::draw_list::FrameDrawList;
 use zax_engine3d::engine::ConversionEngine;
+use zax_engine3d::palette::Rgb24;
 use zax_profiles::profile::GameProfile;
 use zax_render::numerics::Vector3;
 use zax_render::offscreen::{ContextApi, OffscreenContext};
@@ -188,12 +189,17 @@ fn run() -> Result<(), String> {
         let flat = snes
             .frame()
             .ok_or_else(|| format!("no picture after frame {done}"))?;
+        // The sky as the finished picture shows it (games often blend it in).
+        let sky = capture.sky_color(&flat);
         let plain_list = plain.draw_list(&input);
         let smart_list = smart.draw_list(&input);
         for (index, &(rx, ry)) in options.angles.iter().enumerate() {
             let mut panels = Vec::new();
             for list in [&plain_list, &smart_list] {
-                let scene = scene_state(rx, ry, list);
+                let mut scene = scene_state(rx, ry, list);
+                if let Some([r, g, b]) = sky {
+                    scene.nes_background_color = Rgb24::new(r, g, b);
+                }
                 renderer
                     .render(&context.target(), &scene, &SceneFrame::with_draw_list(list))
                     .map_err(|e| e.to_string())?;

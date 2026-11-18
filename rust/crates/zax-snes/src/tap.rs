@@ -269,6 +269,43 @@ impl TileCapture {
         self.cgram.get(start..start + 256)
     }
 
+    /// The colour the sky shows in the finished picture `frame`: the most common colour of the
+    /// pixels where the main screen shows only the backdrop (palette entry 0). A game that
+    /// paints its sky with colour maths (Super Mario World, Donkey Kong Country) keeps entry 0
+    /// black and blends the colour in, so the finished picture is where its sky is. `None` when
+    /// no pixel shows the backdrop.
+    #[must_use]
+    pub fn sky_color(&self, frame: &crate::Frame) -> Option<[u8; 3]> {
+        let first_row: u16 = if frame.height >= 239 { 0 } else { 1 };
+        let mut counts: std::collections::HashMap<[u8; 3], u32> = std::collections::HashMap::new();
+        for line in &self.lines {
+            let Some(chunk) = self.last_chunk(line.scanline) else {
+                continue;
+            };
+            let Some(palette) = self.palette(chunk.cgram_index) else {
+                continue;
+            };
+            let Some(y) = line.scanline.checked_sub(first_row) else {
+                continue;
+            };
+            if u32::from(y) >= frame.height {
+                continue;
+            }
+            for (x, &pixel) in line.reference.iter().enumerate().take(frame.width as usize) {
+                if pixel == palette[0] {
+                    if let Some(color) = frame.pixel(x as u32, u32::from(y)) {
+                        *counts.entry(color).or_default() += 1;
+                    }
+                }
+            }
+        }
+        // Ties go to the smaller colour, so the result does not depend on the map's order.
+        counts
+            .into_iter()
+            .max_by_key(|(color, count)| (*count, std::cmp::Reverse(*color)))
+            .map(|(color, _)| color)
+    }
+
     /// The last chunk drawn on `scanline`: the settings a line's tiles are filed under.
     fn last_chunk(&self, scanline: u16) -> Option<&RawChunk> {
         self.chunks.iter().rev().find(|c| c.scanline == scanline)
