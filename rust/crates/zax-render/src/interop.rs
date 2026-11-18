@@ -253,6 +253,24 @@ pub const PIXEL_COLOR: u8 = 0x3F;
 /// exactly what the index image alone cannot express.
 pub const OPAQUE_PIXEL: u8 = 0x40;
 
+/// A picture of NES-style bytes (a colour index in [`PIXEL_COLOR`], the opacity bit
+/// [`OPAQUE_PIXEL`], or [`HIDDEN_PIXEL`]) as the red, green, blue and alpha the 2D mode takes.
+/// The renderer's own tests are written with such pictures.
+#[must_use]
+pub fn indexed_to_rgba(indices: &[u8]) -> Vec<u8> {
+    let mut out = Vec::with_capacity(indices.len() * 4);
+    for &byte in indices {
+        if byte == HIDDEN_PIXEL {
+            out.extend_from_slice(&[0; 4]);
+            continue;
+        }
+        let color = zax_engine3d::palette::nes_color(usize::from(byte & PIXEL_COLOR));
+        let alpha = if byte & OPAQUE_PIXEL == 0 { 0 } else { 255 };
+        out.extend_from_slice(&[color.r, color.g, color.b, alpha]);
+    }
+    out
+}
+
 /// The width and height in pixels of a 2D-mode picture of `len` bytes in `height` rows (0 reads
 /// as 240). XSnes3D+: the picture is red, green, blue and alpha, four bytes a pixel (the NES app
 /// had one colour index a pixel); alpha 0 is a pixel not drawn. 256 x 240, or wider and taller

@@ -37,7 +37,7 @@ fn amd_009_the_pixel_frame_replaces_the_tile_list_with_a_single_quad() {
 
     let frame = SceneFrame {
         draw_list: Some(&built.draw_list),
-        nes_picture: &picture,
+        nes_picture: rgba(&picture),
         nes_picture_height: 0,
     };
     gl.render(&mut renderer, &built.scene, &frame);
@@ -153,7 +153,7 @@ fn amd_009_a_picture_of_the_wrong_size_falls_back_to_the_tile_list() {
     let short = [0_u8; 16];
     let frame = SceneFrame {
         draw_list: Some(&built.draw_list),
-        nes_picture: &short,
+        nes_picture: rgba(&short),
         nes_picture_height: 0,
     };
     gl.render(&mut renderer, &built.scene, &frame);
@@ -211,7 +211,7 @@ fn scene() -> SceneState {
 fn frame(picture: &[u8]) -> SceneFrame<'_> {
     SceneFrame {
         draw_list: None,
-        nes_picture: picture,
+        nes_picture: rgba(&picture),
         nes_picture_height: 0,
     }
 }
@@ -229,4 +229,9 @@ fn picture(nes_color: u8) -> Vec<u8> {
 /// The byte of an opaque pixel of NES colour `nes_color`.
 fn opaque(nes_color: u8) -> u8 {
     (nes_color & interop::PIXEL_COLOR) | interop::OPAQUE_PIXEL
+}
+
+/// The test's NES-style picture as the RGBA the renderer takes (XSnes3D+), kept for the test.
+fn rgba(picture: &[u8]) -> &'static [u8] {
+    Box::leak(zax_render::interop::indexed_to_rgba(picture).into_boxed_slice())
 }

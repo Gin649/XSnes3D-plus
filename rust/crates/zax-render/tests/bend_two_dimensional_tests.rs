@@ -56,7 +56,7 @@ fn two_dimensional(bend: SpaceBend, bend_rectangle: bool) -> SceneState {
 fn frame(picture: &[u8]) -> SceneFrame<'_> {
     SceneFrame {
         draw_list: None,
-        nes_picture: picture,
+        nes_picture: rgba(&picture),
         nes_picture_height: 0,
     }
 }
@@ -267,4 +267,9 @@ fn req_scn_074_the_setting_decides_the_picture_and_the_mesh() {
         differing(&flat, &off),
         "the setting off gives the picture of no curvature at all"
     );
+}
+
+/// The test's NES-style picture as the RGBA the renderer takes (XSnes3D+), kept for the test.
+fn rgba(picture: &[u8]) -> &'static [u8] {
+    Box::leak(zax_render::interop::indexed_to_rgba(picture).into_boxed_slice())
 }

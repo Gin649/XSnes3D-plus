@@ -361,7 +361,7 @@ fn a_file_without_a_thumbnail_still_reads() {
 #[test]
 fn a_wide_thumbnail_keeps_the_centre_in_4_3() {
     // 432 x 240: the 320 columns of the centre are kept.
-    let picture = vec![0x21u8; 432 * 240];
+    let picture = vec![0x21u8; 432 * 240 * 4]; // RGBA, four bytes a pixel
     let jpeg = save_state_file::thumbnail_jpeg(&picture).unwrap();
     // The SOF0 frame header holds height then width.
     let at = jpeg.windows(2).position(|w| w == [0xFF, 0xC0]).unwrap();

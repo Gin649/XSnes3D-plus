@@ -64,7 +64,7 @@ fn the_core_is_away_during_the_drawing_and_back_at_the_next_tick() {
     assert_eq!(0, session.core().frame_count());
     let mut picture = Vec::new();
     session.copy_nes_picture(&mut picture);
-    assert_eq!(256 * 240, picture.len());
+    assert_eq!(256 * 240 * 4, picture.len()); // RGBA, four bytes a pixel
     harness.host.complete_frame_in_flight();
     assert!(harness.host.session().unwrap().core().frame_count() > 20);
 }

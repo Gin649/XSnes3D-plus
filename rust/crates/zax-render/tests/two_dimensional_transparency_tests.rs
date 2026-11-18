@@ -63,7 +63,7 @@ fn opaque(index: u8) -> u8 {
 fn frame(picture: &[u8]) -> SceneFrame<'_> {
     SceneFrame {
         draw_list: None,
-        nes_picture: picture,
+        nes_picture: rgba(&picture),
         nes_picture_height: 0,
     }
 }
@@ -317,4 +317,9 @@ fn req_core_049_the_two_definitions_of_the_picture_byte_agree() {
         zax_render::interop::HIDDEN_PIXEL & !(PIXEL_COLOR | OPAQUE_PIXEL),
         "HIDDEN_PIXEL uses a bit the core never sets"
     );
+}
+
+/// The test's NES-style picture as the RGBA the renderer takes (XSnes3D+), kept for the test.
+fn rgba(picture: &[u8]) -> &'static [u8] {
+    Box::leak(zax_render::interop::indexed_to_rgba(picture).into_boxed_slice())
 }
