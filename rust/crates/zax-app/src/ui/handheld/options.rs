@@ -239,7 +239,7 @@ pub const TOUCH_ROWS: [OptionRow; 14] = [
 pub const LIBRARY_TITLE: &str = "Games and 3D profiles";
 
 /// Xnes3D+: the rows of the games and profiles page, each carried out by Android.
-pub const LIBRARY_ROWS: [OptionRow; 8] = [
+pub const LIBRARY_ROWS: [OptionRow; 9] = [
     OptionRow::Group("Games"),
     OptionRow::Android(AndroidAction::ChooseRomFolder),
     OptionRow::Android(AndroidAction::ChooseSavesFolder),
@@ -248,6 +248,7 @@ pub const LIBRARY_ROWS: [OptionRow; 8] = [
     OptionRow::Android(AndroidAction::CopyProfiles),
     OptionRow::Group("XSnes3D+"),
     OptionRow::Android(AndroidAction::CheckUpdates),
+    OptionRow::Android(AndroidAction::PlayReports),
 ];
 
 /// Xnes3D+: the label of an Android row.
@@ -258,6 +259,7 @@ fn android_label(action: AndroidAction) -> String {
         AndroidAction::CopyProfiles => "Copy from the profiles folder now",
         AndroidAction::ChooseSavesFolder => "Saves folder",
         AndroidAction::CheckUpdates => "Check for updates",
+        AndroidAction::PlayReports => "Play reports",
     }
     .to_owned()
 }
@@ -287,6 +289,7 @@ fn android_value(action: AndroidAction, settings: &SettingsModel) -> String {
         AndroidAction::ProfilesFolder => "Choose...".to_owned(),
         AndroidAction::CopyProfiles => "Copy".to_owned(),
         AndroidAction::CheckUpdates => format!("v{}", crate::android_bridge::app_version()),
+        AndroidAction::PlayReports => "Set up...".to_owned(),
     }
 }
 

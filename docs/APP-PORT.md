@@ -39,6 +39,17 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
   NES bus). The test ROM of the others is `tests/roms/hello.sfc`. They run with
   `--test-threads=1`, since only one Mesen may run at a time.
 
+## Play reports (v0.1.2)
+- `zax-app/src/field_report.rs`: while a game runs, every log line also goes to
+  `<user data>/reports/<time>-<game>.part` (renamed `.txt` when the game ends; a `.part` left at
+  the next start gets a line saying the app died during it). The head has the build, the game
+  and the start-up report (device, drivers). The frame profiler is always on, so the reports
+  carry the stage times and audio counters every two seconds; `SnesCore` adds a line every 600
+  frames (mode, tiles per layer). A panic hook logs the message, the place and a backtrace.
+- Android: `ReportUploader.java` sends finished reports every 90 s, when a GitHub token is set
+  (Options > Games and 3D profiles > Play reports), to `reports/<device>/` in
+  Gin649/zaxnes-plus-roms-, then moves them to `reports/sent`.
+
 ## Still to do
 - App tests: 681 pass, 41 fail (run with `--test-threads=1`; on this machine link SDL2 through
   `LIBRARY_PATH`). The failures are goldens and counts that the SNES buttons and the removed

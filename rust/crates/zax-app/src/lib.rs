@@ -14,6 +14,7 @@ pub mod core_worker;
 pub mod editor_mode;
 pub mod emulation;
 mod flags;
+pub mod field_report;
 pub mod frame_profiler;
 pub mod frame_rate_counter;
 pub mod game_session;

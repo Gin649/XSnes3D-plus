@@ -25,6 +25,8 @@ pub enum AndroidAction {
     ChooseSavesFolder = 6,
     /// Look for a newer XSnes3D+ release and offer to install it.
     CheckUpdates = 7,
+    /// XSnes3D+: the play reports: the GitHub token they are sent with, and sending them now.
+    PlayReports = 8,
 }
 
 /// The XSnes3D+ version this build is (`.github/fork/VERSION`), shown beside Check for updates.

@@ -105,7 +105,51 @@ pub fn recent(count: usize) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// XSnes3D+: the play report being written, when a game runs (see `field_report`). Every log
+/// line goes to it too, line by line, so a crash keeps all of it.
+static REPORT: Mutex<Option<LineWriter<File>>> = Mutex::new(None);
+
+/// The first lines of the log (the start-up report: the device, the build, the drivers), kept
+/// for the head of each play report.
+static FIRST: Mutex<Vec<String>> = Mutex::new(Vec::new());
+/// How many lines [`FIRST`] keeps.
+const FIRST_LINES: usize = 80;
+
+/// The first lines of the log, oldest first.
+#[must_use]
+pub fn first_lines() -> Vec<String> {
+    FIRST.lock().map(|first| first.clone()).unwrap_or_default()
+}
+
+/// Starts sending every log line to `file` too (a play report), replacing the one before.
+pub fn start_report(file: File) {
+    if let Ok(mut report) = REPORT.lock() {
+        *report = Some(LineWriter::new(file));
+    }
+}
+
+/// Stops sending the log to the play report, writing `last` at its end first.
+pub fn end_report(last: &str) {
+    if let Ok(mut report) = REPORT.lock() {
+        if let Some(file) = report.as_mut() {
+            let _ = writeln!(file, "{last}");
+            let _ = file.flush();
+        }
+        *report = None;
+    }
+}
+
 fn to_file(line: &str) {
+    if let Ok(mut first) = FIRST.lock() {
+        if first.len() < FIRST_LINES {
+            first.push(line.to_owned());
+        }
+    }
+    if let Ok(mut report) = REPORT.lock() {
+        if let Some(file) = report.as_mut() {
+            let _ = writeln!(file, "{line}");
+        }
+    }
     remember(line);
     if let Some(file) = FILE.get() {
         if let Ok(mut file) = file.lock() {

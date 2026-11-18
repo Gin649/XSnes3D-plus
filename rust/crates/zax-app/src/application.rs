@@ -238,6 +238,8 @@ struct Running {
     /// The frame profiler (`ui.profiler`, or `ZAXNES_PROFILE=1`) and the clock of the loop's
     /// stages.
     profiler: Option<FrameProfiler>,
+    /// XSnes3D+: the play report of the game being played.
+    field_report: crate::field_report::FieldReport,
     clock: StageClock,
     /// The displayed and emulated frames counted since `rate_since`, logged every 5 s.
     rate_count: (u32, u32),
@@ -337,8 +339,10 @@ impl Running {
             Some(Box::new(log)),
         );
         let pacing_state = pacing.apply(&mut window, &model);
-        let profiling = frame_profiler::requested_by_environment()
-            || model.get(SettingId::UiProfiler).as_bool();
+        // XSnes3D+: the profiler is always on, for the play reports (`field_report`).
+        let profiling = true;
+        crate::field_report::log_panics();
+        crate::field_report::close_left_over(&paths.root);
         if profiling {
             log_profiler_startup(
                 &model,
@@ -441,6 +445,7 @@ impl Running {
             state: RunState::new(renderer_name, version),
             last: Instant::now(),
             profiler: profiling.then(|| FrameProfiler::new(Instant::now())),
+            field_report: crate::field_report::FieldReport::default(),
             clock: StageClock::new(profiling),
             rate_count: (0, 0),
             rate_since: Instant::now(),
@@ -493,6 +498,12 @@ impl Running {
 
     #[allow(clippy::too_many_lines)] // One host frame, its steps in their order.
     fn frame(&mut self) -> Result<bool, String> {
+        {
+            let host = &self.host;
+            let game = host.current_game_id().zip(host.current_game_title());
+            let root = host.paths().root.clone();
+            self.field_report.follow(&root, game);
+        }
         self.follow_the_profiler_setting();
         self.reopen_the_audio_output();
         self.follow_the_editor_setting();
@@ -920,6 +931,8 @@ impl Running {
             window: self.window.window().size(),
             drawable: self.window.drawable_size(),
         };
+        // XSnes3D+: the profiler always runs (play reports); its line shows when asked.
+        let show_profile = self.host.settings().get(SettingId::UiProfiler).as_bool();
         let mut frame = UiFrame {
             host: &mut self.host,
             input: &mut self.source,
@@ -927,7 +940,11 @@ impl Running {
             real_seconds: real,
             #[allow(clippy::cast_possible_truncation)] // the C# `(float)FramesPerSecond`
             frames_per_second: debug.frames_per_second as f32,
-            profile_line: self.profiler.as_ref().map_or("", FrameProfiler::summary),
+            profile_line: if show_profile {
+                self.profiler.as_ref().map_or("", FrameProfiler::summary)
+            } else {
+                ""
+            },
         };
         if zax_platform::input::touch::offered() {
             let mode = zax_platform::input::touch::TouchPadMode::from_setting(
@@ -1147,8 +1164,8 @@ impl Running {
     }
 
     fn follow_the_profiler_setting(&mut self) {
-        let wanted = frame_profiler::requested_by_environment()
-            || self.host.settings().get(SettingId::UiProfiler).as_bool();
+        // XSnes3D+: always on, for the play reports.
+        let wanted = true;
         if wanted == self.profiler.is_some() {
             return;
         }
@@ -1721,6 +1738,7 @@ impl Running {
         ImguiFrontend::close_capture(&mut self.source);
         let emulated_frames = self.host.emulated_frames();
         self.host.shutdown();
+        self.field_report.finish("the app was closed");
         // REQ-INP-050 / REQ-PERS-065: the bindings are written at exit as well as after each
         // change.
         self.source.flush_changes();

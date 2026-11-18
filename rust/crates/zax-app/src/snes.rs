@@ -5,6 +5,7 @@
 //! is loaded from the bytes the app read, through a copy in the core's home folder, since
 //! Mesen loads files.
 
+use std::fmt::Write as _;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex, MutexGuard};
 
@@ -24,6 +25,9 @@ pub const MAX_RATIO_ADJUSTMENT: f64 = 0.005;
 /// Sound kept for the audio stream at most, in stereo frames (half a second at the highest
 /// usual rate).
 const RING_FRAMES: usize = 24_000;
+
+/// How often (in frames) a line about the picture goes to the log, for the play reports.
+const REPORT_EVERY: i64 = 600;
 
 /// The 2D picture's size, as the renderer takes it (the NES app's frame).
 const PICTURE_WIDTH: usize = 256;
@@ -330,7 +334,29 @@ impl SnesCore {
             }
             input
         });
+        if self.frames % REPORT_EVERY == 0 {
+            self.log_what_is_shown();
+        }
         self.frames
+    }
+
+    /// A line for the play reports: what the frame on screen is made of.
+    fn log_what_is_shown(&self) {
+        let mut line = format!("snes: frame {}", self.frames);
+        if let Some(frame) = &self.picture {
+            let _ = write!(line, ", picture {}x{}", frame.width, frame.height);
+        }
+        match &self.input {
+            Some(input) => {
+                let _ = write!(line, ", mode {}, layers", input.bg_mode);
+                for layer in &input.layers {
+                    let shown = layer.records.iter().filter(|r| !r.hidden).count();
+                    let _ = write!(line, " {}:{}", layer.layer, shown);
+                }
+            }
+            None => line.push_str(", no tiles captured"),
+        }
+        crate::app_log::file_line(&line);
     }
 
     /// [`SnesCore::run_frame`]: the SNES core has no run-ahead yet, so `ahead` is not used.

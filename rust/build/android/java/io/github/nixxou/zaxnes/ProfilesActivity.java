@@ -44,7 +44,8 @@ public class ProfilesActivity extends Activity {
     static final int ACTION_SAVES_FOLDER = 6;
     /** XSnes3D+: Options > Check for updates. */
     static final int ACTION_UPDATES = 7;
-    static final int LAST_ACTION = ACTION_UPDATES;
+    static final int ACTION_REPORTS = 8;
+    static final int LAST_ACTION = ACTION_REPORTS;
 
     /** Where the saves folder is kept; ZaxnesActivity passes it to the native side as --saves. */
     static final String PREFS = "xsnes3d_plus";
@@ -86,6 +87,7 @@ public class ProfilesActivity extends Activity {
             case ACTION_COPY_PROFILES: copyNow(); break;
             case ACTION_SAVES_FOLDER: forSaves = true; chooseRomFolder(); break;
             case ACTION_UPDATES: checkForUpdates(); break;
+            case ACTION_REPORTS: playReports(); break;
             default: finish();
         }
     }
@@ -124,6 +126,79 @@ public class ProfilesActivity extends Activity {
         File to = ProfileFolder.inbox(this);
         if (to != null) to.mkdirs();
         return to;
+    }
+
+    // ---- play reports (XSnes3D+) ---------------------------------------------------------------
+
+    /** Sets the GitHub token the play reports are sent with, or sends the waiting ones now. */
+    private void playReports() {
+        final android.widget.EditText field = new android.widget.EditText(this);
+        field.setSingleLine(true);
+        field.setHint("GitHub token (contents: write on " + ReportUploader.REPOSITORY + ")");
+        field.setInputType(android.text.InputType.TYPE_CLASS_TEXT
+            | android.text.InputType.TYPE_TEXT_VARIATION_PASSWORD);
+        boolean set = !ReportUploader.token(this).isEmpty();
+        int waiting = ReportUploader.waiting(this);
+        String message = "Each game you play writes a report (speed, sound, crashes). "
+            + (set ? "A token is set, so they are sent to GitHub (" + ReportUploader.REPOSITORY
+                + ", reports folder)." : "No token is set, so they stay on this device.")
+            + "\n\nWaiting to be sent: " + waiting
+            + "\n\nPaste a new token to change it, or leave the field empty.";
+        dialog()
+            .setTitle("Play reports")
+            .setMessage(message)
+            .setView(field)
+            .setPositiveButton("Save and send", new android.content.DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(android.content.DialogInterface d, int which) {
+                    String typed = field.getText().toString().trim();
+                    if (!typed.isEmpty()) ReportUploader.setToken(ProfilesActivity.this, typed);
+                    sendReportsNow();
+                }
+            })
+            .setNeutralButton("Remove token", new android.content.DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(android.content.DialogInterface d, int which) {
+                    ReportUploader.setToken(ProfilesActivity.this, "");
+                    finish();
+                }
+            })
+            .setNegativeButton("Close", new android.content.DialogInterface.OnClickListener() {
+                @Override
+                public void onClick(android.content.DialogInterface d, int which) {
+                    finish();
+                }
+            })
+            .setOnCancelListener(new android.content.DialogInterface.OnCancelListener() {
+                @Override
+                public void onCancel(android.content.DialogInterface d) {
+                    finish();
+                }
+            })
+            .show();
+    }
+
+    private void sendReportsNow() {
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                String result;
+                try {
+                    int sent = ReportUploader.sendAll(ProfilesActivity.this);
+                    result = ReportUploader.token(ProfilesActivity.this).isEmpty()
+                        ? "No token is set." : "Sent " + sent + " report(s).";
+                } catch (Exception e) {
+                    result = "Couldn't send: " + e.getMessage();
+                }
+                final String shown = result;
+                runOnUiThread(new Runnable() {
+                    @Override
+                    public void run() {
+                        showResult("Play reports", shown);
+                    }
+                });
+            }
+        }).start();
     }
 
     // ---- ROM folder -------------------------------------------------------------------------

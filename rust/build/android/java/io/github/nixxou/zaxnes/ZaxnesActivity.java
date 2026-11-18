@@ -30,6 +30,7 @@ public class ZaxnesActivity extends SDLActivity {
      */
     @Override
     protected String[] getArguments() {
+        ReportUploader.start(this); // XSnes3D+: sends the play reports when a token is set
         new File(getExternalFilesDir(null), LAUNCH_REQUEST).delete(); // one left from a past run
         List<String> args = new ArrayList<>();
         String font = interfaceFont();
