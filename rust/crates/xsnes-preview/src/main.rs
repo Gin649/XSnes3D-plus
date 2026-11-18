@@ -29,7 +29,7 @@ use zax_render::scene::{SceneFrame, SceneState};
 use zax_render::SceneRenderer;
 use zax_settings::catalogue::SettingId;
 use zax_settings::model::SettingsModel;
-use zax_snes::{EngineInput, PressScript, Snes, BG3_FRONT};
+use zax_snes::{EngineInput, PressScript, Snes, BACKDROP, BG3_FRONT};
 
 /// How far back each background layer sits behind the one in front of it, in scene units
 /// (pixels). Larger than the deepest object one engine makes (its layers L1 to L4 reach 36
@@ -68,18 +68,18 @@ fn main() -> ExitCode {
 /// How many tile images one engine may hold before it starts afresh.
 const IMAGE_LIMIT: usize = 3_000;
 
-/// One set of engines, one per background layer (indexed by layer 0 to 3), and one for the
-/// front part of mode 1's background 3 ([`BG3_FRONT`]).
+/// One set of engines, one per background layer (indexed by layer 0 to 3), one for the front
+/// part of mode 1's background 3 ([`BG3_FRONT`]) and one for the sky ([`BACKDROP`]).
 struct EngineSet {
     smart: bool,
-    engines: [Option<ConversionEngine>; 5],
+    engines: [Option<ConversionEngine>; 6],
 }
 
 impl EngineSet {
     fn new(smart: bool) -> Self {
         Self {
             smart,
-            engines: [None, None, None, None, None],
+            engines: [None, None, None, None, None, None],
         }
     }
 
@@ -108,9 +108,10 @@ impl EngineSet {
                         .load_profile(&GameProfile::create_empty(), true)
                         .map_err(|error| error.to_string())?;
                 }
-                // The front part of mode 1's background 3 holds the game's text or status bar:
-                // Smart 3D keeps it as flat panels.
-                engine.settings_mut().flat_layer = layer.layer == BG3_FRONT;
+                // The front part of mode 1's background 3 holds the game's text or status bar,
+                // and the sky is a painted wall: Smart 3D keeps both as flat panels.
+                engine.settings_mut().flat_layer =
+                    layer.layer == BG3_FRONT || layer.layer == BACKDROP;
                 engine.convert(&input.batch(layer), counter);
                 engine.publish();
             }
@@ -149,10 +150,11 @@ impl EngineSet {
 /// layer's two priorities), with the front part of mode 1's background 3 ([`BG3_FRONT`])
 /// before everything.
 fn front_to_back(input: &EngineInput) -> Vec<u8> {
-    let priorities: [u8; 5] = match input.bg_mode {
-        0 => [11, 10, 5, 4, 0],
-        1 => [9, 8, 3, 0, 12],
-        _ => [7, 5, 0, 0, 0],
+    // The sky ([`BACKDROP`]) is behind everything.
+    let priorities: [u8; 6] = match input.bg_mode {
+        0 => [11, 10, 5, 4, 0, 0],
+        1 => [9, 8, 3, 1, 12, 0],
+        _ => [7, 5, 2, 1, 0, 0],
     };
     let mut layers: Vec<u8> = input.layers.iter().map(|l| l.layer).collect();
     layers.sort_by_key(|&layer| std::cmp::Reverse(priorities[usize::from(layer)]));
@@ -189,7 +191,10 @@ fn run() -> Result<(), String> {
         let Some(capture) = snes.tile_capture() else {
             continue;
         };
-        let input = capture.engine_input();
+        let mut input = capture.engine_input();
+        if let Some(frame) = snes.frame() {
+            capture.add_backdrop(&mut input, &frame);
+        }
         let counter_i32 = i32::try_from(counter).unwrap_or(i32::MAX);
         plain.convert(&input, counter_i32)?;
         smart.convert(&input, counter_i32)?;

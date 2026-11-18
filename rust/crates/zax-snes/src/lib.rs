@@ -13,7 +13,7 @@ pub mod engine_input;
 pub mod press;
 pub mod tap;
 
-pub use engine_input::{EngineInput, LayerInput, BG3_FRONT};
+pub use engine_input::{EngineInput, LayerInput, BACKDROP, BG3_FRONT};
 pub use press::{Buttons, PressScript};
 pub use tap::{Rebuild, SnesTileRecord, TileCapture, TileLayer};
 

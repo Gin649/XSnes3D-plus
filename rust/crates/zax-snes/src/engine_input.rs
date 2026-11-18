@@ -40,6 +40,11 @@ pub struct LayerInput {
 /// at the back, as on the console.
 pub const BG3_FRONT: u8 = 4;
 
+/// `LayerInput::layer` of the sky: the colour each line of the finished picture shows where
+/// no layer covers it. Games paint their sky gradients by changing that colour line by line
+/// (or by blending a colour in), which one background colour cannot show.
+pub const BACKDROP: u8 = 5;
+
 /// A frame ready for the engines.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineInput {
@@ -126,6 +131,14 @@ impl Builder {
         )
         .with_upper([p[2], p[3], p[4], p[5], p[6], p[7]])
     }
+}
+
+/// How far apart two colours are (the sum of the squared differences).
+fn distance(a: [u8; 3], b: [u8; 3]) -> u32 {
+    a.iter()
+        .zip(b)
+        .map(|(&x, y)| (i32::from(x) - i32::from(y)).pow(2) as u32)
+        .sum()
 }
 
 /// The pixels of an 8 pixel row drawn from screen x `x` that are on screen and not hidden
@@ -229,6 +242,95 @@ impl TileCapture {
             bg3_priority,
         }
     }
+    /// Adds the sky to `input` as a layer of its own ([`BACKDROP`]), from the finished
+    /// picture `frame`: whole tiles whose rows are each line's sky colour. Its colours go in
+    /// palette entries no tile of the frame uses (all layers share one palette). Nothing is
+    /// added when the sky is one colour all the way down (the scene's background colour shows
+    /// it then) or cannot be found.
+    pub fn add_backdrop(&self, input: &mut EngineInput, frame: &crate::Frame) {
+        let sky = self.sky_by_line(frame);
+        let Some(&(_, first)) = sky.first() else {
+            return;
+        };
+        if sky.iter().all(|(_, color)| *color == first) {
+            return;
+        }
+
+        // The palette entries the frame's tiles show; entry 0 is the backdrop's own.
+        let mut taken = [false; 256];
+        taken[0] = true;
+        for record in input.layers.iter().flat_map(|layer| &layer.records) {
+            for row in 0..8 {
+                for column in 0..8 {
+                    if let Some(value) = record.source_pixel(column, row) {
+                        if value != 0 {
+                            taken[(usize::from(record.palette) + usize::from(value)).min(255)] =
+                                true;
+                        }
+                    }
+                }
+            }
+        }
+        let mut free = (0..256).filter(|&entry| !taken[entry]);
+
+        // Each line's colour, a line without one taking the line above's (or the first).
+        let mut by_line = [None; 240];
+        for &(scanline, color) in &sky {
+            if let Some(slot) = by_line.get_mut(usize::from(scanline)) {
+                *slot = Some(color);
+            }
+        }
+        let mut placed: Vec<([u8; 3], usize)> = Vec::new();
+        let mut entry_of_line = [0usize; 240];
+        let mut current = first;
+        let last_line = frame.height.min(239) as usize;
+        for line in 1..=last_line {
+            if let Some(color) = by_line[line] {
+                current = color;
+            }
+            let entry = if let Some(&(_, entry)) = placed.iter().find(|(c, _)| *c == current) {
+                entry
+            } else if let Some(entry) = free.next() {
+                let [r, g, b] = current;
+                input.colors[entry] = Rgb24::new(r, g, b);
+                placed.push((current, entry));
+                entry
+            } else {
+                // No free entry left: the closest colour already placed.
+                placed
+                    .iter()
+                    .min_by_key(|(c, _)| distance(*c, current))
+                    .map_or(0, |&(_, entry)| entry)
+            };
+            entry_of_line[line] = entry;
+        }
+        if placed.is_empty() {
+            return;
+        }
+
+        // Tiles cover screen lines 0 up, as the background tiles do (scanline 1 is line 0).
+        let mut records = Vec::new();
+        for row in 0..last_line.div_ceil(8) {
+            let mut builder = Builder::default();
+            for r in 0..8 {
+                let entry = entry_of_line.get(row * 8 + r + 1).copied().unwrap_or(0);
+                for (plane, slot) in builder.planes.iter_mut().enumerate() {
+                    if entry & (1 << plane) != 0 {
+                        *slot |= 0xFF << (8 * r);
+                    }
+                }
+            }
+            for column in 0..32 {
+                let index = records.len() as i32;
+                records.push(builder.record(column * 8, (row * 8) as i16, index, true));
+            }
+        }
+        input.layers.push(LayerInput {
+            layer: BACKDROP,
+            records,
+        });
+    }
+
     /// The background rows put together per layer, which layers were drawn, and whether
     /// sprites were on the main screen.
     #[allow(clippy::type_complexity)] // Three plain results.
