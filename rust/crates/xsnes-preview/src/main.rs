@@ -51,6 +51,8 @@ struct Options {
     size: (i32, i32),
     /// Print how long each stage took per frame.
     timing: bool,
+    /// A save state to start from (the app's `state.bin` of a reported moment, or Mesen's own).
+    state: Option<PathBuf>,
 }
 
 fn main() -> ExitCode {
@@ -137,6 +139,13 @@ fn run() -> Result<(), String> {
 
     let mut snes = Snes::load(&options.rom, &home).map_err(|e| e.to_string())?;
     snes.set_tile_tap(true).map_err(|e| e.to_string())?;
+    if let Some(path) = &options.state {
+        let bytes = std::fs::read(path).map_err(|e| format!("{}: {e}", path.display()))?;
+        snes.run_frame(zax_snes::Buttons::default())
+            .map_err(|e| e.to_string())?;
+        snes.load_state(mesen_state(&bytes))
+            .map_err(|e| e.to_string())?;
+    }
     let mut plain = EngineSet::new(false);
     let mut smart = EngineSet::new(true);
 
@@ -280,6 +289,21 @@ fn write_three_way(
     writer.write_image_data(&rgb).map_err(|e| e.to_string())
 }
 
+/// Mesen's own state inside a state the app wrote: the app adds the ROM, its name, their
+/// lengths and the frame count at the end (`SnesCore::save_state_to`). A moment's state carries
+/// no ROM, so its last 20 bytes are the two lengths (0) and the frame count.
+fn mesen_state(bytes: &[u8]) -> &[u8] {
+    let Some(tail) = bytes.len().checked_sub(20) else {
+        return bytes;
+    };
+    let lengths = &bytes[tail..tail + 12];
+    if lengths.iter().all(|&byte| byte == 0) {
+        &bytes[..tail]
+    } else {
+        bytes
+    }
+}
+
 fn parse(args: Vec<String>) -> Result<Options, String> {
     let mut rom = None;
     let mut frames = 600;
@@ -291,6 +315,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
     let mut name = None;
     let mut size = (512, 448);
     let mut timing = false;
+    let mut state = None;
     let mut args = args.into_iter();
     while let Some(arg) = args.next() {
         let mut value = |flag: &str| args.next().ok_or_else(|| format!("{flag} needs a value"));
@@ -319,6 +344,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             "--angles" => angles_text = value("--angles")?,
             "--out" => out = PathBuf::from(value("--out")?),
             "--timing" => timing = true,
+            "--state" => state = Some(PathBuf::from(value("--state")?)),
             "--name" => name = Some(value("--name")?),
             "--size" => {
                 let text = value("--size")?;
@@ -334,7 +360,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
             path => rom = Some(PathBuf::from(path)),
         }
     }
-    let rom = rom.ok_or("usage: snes-preview <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--firmware DIR] [--angles X,Y;X,Y] [--out DIR] [--name NAME] [--size WxH] [--timing]")?;
+    let rom = rom.ok_or("usage: snes-preview <rom> [--frames N] [--shots A,B] [--press SCRIPT] [--firmware DIR] [--angles X,Y;X,Y] [--out DIR] [--name NAME] [--size WxH] [--timing] [--state FILE]")?;
     if shots.is_empty() {
         shots.push(frames);
     }
@@ -364,6 +390,7 @@ fn parse(args: Vec<String>) -> Result<Options, String> {
         name,
         size,
         timing,
+        state,
     })
 }
 

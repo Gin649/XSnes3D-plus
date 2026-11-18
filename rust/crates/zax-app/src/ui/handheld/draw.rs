@@ -1098,6 +1098,9 @@ impl HandheldUi {
     }
 
     fn overlay_label(item: OverlayItem) -> String {
+        if item == OverlayItem::ReportMoment {
+            return "Report this moment".to_owned();
+        }
         strings::get(match item {
             OverlayItem::Resume => keys::HANDHELD_MENU_RESUME,
             OverlayItem::SaveState => keys::HANDHELD_MENU_SAVE_STATE,
@@ -1107,7 +1110,7 @@ impl HandheldUi {
             OverlayItem::Options => keys::WINDOW_OPTIONS,
             OverlayItem::Achievements => keys::TAB_ACHIEVEMENTS,
             OverlayItem::QuitToList => keys::HANDHELD_MENU_QUIT_TO_LIST,
-            OverlayItem::ExitToLauncher => keys::HANDHELD_MENU_EXIT,
+            OverlayItem::ExitToLauncher | OverlayItem::ReportMoment => keys::HANDHELD_MENU_EXIT,
         })
     }
 

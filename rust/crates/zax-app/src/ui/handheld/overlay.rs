@@ -18,6 +18,9 @@ pub enum OverlayItem {
     FastForward,
     /// The camera preset.
     Camera,
+    /// XSnes3D+: keeps this moment (a save state and both pictures) for the 3D work, sent with
+    /// the play reports.
+    ReportMoment,
     /// The options.
     Options,
     /// The game's achievements (Rust-only, owner request): shown while RetroAchievements is on.
@@ -29,12 +32,13 @@ pub enum OverlayItem {
 }
 
 /// The rows, in order.
-pub const ITEMS: [OverlayItem; 9] = [
+pub const ITEMS: [OverlayItem; 10] = [
     OverlayItem::Resume,
     OverlayItem::SaveState,
     OverlayItem::LoadState,
     OverlayItem::FastForward,
     OverlayItem::Camera,
+    OverlayItem::ReportMoment,
     OverlayItem::Options,
     OverlayItem::Achievements,
     OverlayItem::QuitToList,
@@ -83,6 +87,8 @@ pub enum OverlayCommand {
     ToggleFastForward,
     /// Apply this camera preset.
     SetCamera(CameraPreset),
+    /// Keep this moment for the 3D work.
+    ReportMoment,
     /// Show the options.
     Options,
     /// Show the game's achievements.
@@ -214,6 +220,7 @@ impl OverlayModel {
             OverlayItem::LoadState => OverlayCommand::ChooseState(StatesMode::Load, self.slot),
             OverlayItem::FastForward => OverlayCommand::ToggleFastForward,
             OverlayItem::Camera => OverlayCommand::SetCamera(self.camera),
+            OverlayItem::ReportMoment => OverlayCommand::ReportMoment,
             OverlayItem::Options => OverlayCommand::Options,
             OverlayItem::Achievements => OverlayCommand::Achievements,
             OverlayItem::QuitToList => OverlayCommand::QuitToList,

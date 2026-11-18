@@ -50,6 +50,15 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
   (Options > Games and 3D profiles > Play reports), to `reports/<device>/` in
   Gin649/zaxnes-plus-roms-, then moves them to `reports/sent`.
 
+## Report this moment (v0.1.3)
+- In-game menu > "Report this moment" (`field_report::report_moment`) writes
+  `reports/moments/<time>-<game>/`: `state.bin` (the app's state without the ROM), `shot-3d.png`
+  (960x720, the 3D view without the menu), `shot-2d.png` (the console's picture), `info.txt`
+  (game, ROM path, frame, view, mode, tiles per layer). Uploaded with the reports to
+  `reports/<device>/moments/<name>/`.
+- To look at one here: `snes-preview <rom> --state state.bin --frames 2 --shots 1 --out DIR`
+  (the preview strips the app's tail from the state).
+
 ## Still to do
 - App tests: 681 pass, 41 fail (run with `--test-threads=1`; on this machine link SDL2 through
   `LIBRARY_PATH`). The failures are goldens and counts that the SNES buttons and the removed

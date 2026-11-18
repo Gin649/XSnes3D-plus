@@ -1163,6 +1163,18 @@ impl HandheldUi {
         };
         match command {
             OverlayCommand::Resume => close(self, host),
+            OverlayCommand::ReportMoment => {
+                match crate::field_report::report_moment(host) {
+                    Ok(_) => host.show_notification(
+                        "Moment kept: it is sent with the play reports.",
+                        false,
+                    ),
+                    Err(error) => {
+                        host.show_notification(&format!("Moment not kept: {error}"), true);
+                    }
+                }
+                close(self, host);
+            }
             OverlayCommand::ChooseState(mode, slot) => {
                 self.states_return = Screen::Overlay;
                 self.states = StatesModel::new(mode, slot);

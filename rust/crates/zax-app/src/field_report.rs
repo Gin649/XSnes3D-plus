@@ -12,7 +12,10 @@
 use std::fs::{self, File};
 use std::path::{Path, PathBuf};
 
+use std::fmt::Write as _;
+
 use crate::app_log;
+use crate::emulation::game_catalog::GameCatalog as _;
 
 /// The folder of the reports in the user data.
 pub const FOLDER: &str = "reports";
@@ -133,6 +136,87 @@ pub fn log_panics() {
         }
         previous(info);
     }));
+}
+
+/// The folder of the moments, in the reports folder.
+pub const MOMENTS: &str = "moments";
+
+/// "Report this moment": keeps what is on screen for the 3D work, in
+/// `reports/moments/<time>-<game>/`: a save state of the moment (`state.bin`, without the ROM:
+/// the game is in the roms repository), the 3D view as the player saw it (`shot-3d.png`), the
+/// console's own picture (`shot-2d.png`) and what is known of the moment (`info.txt`). The
+/// folder is written as `<name>.part` and renamed when complete, so the uploader never sends
+/// half of one. Returns the folder's name.
+///
+/// # Errors
+///
+/// No game running, or the folder could not be written.
+pub fn report_moment(host: &mut crate::application::AppHost) -> Result<String, String> {
+    let title = host
+        .current_game_title()
+        .ok_or("no game is running")?
+        .to_owned();
+    let id = host.current_game_id().unwrap_or_default().to_owned();
+    let rom = host.games().rom_path(&id).unwrap_or_default();
+    let stamp = time::OffsetDateTime::now_utc();
+    let name = format!(
+        "{:04}{:02}{:02}-{:02}{:02}{:02}-{}",
+        stamp.year(),
+        u8::from(stamp.month()),
+        stamp.day(),
+        stamp.hour(),
+        stamp.minute(),
+        stamp.second(),
+        safe_name(&title)
+    );
+    let folder = host.paths().root.join(FOLDER).join(MOMENTS);
+    let part = folder.join(format!("{name}.part"));
+    fs::create_dir_all(&part).map_err(|error| error.to_string())?;
+    let write = |file: &str, bytes: &[u8]| {
+        fs::write(part.join(file), bytes).map_err(|error| format!("{file}: {error}"))
+    };
+
+    let two_dimensional = host.showing_two_dimensional();
+    let mut info = format!(
+        "XSnes3D+ {VERSION} moment\ngame: {title}\nid: {id}\nrom: {rom}\ntime (UTC): {stamp}\n\
+         view: {}\n",
+        if two_dimensional { "2D" } else { "3D" }
+    );
+    let session = host.session().ok_or("no game is running")?;
+    let core = session.core();
+    let _ = writeln!(info, "frame: {}", core.frame_count());
+    if let Some(input) = core.engine_input() {
+        let _ = write!(info, "bg mode: {}\nlayers (shown tiles):", input.bg_mode);
+        for layer in &input.layers {
+            let shown = layer.records.iter().filter(|r| !r.hidden).count();
+            let _ = write!(info, " {}:{shown}", layer.layer);
+        }
+        info.push('\n');
+    }
+    let state = core.save_state(false)?;
+    let mut picture = Vec::new();
+    let rows = core.wide_picture_into(&mut picture);
+    write("state.bin", &state)?;
+    let width = picture.len() / rows.max(1) / 4;
+    if let (Ok(width), Ok(height)) = (u32::try_from(width), u32::try_from(rows)) {
+        if let Ok(png) = zax_render::assets::png_image::encode_rgba(width, height, &picture) {
+            write("shot-2d.png", &png)?;
+        }
+    }
+    let (width, height) = (960, 720);
+    match host.view_mut().and_then(|view| view.capture_rgb(width, height)) {
+        Some(rgb) => {
+            if let Ok(png) = zax_render::assets::png_image::encode_rgb(width, height, &rgb) {
+                write("shot-3d.png", &png)?;
+            }
+        }
+        None => info.push_str("shot-3d: the 3D view could not be read\n"),
+    }
+    write("info.txt", info.as_bytes())?;
+    let done = folder.join(&name);
+    fs::rename(&part, &done).map_err(|error| error.to_string())?;
+    app_log::line(&format!("== moment reported: {name}"));
+    Ok(name)
 }
 
 /// The title as a file name: letters, digits and dashes, at most 60 of them.

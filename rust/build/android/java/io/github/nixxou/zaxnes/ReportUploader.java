@@ -62,6 +62,12 @@ final class ReportUploader {
                 if (f.getName().endsWith(".txt")) count++;
             }
         }
+        File[] moments = dir == null ? null : new File(dir, "moments").listFiles();
+        if (moments != null) {
+            for (File f : moments) {
+                if (f.isDirectory() && !f.getName().endsWith(".part")) count++;
+            }
+        }
         return count;
     }
 
@@ -103,17 +109,40 @@ final class ReportUploader {
         int count = 0;
         for (File f : files) {
             if (!f.isFile() || !f.getName().endsWith(".txt")) continue;
-            upload(token, f);
+            upload(token, f, "reports/" + device() + "/" + f.getName(), true);
             f.renameTo(new File(sent, f.getName()));
             count++;
+        }
+        // The moments ("Report this moment"): one folder each, sent file by file. A folder still
+        // ending in .part is being written.
+        File moments = new File(dir, "moments");
+        File[] folders = moments.listFiles();
+        if (folders != null) {
+            File sentMoments = new File(sent, "moments");
+            sentMoments.mkdirs();
+            for (File folder : folders) {
+                if (!folder.isDirectory() || folder.getName().endsWith(".part")) continue;
+                File[] parts = folder.listFiles();
+                if (parts == null) continue;
+                for (File part : parts) {
+                    if (!part.isFile()) continue;
+                    upload(token, part, "reports/" + device() + "/moments/" + folder.getName()
+                        + "/" + part.getName(), false);
+                }
+                folder.renameTo(new File(sentMoments, folder.getName()));
+                count++;
+            }
         }
         return count;
     }
 
-    private static void upload(String token, File file) throws Exception {
-        byte[] text = trimmed(read(file));
-        String device = (Build.MANUFACTURER + "-" + Build.MODEL).replaceAll("[^A-Za-z0-9]+", "-");
-        String path = "reports/" + device + "/" + file.getName();
+    private static String device() {
+        return (Build.MANUFACTURER + "-" + Build.MODEL).replaceAll("[^A-Za-z0-9]+", "-");
+    }
+
+    private static void upload(String token, File file, String path, boolean trim)
+        throws Exception {
+        byte[] text = trim ? trimmed(read(file)) : read(file);
         String body = "{\"message\":\"Play report " + file.getName() + "\",\"content\":\""
             + Base64.encodeToString(text, Base64.NO_WRAP) + "\"}";
         URL url = new URL("https://api.github.com/repos/" + REPOSITORY + "/contents/" + path);
