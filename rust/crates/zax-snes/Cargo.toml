@@ -11,8 +11,6 @@ build = "build.rs"
 [dependencies]
 png = "0.17"
 zax-engine3d = { path = "../zax-engine3d" }
-
-[dev-dependencies]
 zax-profiles = { path = "../zax-profiles" }
 
 [build-dependencies]

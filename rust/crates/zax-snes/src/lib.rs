@@ -10,6 +10,7 @@ use std::path::Path;
 use std::sync::Mutex;
 
 pub mod engine_input;
+pub mod layers;
 pub mod press;
 pub mod tap;
 
