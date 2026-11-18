@@ -23,7 +23,7 @@ use zax_engine3d::input::{FrameBatch, TileRecord, STANDARD_ROWS};
 use zax_engine3d::palette::Rgb24;
 
 use crate::bgr555_to_rgb;
-use crate::tap::TileCapture;
+use crate::tap::{RawChunk, TileCapture};
 
 /// One background layer's tiles for its engine.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -44,7 +44,7 @@ pub const BG3_FRONT: u8 = 4;
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct EngineInput {
     /// The layers drawn on the main or the sub screen, in layer order. Empty for a frame the tap cannot
-    /// read as tiles (Mode 7, the hi-res modes, forced blank all frame).
+    /// read as tiles (the hi-res modes, forced blank all frame).
     pub layers: Vec<LayerInput>,
     /// The frame's 256 colours, from the palette in force at the end of the frame.
     pub colors: Box<[Rgb24; 256]>,
@@ -76,6 +76,9 @@ impl EngineInput {
 /// A background tile's key: its top, its x and its tile map entry.
 type BackgroundKey = (i16, i16, u16);
 
+/// The tile map entry in the key of a Mode 7 screen tile, which has none of its own.
+const MODE7_TILE: u16 = 0xFFFF;
+
 /// A sprite tile's key: its top, its x, its VRAM address and its palette, priority and flips.
 type SpriteKey = (i16, i16, u16, u8, u8, bool, bool);
 
@@ -93,7 +96,9 @@ struct Builder {
 
 impl Builder {
     /// Puts the planes of one row (two per word, low byte the even plane) at source row `row`.
-    fn add_row(&mut self, chr: &[u16], planes: usize, row: u32) {
+    /// Only the pixels whose bit is set in `keep` are kept (bit 7 is the left pixel of the
+    /// source row, as in the planes).
+    fn add_row(&mut self, chr: &[u16], planes: usize, row: u32, keep: u8) {
         for plane in 0..planes {
             let word = chr[plane / 2];
             let byte = if plane % 2 == 0 {
@@ -101,7 +106,7 @@ impl Builder {
             } else {
                 word >> 8
             };
-            self.planes[plane] |= u64::from(byte) << (8 * row);
+            self.planes[plane] |= u64::from(byte & u16::from(keep)) << (8 * row);
         }
     }
 
@@ -121,6 +126,22 @@ impl Builder {
         )
         .with_upper([p[2], p[3], p[4], p[5], p[6], p[7]])
     }
+}
+
+/// The pixels of an 8 pixel row drawn from screen x `x` that are on screen and not hidden
+/// (`hidden` gets the screen x), as a bit mask in the planes' order: bit 7 is the source row's
+/// left pixel, which a mirrored tile draws on the right.
+fn shown_pixels(x: i16, flip_x: bool, hidden: impl Fn(u16) -> bool) -> u8 {
+    let mut keep = 0u8;
+    for i in 0..8 {
+        let screen_x = x + i;
+        if !(0..256).contains(&screen_x) || hidden(screen_x as u16) {
+            continue;
+        }
+        let bit = if flip_x { i } else { 7 - i };
+        keep |= 1 << bit;
+    }
+    keep
 }
 
 /// Bits per pixel, priorities and palette start of each background layer per mode; `None` for
@@ -177,8 +198,8 @@ impl TileCapture {
 
         let mut out = Vec::new();
         for (layer, tiles) in layers.iter().enumerate() {
-            // Sprites ride with layer 1; on a frame without it (a Mode 7 frame: Mario Kart's
-            // race, Super Metroid's Ceres station) they still get layer 1's engine, alone.
+            // Sprites ride with layer 1; on a frame without it they still get layer 1's
+            // engine, alone.
             let sprites_alone = layer == 0 && !used[0] && !sprites.is_empty();
             if !used[layer] && !sprites_alone {
                 continue;
@@ -228,6 +249,10 @@ impl TileCapture {
                 continue;
             }
             sprites_on |= (chunk.main_layers | chunk.sub_layers) & 0x10 != 0;
+            if chunk.bg_mode == 7 {
+                self.mode7_tiles(chunk, &mut layers, &mut used);
+                continue;
+            }
             let Some(rules) = layer_bpp(chunk.bg_mode) else {
                 continue;
             };
@@ -240,6 +265,9 @@ impl TileCapture {
                     continue;
                 }
                 used[layer] = true;
+                // The window hides a layer's pixels on the main screen only; a layer also on the
+                // sub screen keeps them there, so it is left whole.
+                let on_main_only = chunk.sub_layers & (1 << layer) == 0;
                 let fine = (chunk.hscroll[layer] & 0x07) as i16;
                 for (column, tile) in line.tiles[layer].iter().enumerate() {
                     let x = column as i16 * 8 - fine;
@@ -247,6 +275,7 @@ impl TileCapture {
                         continue;
                     }
                     let shown_row = (line.scanline.wrapping_add(tile.vscroll) & 0x07) as i16;
+                    let flip_x = tile.tilemap & 0x4000 != 0;
                     let flip_y = tile.tilemap & 0x8000 != 0;
                     let source_row = if flip_y { 7 - shown_row } else { shown_row };
                     let palette_number = (tile.tilemap >> 10) & 0x07;
@@ -270,18 +299,78 @@ impl TileCapture {
                     };
                     let order = layers[target].len();
                     let builder = layers[target].entry(key).or_insert_with(|| Builder {
-                        flip_x: tile.tilemap & 0x4000 != 0,
+                        flip_x,
                         flip_y,
                         palette: palette.min(255) as u8,
                         order,
                         ..Builder::default()
                     });
-                    builder.add_row(&tile.chr, usize::from(bpp), source_row as u32);
+                    let keep = shown_pixels(x, flip_x, |screen_x| {
+                        on_main_only
+                            && chunk.window_masked[layer][usize::from(screen_x >> 3)]
+                                & (1 << (screen_x & 7))
+                                != 0
+                    });
+                    builder.add_row(&tile.chr, usize::from(bpp), source_row as u32, keep);
                 }
             }
         }
 
         (layers, used, sprites_on)
+    }
+
+    /// Cuts a Mode 7 line into rows of 8 pixel screen tiles. Mode 7 turns and stretches its
+    /// picture pixel by pixel, so its own tiles do not reach the screen whole; the screen
+    /// squares it covers are the tiles the engine gets instead.
+    fn mode7_tiles(
+        &self,
+        chunk: &RawChunk,
+        layers: &mut [BTreeMap<BackgroundKey, Builder>; 5],
+        used: &mut [bool; 5],
+    ) {
+        let y = chunk.scanline as i16 - 1;
+        let shown_row = y & 0x07;
+        for layer in 0..2u8 {
+            if (chunk.main_layers | chunk.sub_layers) & (1 << layer) == 0 {
+                continue;
+            }
+            let Some(colors) = self.mode7_line(chunk.scanline, layer) else {
+                continue;
+            };
+            let target = usize::from(layer);
+            let on_main_only = chunk.sub_layers & (1 << layer) == 0;
+            for column in 0..32u16 {
+                let x = column * 8;
+                // Background 2 keeps its priority in bit 7.
+                let mask = if layer == 1 { 0x7F } else { 0xFF };
+                let mut chr = [0u16; 4];
+                for i in 0..8u16 {
+                    let color = u16::from(colors[usize::from(x + i)] & mask);
+                    for plane in 0..8 {
+                        if color & (1 << plane) != 0 {
+                            chr[plane / 2] |= 1 << ((7 - i) + 8 * (plane as u16 % 2));
+                        }
+                    }
+                }
+                if chr == [0; 4] {
+                    continue;
+                }
+                used[target] = true;
+                let keep = shown_pixels(x as i16, false, |screen_x| {
+                    on_main_only
+                        && chunk.window_masked[target][usize::from(screen_x >> 3)]
+                            & (1 << (screen_x & 7))
+                            != 0
+                });
+                let order = layers[target].len();
+                let key = (y - shown_row, x as i16, MODE7_TILE);
+                let builder = layers[target].entry(key).or_insert_with(|| Builder {
+                    order,
+                    ..Builder::default()
+                });
+                builder.add_row(&chr, 8, shown_row as u32, keep);
+            }
+        }
     }
 
     /// The sprite rows put together per tile.
@@ -303,12 +392,12 @@ impl TileCapture {
                     flip_y,
                 );
                 let order = sprites.len();
-                let mode = self
+                let chunk = self
                     .chunks
                     .iter()
                     .rev()
-                    .find(|c| c.scanline == sprite.fetch_scanline + 1)
-                    .map_or(1, |c| c.bg_mode);
+                    .find(|c| c.scanline == sprite.fetch_scanline + 1);
+                let mode = chunk.map_or(1, |c| c.bg_mode);
                 let builder = sprites.entry(key).or_insert_with(|| Builder {
                     flip_x: sprite.horizontal_mirror != 0,
                     flip_y,
@@ -317,7 +406,15 @@ impl TileCapture {
                     order,
                     ..Builder::default()
                 });
-                builder.add_row(&sprite.chr, 4, u32::from(source_row));
+                let keep = shown_pixels(sprite.x, sprite.horizontal_mirror != 0, |screen_x| {
+                    chunk.is_some_and(|c| {
+                        c.sub_layers & 0x10 == 0
+                            && c.window_masked[4][usize::from(screen_x >> 3)]
+                                & (1 << (screen_x & 7))
+                                != 0
+                    })
+                });
+                builder.add_row(&sprite.chr, 4, u32::from(source_row), keep);
             }
         }
 
@@ -327,7 +424,18 @@ impl TileCapture {
 
 #[cfg(test)]
 mod tests {
-    use super::behind_layer_1;
+    use super::{behind_layer_1, shown_pixels};
+
+    #[test]
+    fn pixels_off_screen_or_behind_a_window_are_dropped() {
+        // Three pixels hang off the left edge: the row's first three are gone.
+        assert_eq!(shown_pixels(-3, false, |_| false), 0b0001_1111);
+        // Mirrored, the row's first pixels are drawn on the right, so its last three go.
+        assert_eq!(shown_pixels(-3, true, |_| false), 0b1111_1000);
+        // A window over screen pixels 10 and 11.
+        assert_eq!(shown_pixels(8, false, |x| x == 10 || x == 11), 0b1100_1111);
+        assert_eq!(shown_pixels(252, false, |_| false), 0b1111_0000);
+    }
 
     #[test]
     fn low_priority_sprites_go_behind_layer_1() {

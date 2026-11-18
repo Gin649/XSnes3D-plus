@@ -67,6 +67,8 @@ struct XsTapView
 	uint32_t SpriteCount;
 	const uint16_t* Cgram;
 	uint32_t CgramSnapshots;
+	const SnesTapMode7Line* Mode7;
+	uint32_t Mode7Count;
 };
 
 static SnesPpu* GetSnesPpu(XsSnes* snes)
@@ -221,6 +223,8 @@ void xs_tap_view(XsSnes* snes, XsTapView* view)
 	view->SpriteCount = (uint32_t)tap.Sprites.size();
 	view->Cgram = tap.Cgram.data();
 	view->CgramSnapshots = (uint32_t)(tap.Cgram.size() / 256);
+	view->Mode7 = tap.Mode7.data();
+	view->Mode7Count = (uint32_t)tap.Mode7.size();
 }
 
 // Stops the game and frees the emulator.

@@ -1,0 +1,71 @@
+diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
+index 783e8a8..cb08866 100644
+--- a/Core/SNES/SnesPpu.cpp
++++ b/Core/SNES/SnesPpu.cpp
+@@ -1281,6 +1281,20 @@ void SnesPpu::RenderTilemapMode7()
+ 
+ 	xValue += xStep * _drawStartX;
+ 	yValue += yStep * _drawStartX;
++
++	// XSnes3D+: the Mode 7 line for the tile tap. A line drawn in several pieces adds to the
++	// same record.
++	uint8_t* tapColors = nullptr;
++	if(_tap && !_skipRender) {
++		vector<SnesTapMode7Line>& lines = _tap->Building.Mode7;
++		if(lines.empty() || lines.back().Scanline != _scanline || lines.back().Layer != layerIndex) {
++			SnesTapMode7Line line = {};
++			line.Scanline = _scanline;
++			line.Layer = layerIndex;
++			lines.push_back(line);
++		}
++		tapColors = lines.back().Color;
++	}
+ 	
+ 	uint8_t pixelFlags = ((_state.ColorMathEnabled >> layerIndex) & 0x01) ? PixelFlags::AllowColorMath : 0;
+ 
+@@ -1333,6 +1347,10 @@ void SnesPpu::RenderTilemapMode7()
+ 			}
+ 		}
+ 
++		if(tapColors) {
++			tapColors[x] = (uint8_t)colorIndex | ((layerIndex == 1 && priority == highPriority) ? 0x80 : 0);
++		}
++
+ 		if(colorIndex > 0) {
+ 			uint16_t paletteColor;
+ 			if(directColorMode) {
+diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
+index ba071e5..abf49f6 100644
+--- a/Core/SNES/SnesTileTap.h
++++ b/Core/SNES/SnesTileTap.h
+@@ -55,6 +55,18 @@ struct SnesTapSprite
+ };
+ static_assert(sizeof(SnesTapSprite) == 16, "SnesTapSprite layout changed");
+ 
++// One Mode 7 line of background 1 or 2: the colour number of each pixel before windows,
++// priorities and colour maths, 0 where the layer is clear. For background 2 (EXTBG) bit 7 is
++// the pixel's priority.
++struct SnesTapMode7Line
++{
++	uint16_t Scanline;
++	uint8_t Layer;
++	uint8_t Padding;
++	uint8_t Color[256];
++};
++static_assert(sizeof(SnesTapMode7Line) == 260, "SnesTapMode7Line layout changed");
++
+ // One frame's worth of records.
+ struct SnesTapData
+ {
+@@ -62,9 +74,11 @@ struct SnesTapData
+ 	vector<SnesTapLine> Lines;
+ 	vector<SnesTapSprite> Sprites;
+ 	vector<uint16_t> Cgram;
++	vector<SnesTapMode7Line> Mode7;
+ 
+ 	void Clear()
+ 	{
++		Mode7.clear();
+ 		Chunks.clear();
+ 		Lines.clear();
+ 		Sprites.clear();

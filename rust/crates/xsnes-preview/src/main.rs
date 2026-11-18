@@ -65,6 +65,9 @@ fn main() -> ExitCode {
     }
 }
 
+/// How many tile images one engine may hold before it starts afresh.
+const IMAGE_LIMIT: usize = 3_000;
+
 /// One set of engines, one per background layer (indexed by layer 0 to 3), and one for the
 /// front part of mode 1's background 3 ([`BG3_FRONT`]).
 struct EngineSet {
@@ -96,6 +99,15 @@ impl EngineSet {
                 *slot = Some(engine);
             }
             if let Some(engine) = slot.as_mut() {
+                // Pictures that change every frame (Mode 7, Super FX) bring new tile images
+                // all the time; the engine keeps every one it meets, so start it afresh when
+                // it holds too many.
+                if engine.registries_mut().1.count() > IMAGE_LIMIT {
+                    engine.unload();
+                    engine
+                        .load_profile(&GameProfile::create_empty(), true)
+                        .map_err(|error| error.to_string())?;
+                }
                 // The front part of mode 1's background 3 holds the game's text or status bar:
                 // Smart 3D keeps it as flat panels.
                 engine.settings_mut().flat_layer = layer.layer == BG3_FRONT;

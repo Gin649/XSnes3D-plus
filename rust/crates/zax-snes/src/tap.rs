@@ -75,11 +75,23 @@ pub(crate) struct RawSprite {
     pub padding2: u16,
 }
 
+/// One Mode 7 line of background 1 or 2: each pixel's colour number, 0 where clear. For
+/// background 2 bit 7 is the pixel's priority.
+#[repr(C)]
+#[derive(Debug, Clone, Copy)]
+pub(crate) struct RawMode7Line {
+    pub scanline: u16,
+    pub layer: u8,
+    pub padding: u8,
+    pub color: [u8; 256],
+}
+
 // The C++ side checks the same sizes (SnesTileTap.h).
 const _: () = assert!(std::mem::size_of::<RawTile>() == 12);
 const _: () = assert!(std::mem::size_of::<RawChunk>() == 184);
 const _: () = assert!(std::mem::size_of::<RawLine>() == 2100);
 const _: () = assert!(std::mem::size_of::<RawSprite>() == 16);
+const _: () = assert!(std::mem::size_of::<RawMode7Line>() == 260);
 
 /// The shim's `XsTapView`.
 #[repr(C)]
@@ -92,6 +104,8 @@ pub(crate) struct RawView {
     pub sprite_count: u32,
     pub cgram: *const u16,
     pub cgram_snapshots: u32,
+    pub mode7: *const RawMode7Line,
+    pub mode7_count: u32,
 }
 
 /// Which layer a tile belongs to.
@@ -227,6 +241,7 @@ pub struct TileCapture {
     pub(crate) chunks: Vec<RawChunk>,
     pub(crate) lines: Vec<RawLine>,
     pub(crate) sprites: Vec<RawSprite>,
+    pub(crate) mode7: Vec<RawMode7Line>,
     cgram: Vec<u16>,
 }
 
@@ -245,6 +260,7 @@ impl TileCapture {
                 chunks: copy(view.chunks, view.chunk_count as usize),
                 lines: copy(view.lines, view.line_count as usize),
                 sprites: copy(view.sprites, view.sprite_count as usize),
+                mode7: copy(view.mode7, view.mode7_count as usize),
                 cgram: copy(view.cgram, view.cgram_snapshots as usize * 256),
             }
         }
@@ -469,6 +485,9 @@ impl TileCapture {
         if chunk.forced_blank != 0 {
             return Some(0);
         }
+        if chunk.bg_mode == 7 {
+            return self.mode7_pixel(chunk, sprites, x);
+        }
         let (layers, sprite_priorities) = mode_rules(chunk.bg_mode, chunk.bg3_priority != 0)?;
         let palette = self.palette(chunk.cgram_index)?;
         let masked =
@@ -544,6 +563,72 @@ impl TileCapture {
             offer(priority, layer_colour);
         }
 
+        Some(best.map_or(palette[0], |(_, colour)| colour))
+    }
+}
+
+impl TileCapture {
+    /// The Mode 7 colour numbers of background `layer` (0 or 1) on `scanline`.
+    pub(crate) fn mode7_line(&self, scanline: u16, layer: u8) -> Option<&[u8; 256]> {
+        self.mode7
+            .iter()
+            .rev()
+            .find(|l| l.scanline == scanline && l.layer == layer)
+            .map(|l| &l.color)
+    }
+
+    /// One main screen pixel of a Mode 7 line, as Mesen's `RenderMode7`.
+    fn mode7_pixel(
+        &self,
+        chunk: &RawChunk,
+        sprites: &[Option<(u8, u8, u8)>],
+        x: u8,
+    ) -> Option<u16> {
+        const SPRITE_PRIORITIES: [u8; 4] = [2, 4, 6, 7];
+        let palette = self.palette(chunk.cgram_index)?;
+        let masked =
+            |layer: usize| chunk.window_masked[layer][usize::from(x >> 3)] & (1 << (x & 7)) != 0;
+        let mut best: Option<(u8, u16)> = None;
+        let mut offer = |priority: u8, colour: u16| {
+            if best.is_none_or(|(current, _)| current < priority) {
+                best = Some((priority, colour));
+            }
+        };
+        if chunk.main_layers & 0x10 != 0 && !masked(4) {
+            if let Some((color, sprite_palette, priority)) = sprites[usize::from(x)] {
+                let index = 128 + usize::from(sprite_palette) * 16 + usize::from(color);
+                offer(SPRITE_PRIORITIES[usize::from(priority)], palette[index]);
+            }
+        }
+        if chunk.main_layers & 0x01 != 0 && !masked(0) {
+            if let Some(&color) = self
+                .mode7_line(chunk.scanline, 0)
+                .map(|l| &l[usize::from(x)])
+            {
+                if color != 0 {
+                    let colour = if chunk.direct_color != 0 {
+                        direct_color(0, color)
+                    } else {
+                        palette[usize::from(color)]
+                    };
+                    offer(3, colour);
+                }
+            }
+        }
+        if chunk.main_layers & 0x02 != 0 && !masked(1) {
+            if let Some(&value) = self
+                .mode7_line(chunk.scanline, 1)
+                .map(|l| &l[usize::from(x)])
+            {
+                let color = value & 0x7F;
+                if color != 0 {
+                    offer(
+                        if value & 0x80 != 0 { 5 } else { 1 },
+                        palette[usize::from(color)],
+                    );
+                }
+            }
+        }
         Some(best.map_or(palette[0], |(_, colour)| colour))
     }
 }

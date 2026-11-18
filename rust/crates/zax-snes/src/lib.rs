@@ -204,6 +204,8 @@ impl Snes {
             sprite_count: 0,
             cgram: std::ptr::null(),
             cgram_snapshots: 0,
+            mode7: std::ptr::null(),
+            mode7_count: 0,
         };
         // SAFETY: `raw` is alive; the shim fills `view` with pointers into its own buffers,
         // valid until the next frame, and `from_view` copies them right away.
