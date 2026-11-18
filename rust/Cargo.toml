@@ -1,6 +1,7 @@
 [workspace]
 resolver = "2"
 members = ["crates/*"]
+exclude = ["vendor"]
 
 [workspace.package]
 version = "0.1.0"
@@ -32,3 +33,8 @@ dbg_macro = "deny"
 lto = "fat"
 codegen-units = 1
 strip = true
+
+# librashader-runtime-wgpu with the naga module handed to wgpu directly (Mega Bezel), see
+# vendor/librashader-runtime-wgpu/README.md. Copied from Xnes3D+ with its app.
+[patch.crates-io]
+librashader-runtime-wgpu = { path = "vendor/librashader-runtime-wgpu" }

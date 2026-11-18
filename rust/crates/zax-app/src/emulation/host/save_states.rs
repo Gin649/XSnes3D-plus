@@ -1,0 +1,447 @@
+//! Save states and rollback (SPEC-07 §3.4, SPEC-09 REQ-PERS-050 to REQ-PERS-058).
+
+use zax_engine3d::state_codec;
+use zax_nes::{builtin_patches, NesCore};
+use zax_render::assets::png_image;
+
+use super::{EmulationHost, GameView, THUMBNAIL_HEIGHT, THUMBNAIL_WIDTH};
+use crate::audio::UiSound;
+use crate::emulation::emulation_state::EmulationState;
+use crate::emulation::game_catalog::GameCatalog;
+use crate::emulation::notification_center::{NotificationSeverity, DEFAULT_SECONDS, SHORT_SECONDS};
+use crate::emulation::rollback_history::RollbackSnapshot;
+use crate::persistence::save_slots::{self, is_valid_slot_id, SaveSlotIndex, QUICK_SLOT_ID};
+use crate::persistence::save_state_file::{self, SaveStateContent, SaveStateHeader};
+use crate::user_data_paths::{remove_file_if_present, rom_file_stem, write_atomic};
+
+/// Xnes3D+: how many numbered slots the console's save button goes round.
+pub const ROTATING_SLOTS: i32 = 15;
+
+impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
+    /// The name the files of `game_id` are given (owner request): its ROM's file name without
+    /// its extension, or the game's identifier for a game without a ROM file.
+    #[must_use]
+    pub fn rom_file_name(&self, game_id: &str) -> String {
+        self.games
+            .rom_path(game_id)
+            .as_deref()
+            .and_then(rom_file_stem)
+            .unwrap_or_else(|| game_id.to_owned())
+    }
+
+    /// Makes the slots those of `game_id`'s ROM (owner request: only its states are shown), its
+    /// states of the slots shared by every game before moved to its files first, and its movies
+    /// of before renamed after the ROM.
+    pub(super) fn choose_slots(&mut self, game_id: &str) {
+        let rom = self.rom_file_name(game_id);
+        if save_slots::move_legacy_states(&self.paths, &mut self.legacy_slots, game_id, &rom) > 0 {
+            self.save_slot_index();
+        }
+        self.rename_legacy_movies(game_id, &rom);
+        self.slots = SaveSlotIndex::for_rom(&self.paths, &rom);
+    }
+
+    /// The state file of `slot_id` of the game chosen.
+    #[must_use]
+    pub fn slot_state_file(&self, slot_id: &str) -> std::path::PathBuf {
+        self.slots.state_file(&self.paths, slot_id)
+    }
+
+    /// The thumbnail of `slot_id` of the game chosen.
+    #[must_use]
+    pub fn slot_thumbnail_file(&self, slot_id: &str) -> std::path::PathBuf {
+        self.slots.thumbnail_file(&self.paths, slot_id)
+    }
+
+    /// Captures the state of the game being played for `slot_id`: the core, the scripts' data,
+    /// the camera and the learned conversion state (REQ-PERS-055).
+    pub fn capture_save_state(&mut self, slot_id: &str) -> Option<SaveStateContent> {
+        let game_id = self.current_game_id()?.to_owned();
+        let fingerprint = self.current_rom_fingerprint().unwrap_or_default();
+        let saved_at = (self.now)().unix_timestamp();
+        let session = self.session.as_mut().filter(|session| session.has_rom())?;
+        let lua = match session.capture_script_state(&mut self.settings, &mut self.scene) {
+            Ok(lua) => lua,
+            Err(error) => {
+                self.log(&format!("the scripts' state could not be read: {error}"));
+                return None;
+            }
+        };
+        // Taken at the game's wait for the next frame: it restores with other components of the
+        // hack applied (an aid on or off).
+        let (core, at_idle) = session.core_mut().save_state_at_idle(true).ok()?;
+        let components: Vec<String> = session
+            .core()
+            .applied_components()
+            .into_iter()
+            .map(str::to_owned)
+            .collect();
+        // The pack whose components are applied, its widescreen running or an aid on.
+        let pack = (!components.is_empty())
+            .then(|| session.core().options_patch())
+            .flatten()
+            .and_then(builtin_patches::by_name);
+        let camera = save_state_file::write_camera(&self.scene.camera.capture());
+        let conversion = state_codec::write(session.engine());
+        let hack = session
+            .core()
+            .original_image()
+            .and_then(builtin_patches::patch_for);
+        let mut picture = Vec::new();
+        session.copy_nes_picture(&mut picture);
+        let thumbnail = save_state_file::thumbnail_jpeg(&picture).unwrap_or_default();
+        let achievements = self
+            .achievements
+            .progress()
+            .filter(|progress| progress.len() <= save_state_file::MAX_ACHIEVEMENTS_BYTES)
+            .unwrap_or_default();
+        Some(SaveStateContent {
+            header: SaveStateHeader {
+                core_id: NesCore::CORE_NAME.to_owned(),
+                core_state_version: NesCore::STATE_VERSION,
+                game_id,
+                rom_sha1: fingerprint,
+                saved_at,
+                slot_id: slot_id.to_owned(),
+                is_hack: Some(hack.is_some()),
+                hack_name: hack.or(pack).map(|patch| patch.name.to_owned()),
+                hack_version: hack
+                    .or(pack)
+                    .map(|patch| format!("{:08X}", patch.version())),
+                hack_components: Some(components),
+                at_idle: Some(at_idle),
+                app_version: Some(env!("CARGO_PKG_VERSION").to_owned()),
+                saved_at_local: Some(save_state_file::local_date_time(saved_at)),
+            },
+            core,
+            lua,
+            camera,
+            conversion,
+            thumbnail,
+            achievements,
+        })
+    }
+
+    /// Saves to `slot_id` (REQ-LOOP-041 to REQ-LOOP-043). Returns whether the file was written.
+    pub fn save_to_slot(&mut self, slot_id: &str, with_thumbnail: bool) -> bool {
+        // REQ-LOOP-041: a save only happens outside Stopped and with a current game.
+        if self.state == EmulationState::Stopped
+            || self.loading
+            || !self
+                .session
+                .as_ref()
+                .is_some_and(crate::game_session::GameSession::has_rom)
+        {
+            return false;
+        }
+        if !is_valid_slot_id(slot_id) || self.slots.find(slot_id).is_none() {
+            return false;
+        }
+        if !self.paths.is_writable {
+            // REQ-PERS-073: a write action on a read-only root shows the same notification.
+            let message = self
+                .paths
+                .unwritable_message
+                .clone()
+                .unwrap_or_else(|| "User data folder is not writable.".to_owned());
+            self.notifications.show_error(&message);
+            return false;
+        }
+        if let Some(mixer) = &mut self.mixer {
+            mixer.play_sound(UiSound::Confirm);
+        }
+        let Some(content) = self.capture_save_state(slot_id) else {
+            return false;
+        };
+        let picture = if with_thumbnail {
+            self.thumbnail_for_slot()
+        } else {
+            None
+        };
+        match self.write_slot(slot_id, &content, picture.as_deref()) {
+            Ok(()) => true,
+            Err(error) => {
+                self.slots.vacate(slot_id);
+                self.save_slot_index();
+                self.notifications.show_error(&error.to_string());
+                false
+            }
+        }
+    }
+
+    fn write_slot(
+        &mut self,
+        slot_id: &str,
+        content: &SaveStateContent,
+        picture: Option<&[u8]>,
+    ) -> std::io::Result<()> {
+        self.slots.occupy(
+            slot_id,
+            &content.header.game_id,
+            content.header.saved_at,
+            picture.is_some(),
+        );
+        let file = save_state_file::write(content);
+        let bound = self.session.as_ref().map_or(0, |session| {
+            save_state_file::max_file_size(session.core().max_state_size())
+        });
+        if file.len() > bound {
+            // REQ-ARCH-013: the announced bound must hold for the whole session. Going past it
+            // is a bug in the bound, not a reason to lose the user's state, so it is logged and
+            // the state is still written.
+            self.log(&format!(
+                "savestate of slot {slot_id} is larger than the announced bound."
+            ));
+        }
+        write_atomic(&self.slot_state_file(slot_id), &file)?;
+        let thumbnail_file = self.slot_thumbnail_file(slot_id);
+        if let Some(picture) = picture {
+            let png = png_image::encode_rgb(
+                u32::try_from(THUMBNAIL_WIDTH).unwrap_or(0),
+                u32::try_from(THUMBNAIL_HEIGHT).unwrap_or(0),
+                picture,
+            )
+            .map_err(std::io::Error::other)?;
+            // AMD-051 REQ-PERS-088: the thumbnail travels with the savestate, so it is written
+            // the same way — an interruption leaves the old picture or the new one, never half
+            // a PNG beside a complete state.
+            write_atomic(&thumbnail_file, &png)?;
+        } else {
+            // A quick save has no thumbnail (REQ-LOOP-043): the previous one must not stay
+            // behind and be shown for a different state.
+            remove_file_if_present(&thumbnail_file);
+        }
+        Ok(())
+    }
+
+    /// Xnes3D+: the slot the console's save button writes next, among the first
+    /// [`ROTATING_SLOTS`]: the first empty one, else the one after the newest, round to 1 after
+    /// the last, so the oldest is the one replaced (RetroArch's auto-increment).
+    fn next_rotating_slot(&self) -> i32 {
+        let mut newest: Option<(i64, i32)> = None;
+        for number in 1..=ROTATING_SLOTS {
+            match self.slots.find(&save_slots::numbered_slot_id(number)) {
+                Some(record) if record.is_occupied() => {
+                    if newest.is_none_or(|(at, _)| record.saved_at >= at) {
+                        newest = Some((record.saved_at, number));
+                    }
+                }
+                _ => return number,
+            }
+        }
+        newest.map_or(1, |(_, number)| number % ROTATING_SLOTS + 1)
+    }
+
+    /// Xnes3D+: the newest state among the first [`ROTATING_SLOTS`], if any.
+    fn newest_rotating_slot(&self) -> Option<i32> {
+        (1..=ROTATING_SLOTS)
+            .filter_map(|number| {
+                self.slots
+                    .find(&save_slots::numbered_slot_id(number))
+                    .filter(|record| record.is_occupied())
+                    .map(|record| (record.saved_at, number))
+            })
+            .max()
+            .map(|(_, number)| number)
+    }
+
+    /// The quick save (REQ-LOOP-043): the quick slot, no thumbnail, and its notification.
+    ///
+    /// Xnes3D+: in the console interface (Android, handhelds) the save button writes the
+    /// next of 15 numbered slots in turn, with its picture, as RetroArch does.
+    pub fn quick_save(&mut self) {
+        if self.current_game.is_none() || self.state == EmulationState::Stopped {
+            return;
+        }
+        if self.console_interface {
+            let number = self.next_rotating_slot();
+            if self.save_to_slot(&save_slots::numbered_slot_id(number), true) {
+                self.notifications.show(
+                    &format!("State {number} saved"),
+                    DEFAULT_SECONDS,
+                    NotificationSeverity::Normal,
+                );
+            }
+            return;
+        }
+        if self.save_to_slot(QUICK_SLOT_ID, false) {
+            self.notifications
+                .show("Quick Save", DEFAULT_SECONDS, NotificationSeverity::Normal);
+        }
+    }
+
+    /// The quick load (REQ-LOOP-045): loads the quick slot, with its notification.
+    pub fn quick_load(&mut self) {
+        // Xnes3D+: the console's load button loads the newest of the 15 states.
+        if self.console_interface {
+            let Some(number) = self.newest_rotating_slot() else {
+                self.notifications
+                    .show("No saved state yet", DEFAULT_SECONDS, NotificationSeverity::Normal);
+                return;
+            };
+            self.load_slot(&save_slots::numbered_slot_id(number));
+            if self.loading {
+                self.notifications.show(
+                    &format!("State {number} loaded"),
+                    DEFAULT_SECONDS,
+                    NotificationSeverity::Normal,
+                );
+            }
+            return;
+        }
+        if !self.slots.is_occupied(QUICK_SLOT_ID) {
+            return;
+        }
+        self.load_slot(QUICK_SLOT_ID);
+        if self.loading {
+            self.notifications
+                .show("Quick Load", DEFAULT_SECONDS, NotificationSeverity::Normal);
+        }
+    }
+
+    /// The picture a thumbnail is made of (Q-027): the capture taken at the pause while
+    /// paused, a fresh capture otherwise.
+    pub(super) fn thumbnail_for_slot(&mut self) -> Option<Vec<u8>> {
+        if self.state == EmulationState::Paused {
+            if let Some(paused) = &self.pause_thumbnail {
+                return Some(paused.clone());
+            }
+        }
+        self.view
+            .as_mut()
+            .and_then(GameView::capture_thumbnail)
+            .or_else(|| self.pause_thumbnail.clone())
+    }
+
+    /// One frame on, the emulation paused (K, Rust-only, owner request): the frame runs with the
+    /// input held now, the core's state before it kept so that J can come back to it.
+    pub(super) fn step_frame(&mut self) {
+        if !self.can_step() {
+            return;
+        }
+        self.pause();
+        self.take_core_back();
+        let (one, two) = self.step_input;
+        if let Some(session) = self.session.as_ref() {
+            let core = session.core();
+            let _ =
+                self.frame_steps
+                    .capture_with(|buffer| core.save_state_to(false, buffer), one, two);
+        }
+        self.step_without_run_ahead(one, two);
+        self.show_frame_number();
+    }
+
+    /// One frame back, the emulation paused (J): the state before the frame that came before the
+    /// one on screen, run again with its input, shows that frame. Nothing past the history's
+    /// oldest frame (five seconds), nor on a handheld (no history there).
+    pub(super) fn step_frame_back(&mut self) {
+        if !self.can_step() {
+            return;
+        }
+        self.pause();
+        self.take_core_back();
+        let Some((state, one, two)) = self.frame_steps.step_back() else {
+            return;
+        };
+        if let Some(session) = self.session.as_mut() {
+            if let Err(error) = session.restore_core(&state) {
+                self.log(&format!("frame step refused: {error}"));
+                return;
+            }
+        }
+        self.step_without_run_ahead(one, two);
+        self.show_frame_number();
+    }
+
+    /// One emulated frame with **no** run-ahead (AMD-041 REQ-LOOP-066): a frame step bears on the
+    /// real state, and what the player asked to see is that frame and not one a few frames on.
+    /// The loop reads the setting again at the next real frame, so nothing has to be put back.
+    fn step_without_run_ahead(
+        &mut self,
+        one: crate::input::InputAction,
+        two: crate::input::InputAction,
+    ) {
+        if let Some(session) = self.session.as_mut() {
+            session.set_run_ahead(0);
+        }
+        self.run_session_frame(one, two);
+    }
+
+    fn can_step(&self) -> bool {
+        self.state != EmulationState::Stopped
+            && !self.loading
+            && self
+                .session
+                .as_ref()
+                .is_some_and(crate::game_session::GameSession::has_rom)
+    }
+
+    fn show_frame_number(&mut self) {
+        if let Some(session) = self.session.as_ref() {
+            let frame = session.core().frame_count();
+            self.notifications.show(
+                &format!("Frame {frame}"),
+                SHORT_SECONDS,
+                NotificationSeverity::Normal,
+            );
+        }
+    }
+
+    /// Goes back to the second-to-last snapshot (REQ-LOOP-032).
+    pub(super) fn perform_rollback(&mut self) {
+        if self.state == EmulationState::Stopped
+            || !self
+                .session
+                .as_ref()
+                .is_some_and(crate::game_session::GameSession::has_rom)
+        {
+            return;
+        }
+        self.notifications
+            .show("Rewind", SHORT_SECONDS, NotificationSeverity::Normal);
+        if let Some(snapshot) = self.rollback.take_rollback_target() {
+            self.restore_snapshot(&snapshot);
+        }
+        // Step 3 applies even when nothing was restored (REQ-LOOP-032, notes).
+        self.set_state(EmulationState::Running);
+        self.pacer.reset();
+        // The restore emptied the core's ring (REQ-CORE-074), and a rollback taken while the
+        // game was already running leaves the state alone, so the stream is told to prefill and
+        // ramp in. REQ-AUD-012 tolerates the discontinuity and asks for no silence longer than
+        // 50 ms: the mid-stream prefill is half the latency, 30 ms at the default (Q-153 §4).
+        self.resynchronise_audio();
+    }
+
+    /// Restores one snapshot of the history: the core, then the 64 `PData` values, then the
+    /// camera (AMD-042 REQ-LOOP-070).
+    ///
+    /// The `Save` and `Load` hooks of the scripts are never called by a rollback: the entries are
+    /// written back the way `SetPData` writes them, and the hooks stay reserved for savestates
+    /// and for serialisation (REQ-LOOP-070, REQ-LUA-074, REQ-LUA-075). The camera goes back
+    /// through `SceneCamera::restore`, the one path a savestate load also takes, so that the
+    /// "shown straight at its setpoints" of REQ-SCN-073 holds for both at once.
+    fn restore_snapshot(&mut self, snapshot: &RollbackSnapshot) {
+        let Some(session) = self.session.as_mut() else {
+            return;
+        };
+        if let Err(error) = session.restore_core(&snapshot.core) {
+            self.log(&format!("rollback snapshot refused: {error}"));
+            return;
+        }
+
+        if let Some(block) = snapshot.extras.persistent_data.as_ref() {
+            session.restore_rollback_data(block);
+        }
+
+        // AMD-063 REQ-LUA-119: REQ-LOOP-070 writes the forced rotation back as well, **before**
+        // the camera state, so the restored setpoints are the snapshot's and not the forced value
+        // of the frame the rollback left.
+        self.scene
+            .camera
+            .set_rot_override(snapshot.extras.rot_override);
+        if let Some(camera) = snapshot.extras.camera.as_ref() {
+            self.scene.camera.restore(camera);
+        }
+    }
+}

@@ -1,0 +1,761 @@
+//! The interface as the application loop holds it: a Dear `ImGui` context with its renderer and
+//! platform input, over the screens of [`ZaxUi`] and the developer panel.
+
+use std::path::PathBuf;
+use std::rc::Rc;
+
+use imgui::DrawData;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use zax_platform::imgui_renderer::ImguiRenderer;
+use zax_platform::input::{Key, KeyboardDevice};
+use zax_platform::ui_image::PictureUpdate;
+
+use super::commands::UiCommand;
+use super::debug_overlay::{self, DebugInfo};
+use super::fonts::{FontSizes, UiFonts};
+use super::handheld::keyboard::KeyboardPad;
+use super::handheld::layout::Metrics;
+use super::handheld::pointer::PointerInput;
+use super::handheld::states::StatesMode;
+use super::handheld::{HandheldUi, Screen as HandheldScreen};
+use super::menu_shortcuts::ShortcutModifiers;
+use super::platform::SdlPlatform;
+use super::shots::{ShotStep, UiShots};
+use super::zax_ui::{UiEffect, UiFrame, ZaxUi};
+use crate::app_options::AppOptions;
+use crate::application::AppHost;
+use crate::emulation::host::HostEvent;
+use crate::input::{DesktopInputSource, InputBindings};
+use zax_settings::catalogue::SettingId;
+
+/// The window sizes of one frame: the window's own and the drawable's.
+#[derive(Debug, Clone, Copy)]
+pub struct Sizes {
+    /// The window, in screen coordinates.
+    pub window: (u32, u32),
+    /// The drawable, in pixels.
+    pub drawable: (u32, u32),
+}
+
+/// What the interface is drawn with: the GL renderer of this crate, or the window's wgpu
+/// display, which draws the data [`ImguiFrontend::draw_data`] gives it.
+pub enum UiGraphics<'a> {
+    Gl(&'a Rc<glow::Context>),
+    #[cfg(feature = "wgpu")]
+    Wgpu(&'a mut zax_platform::wgpu_display::WgpuDisplay),
+}
+
+/// The console mode of the desktop: on, and whether it came on by itself (the gamepad's menu
+/// button, a save state shortcut), in which case it goes when the game is back.
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+struct ConsoleMode {
+    active: bool,
+    automatic: bool,
+}
+
+/// The body height the console mode of the desktop is sized for, whatever the window: between
+/// the smallest handheld and a full HD screen.
+fn console_height(drawable_height: f32) -> f32 {
+    drawable_height.clamp(480.0, 1080.0)
+}
+
+/// What the screenshot plan asks after a frame is drawn.
+#[derive(Debug, Default)]
+pub struct ShotRequest {
+    /// The window is to be captured into this file.
+    pub capture: Option<PathBuf>,
+    /// The plan is over: the program quits.
+    pub finished: bool,
+}
+
+/// `ImGui` over the window.
+pub struct ImguiFrontend {
+    context: imgui::Context,
+    /// The GL renderer; none when the window's wgpu display draws the interface.
+    renderer: Option<ImguiRenderer>,
+    platform: SdlPlatform,
+    ui: ZaxUi,
+    /// The gamepad-only interface, which takes the place of `ui` in the handheld mode; `ui` stays
+    /// for the texts and the commands the two share. On the desktop it is the console mode (F1),
+    /// and the gamepad's gestures in game (Rust-only, owner request).
+    handheld: Option<HandheldUi>,
+    /// Whether this is a handheld, where the gamepad interface is the only one.
+    device: bool,
+    /// The console mode of the desktop.
+    console: ConsoleMode,
+    shots: Option<UiShots>,
+    /// The keyboard as a pad of the handheld interface.
+    keyboard_pad: KeyboardPad,
+    /// The changes of the interface's pictures not handed to the renderer yet.
+    pictures: Vec<PictureUpdate>,
+    /// The ROM folder of the command line (`--roms`), which wins over the options.
+    roms_option: Option<String>,
+    /// The ROM folder of the options the ROM list was last given.
+    roms_setting: String,
+    /// The touch pad to draw over everything this frame (Rust-only).
+    touch_pad: Option<zax_platform::input::touch::TouchPadView>,
+    /// Where fingers tapped off the touch pad since the last frame (Rust-only).
+    taps: Vec<[f32; 2]>,
+    /// How far fingers slid down off the pad, in pixels, not yet turned into rows (Rust-only).
+    swipe: f32,
+    /// The system's keyboard is up for the console's keyboard screen (Android, Rust-only).
+    system_typing: bool,
+}
+
+impl ImguiFrontend {
+    /// Gives the text fields the system clipboard (Ctrl+C, Ctrl+X, Ctrl+V).
+    pub fn set_clipboard(&mut self, clipboard: sdl2::clipboard::ClipboardUtil) {
+        self.context
+            .set_clipboard_backend(super::platform::SdlClipboard(clipboard));
+    }
+
+    /// Builds the context, loads the fonts and uploads the atlas. `drawable_height` sizes the
+    /// fonts and the rows of the handheld interface.
+    ///
+    /// # Errors
+    /// The renderer could not be built, or the folder of the screenshots could not be created.
+    // The wgpu variant hands over a unique borrow; the GL one, the only one without the
+    // feature, a shared one.
+    #[cfg_attr(not(feature = "wgpu"), allow(clippy::needless_pass_by_value))]
+    #[allow(clippy::too_many_lines)] // The start of the interface, step by step in its order.
+    pub fn new(
+        graphics: UiGraphics<'_>,
+        host: &AppHost,
+        options: &AppOptions,
+        drawable_height: u32,
+    ) -> Result<Self, String> {
+        #[allow(clippy::cast_precision_loss)] // display heights are far below 2^24
+        let height = drawable_height as f32;
+        let metrics = Metrics::for_height(height);
+        let mut context = imgui::Context::create();
+        // Dear ImGui would otherwise drop an imgui.ini next to the working directory.
+        context.set_ini_filename(None);
+        context.set_log_filename(None);
+        // Owner review before 0.5.0: the windows were 94 % opaque, the Dear ImGui default, so the
+        // welcome window's text showed through the options. They are opaque now.
+        context.style_mut()[imgui::StyleColor::WindowBg][3] = 1.0;
+        let fonts = UiFonts::load_sized(
+            context.fonts(),
+            options.font_file.as_deref(),
+            options.built_in_font,
+            if options.handheld {
+                metrics.font_sizes()
+            } else {
+                FontSizes::DESKTOP
+            },
+        );
+        // The console mode of the desktop has faces of its own, baked for the window it opens in
+        // (a screenshot run photographs the desktop as it is, without it).
+        let console = (!options.handheld && options.ui_shot_directory.is_none()).then(|| {
+            let metrics = Metrics::for_height(console_height(height));
+            let faces = UiFonts::load_console(
+                context.fonts(),
+                options.font_file.as_deref(),
+                options.built_in_font,
+                metrics.font_sizes(),
+            );
+            (metrics, faces)
+        });
+        let renderer = match graphics {
+            UiGraphics::Gl(gl) => {
+                Some(ImguiRenderer::new(gl, context.fonts()).map_err(|error| error.to_string())?)
+            }
+            #[cfg(feature = "wgpu")]
+            UiGraphics::Wgpu(display) => {
+                display.upload_fonts(context.fonts());
+                None
+            }
+        };
+        // REQ-UI-207: the renderer has just built the font atlas, so the glyph tables exist; this
+        // is the earliest moment a missing code point can be pointed at a glyph that is in it.
+        fonts.remap_missing_glyphs(context.fonts());
+        let mut ui = ZaxUi::new(host);
+        ui.set_heading_font(fonts.heading);
+        let roms_option = options.roms_directory.clone();
+        let handheld = if options.handheld {
+            let directory = roms_directory(host, roms_option.as_deref());
+            if let Err(error) = std::fs::create_dir_all(&directory) {
+                ui.log(format!(
+                    "the ROM folder '{}' could not be created: {error}",
+                    directory.display()
+                ));
+            }
+            let mut handheld = HandheldUi::new(host, directory, height);
+            handheld.set_heading_font(fonts.heading);
+            Some(handheld)
+        } else {
+            console.map(|(metrics, (body, heading))| {
+                let directory = roms_directory(host, roms_option.as_deref());
+                let mut handheld = HandheldUi::new(host, directory, console_height(height));
+                handheld.set_heading_font(heading);
+                handheld.use_on_desktop(metrics, Some(body));
+                handheld
+            })
+        };
+        #[cfg(feature = "native-dialog")]
+        if options.ui_shot_directory.is_none() {
+            ui.set_file_picker(Box::new(super::native_picker::NativePicker::detect()));
+        }
+        ui.log(match &fonts.body_file {
+            Some(file) => format!("interface font: {}", file.display()),
+            None => "no system font was loaded; the built-in ImGui font has no accents.".to_owned(),
+        });
+        let shots = options
+            .ui_shot_directory
+            .as_deref()
+            .map(|directory| UiShots::new(directory, options.handheld))
+            .transpose()
+            .map_err(|error| format!("the screenshot folder could not be created: {error}"))?;
+        let platform = if options.handheld {
+            SdlPlatform::for_handheld()
+        } else if shots.is_some() {
+            SdlPlatform::for_capture()
+        } else {
+            SdlPlatform::new()
+        };
+        platform.configure(context.io_mut());
+        Ok(Self {
+            context,
+            renderer,
+            platform,
+            console: console_at_start(options, handheld.is_some()),
+            ui,
+            handheld,
+            device: options.handheld,
+            shots,
+            keyboard_pad: KeyboardPad::new(),
+            pictures: Vec::new(),
+            roms_option,
+            roms_setting: roms_setting(host),
+            touch_pad: None,
+            taps: Vec::new(),
+            swipe: 0.0,
+            system_typing: false,
+        })
+    }
+
+    /// An SDL event, before the input layer sees it.
+    pub fn handle_event(&mut self, event: &Event) {
+        self.platform.handle_event(self.context.io_mut(), event);
+        if self.system_typing {
+            self.type_on_system_keyboard(event);
+        }
+    }
+
+    /// What the system's keyboard typed into the console's keyboard screen (Android): its text,
+    /// backspace and enter.
+    fn type_on_system_keyboard(&mut self, event: &Event) {
+        let Some(handheld) = &mut self.handheld else {
+            return;
+        };
+        match event {
+            Event::TextInput { text, .. } => handheld.type_text(text),
+            Event::KeyDown {
+                keycode: Some(Keycode::Backspace),
+                ..
+            } => handheld.erase_typed(),
+            Event::KeyDown {
+                keycode: Some(Keycode::Return | Keycode::KpEnter),
+                ..
+            } => handheld.finish_typing(),
+            _ => {}
+        }
+    }
+
+    /// Raises the system's keyboard while the console's keyboard screen types, and lowers it
+    /// after (Android only: a desktop types with its own keyboard).
+    fn follow_system_keyboard(&mut self) {
+        let typing = cfg!(target_os = "android")
+            && self.device
+            && self.handheld.as_ref().is_some_and(HandheldUi::typing);
+        if typing != self.system_typing {
+            self.system_typing = typing;
+            zax_platform::input::text::show_system_keyboard(typing);
+            self.keyboard_pad.release(self.platform.pad_mut());
+        }
+    }
+
+    /// Whether a text field of the interface owns the keyboard.
+    #[must_use]
+    pub fn wants_keyboard(&self) -> bool {
+        self.context.io().want_capture_keyboard
+    }
+
+    /// Whether the pointer is over a piece of the interface.
+    #[must_use]
+    pub fn wants_pointer(&self) -> bool {
+        self.context.io().want_capture_mouse
+    }
+
+    /// Whether the gamepad interface is the one shown: always on a handheld, in the console
+    /// mode on the desktop.
+    #[must_use]
+    pub const fn console_shown(&self) -> bool {
+        self.handheld.is_some() && (self.device || self.console.active)
+    }
+
+    /// Whether the interface holds a modal window (REQ-UI-004).
+    #[must_use]
+    pub fn is_modal(&self) -> bool {
+        match &self.handheld {
+            Some(handheld) if self.console_shown() => handheld.is_modal(),
+            _ => self.ui.state.is_modal(),
+        }
+    }
+
+    /// Height of the menu bar, which the game view sits under (REQ-UI-200).
+    #[must_use]
+    pub const fn chrome_height(&self) -> f32 {
+        if self.console_shown() {
+            0.0
+        } else {
+            self.ui.chrome_height
+        }
+    }
+
+    /// Switches the desktop to its console mode, or back to the menu bar. On the way back, a
+    /// menu left open over the game is closed and the game resumes.
+    fn switch_console(&mut self, host: &mut AppHost, active: bool, automatic: bool) {
+        let Some(handheld) = &mut self.handheld else {
+            return;
+        };
+        if self.device {
+            return;
+        }
+        if !active && self.console.active {
+            handheld.leave_for_desktop(host);
+            self.keyboard_pad.release(self.platform.pad_mut());
+        }
+        self.console = ConsoleMode { active, automatic };
+    }
+
+    /// Xnes3D+: reads the ROM folder again and the profile of each game (new profiles were
+    /// imported).
+    pub fn refresh_roms(&mut self, host: &AppHost) {
+        if let Some(handheld) = &mut self.handheld {
+            handheld.refresh_roms(host);
+        }
+    }
+
+    /// Gives the ROM list the ROM folder of the options when it changed.
+    fn follow_roms_folder(&mut self, host: &AppHost) {
+        let setting = roms_setting(host);
+        if setting == self.roms_setting {
+            return;
+        }
+        self.roms_setting = setting;
+        let directory = roms_directory(host, self.roms_option.as_deref());
+        if let Some(handheld) = &mut self.handheld {
+            handheld.set_roms_directory(host, directory);
+        }
+    }
+
+    /// Carries out what a shortcut, a binding or a menu entry asked of the console mode.
+    fn follow_console_request(&mut self, host: &mut AppHost) {
+        let Some(request) = self.ui.take_console_request() else {
+            return;
+        };
+        match request {
+            UiCommand::ToggleConsole => {
+                let active = !self.console.active;
+                self.switch_console(host, active, false);
+            }
+            UiCommand::SaveStates | UiCommand::LoadStates => {
+                let mode = if request == UiCommand::SaveStates {
+                    StatesMode::Save
+                } else {
+                    StatesMode::Load
+                };
+                let opened = self
+                    .handheld
+                    .as_mut()
+                    .is_some_and(|handheld| handheld.open_states(mode, host));
+                if opened && !self.console.active {
+                    self.switch_console(host, true, true);
+                }
+            }
+            // Neither asks anything of the console mode: `ZaxUi::run_ui_command` does the whole
+            // of each one itself.
+            UiCommand::ToggleDebugOverlay
+            | UiCommand::CloseWindows
+            | UiCommand::AchievementsAccount
+            | UiCommand::ShowShaders => {}
+        }
+    }
+
+    /// The menu shortcuts of REQ-UI-204: the rising edge of every watched key.
+    pub fn handle_shortcuts(
+        &mut self,
+        host: &mut AppHost,
+        keyboard: &dyn KeyboardDevice,
+        binding_capture_active: bool,
+        bindings: &InputBindings,
+    ) {
+        // In the console mode of the desktop, F1 and Home still switch back; the other keys
+        // drive the pad, as on a handheld.
+        if self.console_shown() && !self.device {
+            let down = |key: Key| keyboard.is_down(key as i32);
+            let pressed = self.ui.rising_keys(down);
+            let plain = !(down(Key::ControlLeft)
+                || down(Key::ControlRight)
+                || down(Key::ShiftLeft)
+                || down(Key::ShiftRight)
+                || down(Key::AltLeft)
+                || down(Key::AltRight));
+            if !binding_capture_active
+                && plain
+                && pressed.iter().any(|key| matches!(key, Key::F1 | Key::Home))
+            {
+                self.switch_console(host, false, false);
+                return;
+            }
+        }
+        // A handheld has no menu bar: the keys drive its pad instead of the shortcuts; the
+        // system's keyboard types its text instead (Android).
+        if self.console_shown() {
+            if binding_capture_active || self.system_typing {
+                self.keyboard_pad.release(self.platform.pad_mut());
+            } else {
+                self.keyboard_pad
+                    .update(self.platform.pad_mut(), bindings, keyboard);
+            }
+            return;
+        }
+        // While a binding capture is listening, the keyboard belongs to the capture: the fixed
+        // shortcuts must not fire either, for the same reason REQ-INP-047 and DEC-08-2 suspend
+        // the actions. A text field of the interface (the two search boxes) owns the keyboard
+        // while it has the focus, so a shortcut must not fire from what is being typed.
+        if binding_capture_active || self.wants_keyboard() {
+            self.ui.release_held_keys();
+            return;
+        }
+        let down = |key: Key| keyboard.is_down(key as i32);
+        let pressed = self.ui.rising_keys(down);
+        let modifiers = ShortcutModifiers {
+            control: down(Key::ControlLeft) || down(Key::ControlRight),
+            shift: down(Key::ShiftLeft) || down(Key::ShiftRight),
+            alt: down(Key::AltLeft) || down(Key::AltRight),
+        };
+        self.ui.handle_shortcuts(host, &pressed, modifiers);
+        self.follow_console_request(host);
+    }
+
+    /// The keys that go down this frame as an application shortcut, which the game must not see.
+    #[must_use]
+    pub fn consumed_keys(&self, keyboard: &dyn KeyboardDevice) -> Vec<i32> {
+        if self.console_shown() || self.wants_keyboard() {
+            return Vec::new();
+        }
+        self.ui
+            .consumed_keys(|key: Key| keyboard.is_down(key as i32))
+            .into_iter()
+            .map(|key| key as i32)
+            .collect()
+    }
+
+    /// The commands a binding triggered that belong to the interface.
+    pub fn run_bound_ui_commands(&mut self, input: &DesktopInputSource) {
+        for name in input.triggered_commands() {
+            self.ui.run_named_ui_command(name);
+        }
+    }
+
+    /// The step of the screenshot plan after a drawn frame, if there is a plan: the file to
+    /// capture the window into, and whether the plan is over (the caller then quits).
+    pub fn advance_shots(&mut self) -> ShotRequest {
+        let Some(shots) = &mut self.shots else {
+            return ShotRequest::default();
+        };
+        let capture = match shots.advance(&mut self.ui, self.handheld.as_mut()) {
+            ShotStep::Capture(path) => Some(path),
+            ShotStep::Wait => None,
+        };
+        ShotRequest {
+            capture,
+            finished: shots.finished(),
+        }
+    }
+
+    /// Whether a screenshot plan drives the interface.
+    #[must_use]
+    pub const fn has_shots(&self) -> bool {
+        self.shots.is_some()
+    }
+
+    /// Builds the interface of the frame, which [`ImguiFrontend::render`] then draws: a
+    /// pipelined frame builds it before the host is lent to the conversion thread.
+    pub fn build(&mut self, frame: &mut UiFrame<'_>, sizes: Sizes, debug: &DebugInfo<'_>) {
+        self.platform.prepare_frame(
+            self.context.io_mut(),
+            sizes.window,
+            sizes.drawable,
+            frame.real_seconds,
+        );
+        // A menu entry clicked last frame.
+        self.follow_console_request(frame.host);
+        self.follow_roms_folder(frame.host);
+        let shown = self.console_shown();
+        let device = self.device;
+        let desktop_modal = self.ui.state.is_modal();
+        let ui = self.context.new_frame();
+        let mut open_console = false;
+        let mut leave_console = false;
+        if let Some(handheld) = &mut self.handheld {
+            // A screenshot run has no gamepad, and its screens are staged by the plan.
+            if self.shots.is_none() {
+                self.platform.pad_mut().advance(frame.real_seconds);
+            }
+            let playing = frame.host.current_game_id().is_some() || frame.host.is_loading();
+            if shown {
+                if self.shots.is_none() {
+                    handheld.update(self.platform.pad(), frame.real_seconds, frame);
+                    // The mouse of the desktop (owner request), but not through a menu of the
+                    // bar over it.
+                    if !device && !self.ui.menu_engaged() {
+                        handheld.update_pointer(&pointer_input(ui), frame);
+                    }
+                    // A tap of a touch screen is a click (Rust-only, owner request): the rows,
+                    // and the hints of the buttons the touch pad does not have.
+                    let taps = std::mem::take(&mut self.taps);
+                    // A tap while the keyboard screen types raises the system's keyboard again,
+                    // in case it was put away.
+                    if self.system_typing && !taps.is_empty() {
+                        zax_platform::input::text::show_system_keyboard(true);
+                    }
+                    // A finger sliding over a menu scrolls it: a row per row's height, the list
+                    // following the finger (Rust-only, owner request).
+                    if device {
+                        let row = handheld.row_height().max(1.0);
+                        let rows = (self.swipe / row).trunc();
+                        self.swipe -= rows * row;
+                        if rows != 0.0 {
+                            let input = super::handheld::pointer::PointerInput {
+                                wheel: rows,
+                                ..Default::default()
+                            };
+                            handheld.update_pointer(&input, frame);
+                        }
+                    }
+                    for tap in taps.into_iter().filter(|_| device) {
+                        let input = super::handheld::pointer::PointerInput {
+                            position: tap,
+                            clicked: true,
+                            ..Default::default()
+                        };
+                        handheld.update_pointer(&input, frame);
+                    }
+                }
+                handheld.draw(ui, frame);
+                self.pictures.extend(handheld.take_picture_updates());
+                // The menu bar of the desktop stays at hand over its console mode (owner
+                // request); an entry the desktop carries out brings the desktop back.
+                if !device && self.shots.is_none() {
+                    leave_console = self.ui.draw_menu_bar_over_console(ui, frame.host);
+                }
+                self.ui.draw_fps_counter(ui, frame);
+            } else if !device && playing && !desktop_modal && self.shots.is_none() {
+                // The gamepad plays as in the console mode (owner request): the menu button
+                // opens its menu, X, Y and L2 act in game.
+                handheld.update(self.platform.pad(), frame.real_seconds, frame);
+                open_console = handheld.screen() != HandheldScreen::InGame;
+            }
+        }
+        if !shown {
+            self.ui.draw(ui, frame);
+            if self.ui.state.debug_overlay_visible() {
+                debug_overlay::draw(ui, frame.host, self.ui.chrome_height, debug);
+            }
+        }
+        // RetroAchievements' pop-ups and indicators, over either interface (Rust-only).
+        let top = if shown { 0.0 } else { self.ui.chrome_height };
+        let challenges = frame
+            .host
+            .settings()
+            .get(zax_settings::catalogue::SettingId::AchievementsChallenges)
+            .as_bool();
+        super::achievements_view::draw_overlay(ui, &frame.host.achievements, top, challenges);
+        if let Some(view) = &self.touch_pad {
+            super::touch_pad_view::draw(ui, view);
+        }
+        self.follow_system_keyboard();
+        self.pictures
+            .extend(frame.host.achievements.take_picture_updates());
+        if leave_console {
+            self.switch_console(frame.host, false, false);
+        }
+        if open_console {
+            self.console = ConsoleMode {
+                active: true,
+                automatic: true,
+            };
+        }
+        // A console mode that came by itself goes when the game is back.
+        let back_in_game = self
+            .handheld
+            .as_ref()
+            .is_some_and(|handheld| handheld.screen() == HandheldScreen::InGame);
+        if shown && !device && self.console.automatic && back_in_game {
+            self.console = ConsoleMode::default();
+        }
+        self.platform.pad_mut().end_frame();
+    }
+
+    /// The touch pad the next [`ImguiFrontend::build`] draws (none while it is hidden), where
+    /// fingers tapped off it and how far they slid down: on a handheld, the clicks of the
+    /// console's rows and hints, and the scroll of its lists.
+    pub fn set_touch_pad(
+        &mut self,
+        view: Option<zax_platform::input::touch::TouchPadView>,
+        taps: Vec<[f32; 2]>,
+        swipe: f32,
+    ) {
+        self.touch_pad = view;
+        self.taps = taps;
+        self.swipe += swipe;
+    }
+
+    /// Whether a game is on the screen, not a menu: the touch pad is shown only then.
+    #[must_use]
+    pub fn game_on_screen(&self) -> bool {
+        if !self.console_shown() {
+            return true;
+        }
+        self.handheld
+            .as_ref()
+            .is_some_and(|handheld| handheld.screen() == HandheldScreen::InGame)
+    }
+
+    /// Draws the interface [`ImguiFrontend::build`] built, with the GL renderer (a wgpu window
+    /// draws [`ImguiFrontend::draw_data`] itself).
+    pub fn render(&mut self) {
+        if let Some(renderer) = &mut self.renderer {
+            renderer.update_pictures(&std::mem::take(&mut self.pictures));
+            renderer.render(self.context.render());
+        }
+    }
+
+    /// The changes of the interface's pictures since the last call, for a renderer that is not
+    /// the front end's own (wgpu).
+    pub fn take_picture_updates(&mut self) -> Vec<PictureUpdate> {
+        std::mem::take(&mut self.pictures)
+    }
+
+    /// The draw data of the interface [`ImguiFrontend::build`] built, for a wgpu window.
+    pub fn draw_data(&mut self) -> &DrawData {
+        self.context.render()
+    }
+
+    /// Takes one event of the host.
+    pub fn handle_host_event(&mut self, host: &mut AppHost, event: HostEvent) {
+        let shown = self.console_shown();
+        match (&mut self.handheld, event) {
+            (Some(_), HostEvent::LanguageChanged(code)) if shown => self.ui.language_changed(&code),
+            (Some(handheld), event) if shown => handheld.handle_host_event(host, event),
+            (_, event) => self.ui.handle_host_event(host, event),
+        }
+    }
+
+    /// Stops a binding capture in progress (REQ-UI-067).
+    pub fn close_capture(input: &mut DesktopInputSource) {
+        ZaxUi::close_capture(input);
+    }
+
+    /// What the interface asked of the application since the last call.
+    pub fn take_effects(&mut self) -> Vec<UiEffect> {
+        let mut effects = self.ui.take_effects();
+        if let Some(handheld) = &mut self.handheld {
+            effects.extend(handheld.take_effects());
+        }
+        effects
+    }
+}
+
+/// What the mouse did this frame, for the console mode of the desktop.
+fn pointer_input(ui: &imgui::Ui) -> PointerInput {
+    PointerInput {
+        position: ui.io().mouse_pos,
+        clicked: ui.is_mouse_clicked(imgui::MouseButton::Left),
+        right_clicked: ui.is_mouse_clicked(imgui::MouseButton::Right),
+        wheel: ui.io().mouse_wheel,
+    }
+}
+
+/// The console mode the desktop starts in: without a game to start, it opens on the ROM list of
+/// its console mode, which goes by itself once a game plays (owner request); F1 or Home leaves
+/// it. `--console` keeps it on.
+fn console_at_start(options: &AppOptions, has_console: bool) -> ConsoleMode {
+    let opens_on_list = !options.handheld
+        && !options.console
+        && !options.smoke_test
+        && options.rom_path.is_none()
+        && has_console;
+    ConsoleMode {
+        active: options.console || opens_on_list,
+        automatic: opens_on_list,
+    }
+}
+
+/// The ROM folder of the options, as stored.
+fn roms_setting(host: &AppHost) -> String {
+    host.settings()
+        .get(SettingId::UiRomsFolder)
+        .as_text()
+        .to_owned()
+}
+
+/// The folder the handheld ROM list reads: `--roms`, the ROM folder of the options, or the
+/// `roms` folder of the user data.
+fn roms_directory(host: &AppHost, option: Option<&str>) -> PathBuf {
+    let setting = host.settings().get(SettingId::UiRomsFolder);
+    let directory = option
+        .or_else(|| Some(setting.as_text().trim()).filter(|folder| !folder.is_empty()))
+        .map_or_else(|| host.paths().root.join("roms"), PathBuf::from);
+    std::path::absolute(&directory).unwrap_or(directory)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// Without a game to start, the desktop opens on the ROM list of its console mode, which
+    /// goes once a game plays; a game on the command line, a smoke run or a handheld do not.
+    #[test]
+    fn the_desktop_opens_on_the_rom_list_without_a_game() {
+        let plain = AppOptions::default();
+        let on_list = ConsoleMode {
+            active: true,
+            automatic: true,
+        };
+        assert_eq!(on_list, console_at_start(&plain, true));
+        assert_eq!(ConsoleMode::default(), console_at_start(&plain, false));
+        let with_game = AppOptions {
+            rom_path: Some("game.nes".to_owned()),
+            ..AppOptions::default()
+        };
+        assert_eq!(ConsoleMode::default(), console_at_start(&with_game, true));
+        let smoke = AppOptions {
+            smoke_test: true,
+            ..AppOptions::default()
+        };
+        assert_eq!(ConsoleMode::default(), console_at_start(&smoke, true));
+        let device = AppOptions {
+            handheld: true,
+            ..AppOptions::default()
+        };
+        assert_eq!(ConsoleMode::default(), console_at_start(&device, true));
+        // --console keeps it on, game or not.
+        let console = AppOptions {
+            console: true,
+            rom_path: Some("game.nes".to_owned()),
+            ..AppOptions::default()
+        };
+        assert_eq!(
+            ConsoleMode {
+                active: true,
+                automatic: false
+            },
+            console_at_start(&console, true)
+        );
+    }
+}

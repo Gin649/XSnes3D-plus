@@ -1,0 +1,929 @@
+//! The key of every interface text of AMD-035. Both tables of [`super::strings`] hold exactly
+//! these keys, which a test of `ui_language_tests` checks.
+
+// ----------------------------------------------------------- menu bar
+pub const MENU_FILE: &str = "menu.file";
+pub const MENU_EMULATION: &str = "menu.emulation";
+pub const MENU_VIDEO: &str = "menu.video";
+pub const MENU_AUDIO: &str = "menu.audio";
+pub const MENU_TOOLS: &str = "menu.tools";
+pub const MENU_RECENT_ROMS: &str = "menu.recent_roms";
+pub const MENU_LOAD_STATE: &str = "menu.load_state";
+pub const MENU_SAVE_STATE: &str = "menu.save_state";
+pub const MENU_DELETE_STATE: &str = "menu.delete_state";
+pub const MENU_SPEED: &str = "menu.speed";
+pub const MENU_REGION: &str = "menu.region";
+pub const MENU_PORTS: &str = "menu.ports";
+pub const MENU_CAMERA_MODE: &str = "menu.camera_mode";
+pub const MENU_VOLUME: &str = "menu.volume";
+pub const MENU_NOTHING_HERE: &str = "menu.nothing_here";
+pub const MENU_REGION_AUTO: &str = "menu.region.auto";
+pub const MENU_PORT: &str = "menu.port";
+pub const MENU_PORT_CONTROLLER: &str = "menu.port.controller";
+pub const MENU_PORT_ZAPPER: &str = "menu.port.zapper";
+pub const MENU_CAMERA_ORBITAL: &str = "menu.camera.orbital";
+pub const MENU_CAMERA_FIRST_PERSON: &str = "menu.camera.first_person";
+pub const SLOT_EMPTY: &str = "slot.empty";
+pub const SLOT_OTHER_PATCH: &str = "slot.other_patch";
+pub const SLOT_OTHER_HACK_VERSION: &str = "slot.other_hack_version";
+/// Submenu of the movies to play.
+pub const MENU_MOVIES: &str = "menu.movies";
+/// Title of the window that asks for a note on the frame on screen.
+pub const WINDOW_MOVIE_NOTE: &str = "window.movie_note";
+/// Its button that writes the note.
+pub const MOVIE_NOTE_WRITE: &str = "movie_note.write";
+/// Title of the dialog that picks the ROM folder of the console mode.
+pub const WINDOW_ROMS_FOLDER: &str = "window.roms_folder";
+/// The button that opens it, beside the folder in the options.
+pub const BUTTON_BROWSE: &str = "button.browse";
+/// What the ROM folder row says under the field: what the folder is for and the default.
+pub const ROMS_FOLDER_HINT: &str = "hint.roms_folder";
+pub const SLOT_QUICK: &str = "slot.quick";
+pub const SLOT_PREFIX: &str = "slot.prefix";
+
+// -------------------------------------------------------- window titles
+pub const WINDOW_OPTIONS: &str = "window.options";
+pub const WINDOW_KEY_CONFIG: &str = "window.key_config";
+pub const WINDOW_ABOUT: &str = "window.about";
+pub const WINDOW_PROFILE_CHOOSER: &str = "window.profile_chooser";
+pub const WINDOW_OPEN_ROM: &str = "window.open_rom";
+pub const WINDOW_OPEN_MOVIE: &str = "window.open_movie";
+pub const WINDOW_IMPORT_PROFILE: &str = "window.import_profile";
+pub const WINDOW_IMPORT_COVER: &str = "window.import_cover";
+pub const WINDOW_IMPORT_THREE_DSEN: &str = "window.import_3dsen";
+
+// -------------------------------------------------------------- buttons
+pub const BUTTON_CLOSE: &str = "button.close";
+pub const BUTTON_CANCEL: &str = "button.cancel";
+pub const BUTTON_OPEN: &str = "button.open";
+pub const BUTTON_LAUNCH: &str = "button.launch";
+pub const BUTTON_PARENT_FOLDER: &str = "button.parent_folder";
+pub const BUTTON_RESET_DEFAULTS: &str = "button.reset_defaults";
+pub const BUTTON_RESET_BINDINGS: &str = "button.reset_bindings";
+pub const BUTTON_STOP_BINDING: &str = "button.stop_binding";
+pub const BUTTON_YES: &str = "button.yes";
+pub const BUTTON_NO: &str = "button.no";
+/// The lone button of the two one-button dialogues of AMD-056 REQ-UI-214.
+pub const BUTTON_OK: &str = "button.ok";
+/// The destructive button of the replacement confirmation of REQ-UI-214. The French entry is
+/// **not** the « Oui » of REQ-PERS-042: the amendment names the action.
+pub const BUTTON_REPLACE: &str = "button.replace";
+
+// ------------------- the three import dialogues of AMD-056 REQ-UI-214, whose English entries the
+//                     amendment's table fixes word for word. An accepted import has no text at
+//                     all: it shows neither notification nor dialogue, which is why the
+//                     « Profile imported: … » of REQ-UI-212 is not in this table.
+
+/// Title of the refusal dialogue: a cause of the table of REQ-UI-212.
+pub const DIALOG_IMPORT_REFUSED_TITLE: &str = "dialog.import_refused.title";
+/// Its body: the file name, a colon, and the text of the cause (REQ-UI-084).
+pub const DIALOG_IMPORT_REFUSED_BODY: &str = "dialog.import_refused.body";
+/// Title of the dialogue of a file carrying the identifier of a built-in profile.
+pub const DIALOG_IMPORT_BUILT_IN_TITLE: &str = "dialog.import_built_in.title";
+/// Its body: the title of the file, and the file name that was not imported.
+pub const DIALOG_IMPORT_BUILT_IN_BODY: &str = "dialog.import_built_in.body";
+/// Title of the replacement confirmation: the displayed name of the entry.
+pub const DIALOG_IMPORT_REPLACE_TITLE: &str = "dialog.import_replace.title";
+/// Its body: what is replaced, and what is kept.
+pub const DIALOG_IMPORT_REPLACE_BODY: &str = "dialog.import_replace.body";
+
+// ------------------- notifications of SPEC-10 §3.10, whose English text the spec fixes
+pub const NOTIFY_ROLL_BACK: &str = "notify.roll_back";
+pub const NOTIFY_FAST_FORWARD: &str = "notify.fast_forward";
+pub const NOTIFY_QUICK_SAVE: &str = "notify.quick_save";
+pub const NOTIFY_QUICK_LOAD: &str = "notify.quick_load";
+pub const NOTIFY_CORRUPTED_ZIP: &str = "notify.corrupted_zip";
+pub const NOTIFY_STATE_OTHER_PATCH: &str = "notify.state_other_patch";
+pub const NOTIFY_STATE_OTHER_HACK_VERSION: &str = "notify.state_other_hack_version";
+pub const CONFIRM_TURN_HACK_ON: &str = "confirm.turn_hack_on";
+pub const CONFIRM_TURN_HACK_OFF: &str = "confirm.turn_hack_off";
+pub const CONFIRM_OTHER_COMPONENTS: &str = "confirm.other_components";
+pub const BUTTON_LOAD_AS_SET: &str = "button.load_as_set";
+pub const BUTTON_LOAD_ALIGNED: &str = "button.load_aligned";
+pub const NOTIFY_UNCOMPRESSION_FAILED: &str = "notify.uncompression_failed";
+pub const NOTIFY_INVALID_ROM: &str = "notify.invalid_rom";
+pub const NOTIFY_GAME_MISSING: &str = "notify.game_missing";
+
+/// A load that stopped advancing (AMD-051 REQ-LOOP-073, SPEC-07 §4).
+pub const NOTIFY_LOADING_TIMED_OUT: &str = "notify.loading_timed_out";
+pub const NOTIFY_FOREIGN_CORE: &str = "notify.foreign_core";
+pub const NOTIFY_NOT_A3DN_FILE: &str = "notify.not_a_3dn_file";
+pub const NOTIFY_UNSUPPORTED3DN_VERSION: &str = "notify.unsupported_3dn_version";
+pub const NOTIFY_OBSOLETE_PROFILE_FORMAT: &str = "notify.obsolete_profile_format";
+
+// ------------- notifications of the persisted files (SPEC-09 REQ-PERS-022, REQ-PERS-024)
+pub const NOTIFY_SETTINGS_UNREADABLE: &str = "notify.settings_unreadable";
+pub const NOTIFY_SETTINGS_NEWER_VERSION: &str = "notify.settings_newer_version";
+pub const NOTIFY_GAME_LIST_UNREADABLE: &str = "notify.game_list_unreadable";
+pub const NOTIFY_GAME_LIST_NEWER_VERSION: &str = "notify.game_list_newer_version";
+pub const NOTIFY_BINDINGS_UNREADABLE: &str = "notify.bindings_unreadable";
+pub const NOTIFY_BINDINGS_NEWER_VERSION: &str = "notify.bindings_newer_version";
+pub const NOTIFY_THREE_DSEN_SUMMARY: &str = "notify.import_3dsen_summary";
+
+// ------------------- confirmations of SPEC-09 REQ-PERS-042 and REQ-PERS-054 (AMD-036 §1)
+pub const CONFIRM_DELETE_GAME: &str = "confirm.delete_game";
+pub const CONFIRM_DELETE_SLOT: &str = "confirm.delete_slot";
+
+// --------------------------------------------------------------- hints
+pub const HINT_IMPORT_THREE_DSEN: &str = "hint.import_3dsen";
+pub const HINT_RES_SCALE_DIRECT: &str = "hint.res_scale_direct";
+/// Q-103: why Run-ahead is held at 0 while this game is playing.
+pub const HINT_RUN_AHEAD_FORCED: &str = "hint.run_ahead_forced";
+pub const HINT_PRESS_ACONTROL: &str = "hint.press_a_control";
+pub const HINT_CLICK_ACELL: &str = "hint.click_a_cell";
+pub const HINT_AT_NEXT_START: &str = "hint.at_next_start";
+pub const HINT_AT_NEXT_LOAD: &str = "hint.at_next_load";
+pub const HINT_PROFILE_SETTING: &str = "hint.profile_setting";
+
+// ------------------------------- the groups of the options window (RO-1)
+/// The resolution the scene is drawn at, and how its edges are smoothed.
+pub const GROUP_RESOLUTION: &str = "group.resolution";
+/// What the picture costs: the switches of `docs/PERFORMANCE-HISTORY.md`.
+pub const GROUP_PERFORMANCE: &str = "group.performance";
+/// The picture's edges a television did not show.
+pub const GROUP_OVERSCAN: &str = "group.overscan";
+/// The widescreen extension.
+pub const GROUP_WIDESCREEN: &str = "group.widescreen";
+/// The video region.
+pub const GROUP_REGION: &str = "group.region";
+/// What a player should not need; used on more than one tab.
+pub const GROUP_ADVANCED: &str = "group.advanced";
+
+// --------------------- the group titles the console tree of RO-3 adds. The options window has
+//                       no group of these three names: it spreads the same settings over its
+//                       `Style` groups, which the console tree names for what they are.
+/// The effects the Enhanced style adds (AMD-055 REQ-SCN-079): the page of the console tree.
+pub const PAGE_ENHANCED_EFFECTS: &str = "handheld.page.enhanced_effects";
+/// The curvature page of the console tree, named for what it bends (AMD-043 REQ-SCN-066).
+pub const PAGE_GEOMETRY: &str = "handheld.page.geometry";
+/// The screen-space reflections and their four gradations.
+pub const GROUP_REFLECTIONS: &str = "group.reflections";
+/// The ambient occlusion and its four gradations.
+pub const GROUP_AMBIENT_OCCLUSION: &str = "group.ambient_occlusion";
+
+// ------------------- the compact rows of RO-1 point 6: the title of the row, and the caption
+//                     of each of the four values it holds side by side.
+pub const COMPACT_OVERSCAN_NTSC: &str = "compact.overscan_ntsc";
+pub const COMPACT_OVERSCAN_PAL: &str = "compact.overscan_pal";
+pub const CAPTION_TOP: &str = "caption.top";
+pub const CAPTION_BOTTOM: &str = "caption.bottom";
+pub const CAPTION_LEFT: &str = "caption.left";
+pub const CAPTION_RIGHT: &str = "caption.right";
+
+// ------------------------------- why a row is greyed out (RO-1 point 1)
+/// `video.res_scale` while the automatic resolution chooses it instead.
+pub const HINT_RES_SCALE_AUTOMATIC: &str = "hint.res_scale_automatic";
+/// `spl.pixel_shadow` while the shadows are off.
+pub const HINT_NEEDS_SHADOWS: &str = "hint.needs_shadows";
+/// `emu.lua_experimental` and `emu.pipeline` without the optimised Lua.
+pub const HINT_NEEDS_LUA_OPTIMIZED: &str = "hint.needs_lua_optimized";
+/// `scene.custom_bg_color` under the gradient and the fantasy sky.
+pub const HINT_BG_COLOR_UNUSED: &str = "hint.bg_color_unused";
+/// `scene.arc_center` while the horizontal arc is 0.
+pub const HINT_NEEDS_ARC: &str = "hint.needs_arc";
+/// `scene.bend_2d_mode` while no curvature is set.
+pub const HINT_NEEDS_CURVATURE: &str = "hint.needs_curvature";
+/// `emu.tv_mode` while the region is detected automatically.
+pub const HINT_REGION_AUTOMATIC: &str = "hint.region_automatic";
+/// `emu.core`: this version has one core, so the value is always 0.
+pub const HINT_SINGLE_CORE: &str = "hint.single_core";
+/// `audio.latency_ms` while the classic output of `v0.4.2` is on (AUDIO-2): that output has the
+/// fixed buffer it always had and reads no latency.
+pub const HINT_CLASSIC_AUDIO: &str = "hint.classic_audio";
+/// The four RetroAchievements options while RetroAchievements is off.
+pub const HINT_NEEDS_ACHIEVEMENTS: &str = "hint.needs_achievements";
+/// Why a "Style" group shows no row: the style is Classic.
+pub const HINT_STYLE_CLASSIC: &str = "hint.style_classic";
+/// `input.emulated_menu_button`, which Zaxnes keeps and never acts on (DEC-08-6, DEC-R2-D7).
+pub const HINT_MENU_BUTTON_UNUSED: &str = "hint.menu_button_unused";
+
+// ------------------------------------- the Geometry group (AMD-043 §6, AMD-046 §3)
+/// The heading above the curvature settings.
+pub const GROUP_GEOMETRY: &str = "group.geometry";
+/// The help sentences the two amendments give, shown as tooltips.
+pub const HELP_BEND_LR: &str = "help.scene.bend_lr";
+pub const HELP_BEND_TB: &str = "help.scene.bend_tb";
+pub const HELP_ARC_H: &str = "help.scene.arc_h";
+pub const HELP_ARC_CENTER: &str = "help.scene.arc_center";
+pub const HELP_BEND_2D_MODE: &str = "help.scene.bend_2d_mode";
+
+/// The help sentence of the backdrop lighting of AMD-049 REQ-SCN-075. The amendment gives no UI
+/// wording — the original has no such setting — so this is Zaxnes's own, like the setting.
+pub const HELP_BACKDROP_LIGHTING: &str = "help.render.backdrop_lighting";
+
+/// The one-line hint of `audio.classic_output` (AUDIO-2): when to tick the box at all. Zaxnes's
+/// own, like the setting — no amendment knows of either output.
+pub const HELP_CLASSIC_AUDIO_OUTPUT: &str = "help.audio.classic_output";
+
+// ------------------------------- the Style group (AMD-055 §3 point 6 and §4)
+/// The title of the collapsible group that holds the style and its twelve parameters.
+pub const GROUP_STYLE: &str = "group.style";
+/// The thirteen help sentences of AMD-055 §4, shown as tooltips.
+pub const HELP_VISUAL_STYLE: &str = "help.render.visual_style";
+pub const HELP_STYLE_AO: &str = "help.render.style.ao";
+pub const HELP_STYLE_AO_STRENGTH: &str = "help.render.style.ao_strength";
+pub const HELP_STYLE_AO_RADIUS: &str = "help.render.style.ao_radius";
+pub const HELP_STYLE_AO_THICKNESS: &str = "help.render.style.ao_thickness";
+pub const HELP_STYLE_AO_QUALITY: &str = "help.render.style.ao_quality";
+pub const HELP_STYLE_PIXEL_SHADOW: &str = "help.render.style.pixel_shadow";
+pub const HELP_STYLE_VOXEL_GRID: &str = "help.render.style.voxel_grid";
+pub const HELP_STYLE_REFLECTIONS: &str = "help.render.style.reflections";
+pub const HELP_STYLE_SSR_SHINE: &str = "help.render.style.ssr_shine";
+pub const HELP_STYLE_SSR_CLARITY: &str = "help.render.style.ssr_clarity";
+pub const HELP_STYLE_SSR_LENGTH: &str = "help.render.style.ssr_length";
+pub const HELP_STYLE_SSR_QUALITY: &str = "help.render.style.ssr_quality";
+/// Why `ao.thickness` is greyed: REQ-SCN-079's "grisé" under the fallback **(D)** of REQ-SCN-083.
+pub const HINT_THICKNESS_NO_EFFECT: &str = "hint.style.thickness_no_effect";
+
+// ------------------------------------------------------- fields, columns
+pub const FIELD_SEARCH: &str = "field.search";
+pub const COLUMN_ACTION: &str = "column.action";
+pub const COLUMN_KEYBOARD: &str = "column.keyboard";
+pub const COLUMN_GAMEPAD: &str = "column.gamepad";
+pub const VALUE_NO_GAMEPAD: &str = "value.no_gamepad";
+
+// ------------------------------------------------------- welcome screen
+pub const WELCOME_HINT: &str = "welcome.hint";
+pub const WELCOME_RECENT: &str = "welcome.recent";
+pub const WELCOME_NO_RECENT: &str = "welcome.no_recent";
+
+// ----------------------------------------------------------- about block
+pub const ABOUT_LICENCE: &str = "about.licence";
+pub const ABOUT_CREDIT_INSPIRED: &str = "about.credit.inspired";
+pub const ABOUT_CREDIT_ADAPTED: &str = "about.credit.adapted";
+pub const ABOUT_CREDIT_DISCLAIMER: &str = "about.credit.disclaimer";
+pub const ABOUT_VERSION_PREFIX: &str = "about.version_prefix";
+
+// ----------------------------------------------------- options window tabs
+// RO-1 replaces the single "Video" tab of REQ-UI-202, which held three families, with the three
+// tabs below (see `docs/OPTIONS-LAYOUT.md` and Q-107).
+pub const TAB_DISPLAY: &str = "options.tab.display";
+pub const TAB_NES_PICTURE: &str = "options.tab.nes_picture";
+pub const TAB_RENDER_3D: &str = "options.tab.render_3d";
+pub const TAB_CAMERA: &str = "options.tab.camera";
+pub const TAB_LIGHT: &str = "options.tab.light";
+pub const TAB_AUDIO: &str = "options.tab.audio";
+pub const TAB_EMULATION: &str = "options.tab.emulation";
+pub const TAB_INTERFACE: &str = "options.tab.interface";
+
+// ------------------------------------------------- key configuration sections
+pub const KEYS_PLAYER_ONE: &str = "keys.section.player_one";
+pub const KEYS_PLAYER_TWO: &str = "keys.section.player_two";
+pub const KEYS_CAMERA: &str = "keys.section.camera";
+pub const KEYS_HOTKEYS: &str = "keys.section.hotkeys";
+pub const KEYS_COMMANDS: &str = "keys.section.commands";
+
+// --------------------------------------------------------- file browser
+pub const BROWSER_COMPUTER: &str = "browser.computer";
+pub const BROWSER_FILTER_NES_ROMS: &str = "browser.filter.nes_roms";
+pub const BROWSER_FILTER_NES_FILES: &str = "browser.filter.nes_files";
+pub const BROWSER_FILTER_ZIP: &str = "browser.filter.zip";
+pub const BROWSER_FILTER_PROFILES: &str = "browser.filter.profiles";
+pub const BROWSER_FILTER_BUNDLE: &str = "browser.filter.bundle";
+pub const BROWSER_FILTER_PNG: &str = "browser.filter.png";
+pub const BROWSER_FILTER_MOVIES: &str = "browser.filter.movies";
+pub const BROWSER_FILTER_ALL: &str = "browser.filter.all";
+
+// ------------------------------------------------------------- movie bar
+pub const MOVIE_BAR_PLAY: &str = "movie_bar.play";
+pub const MOVIE_BAR_PAUSE: &str = "movie_bar.pause";
+pub const MOVIE_BAR_SEEKING: &str = "movie_bar.seeking";
+
+// --------------------------------------------------------- editor's pens
+pub const PENS_HAND: &str = "pens.hand";
+pub const PENS_UNDO: &str = "pens.undo";
+pub const PENS_CLEAR: &str = "pens.clear";
+pub const PENS_RED: &str = "pens.red";
+pub const PENS_BLUE: &str = "pens.blue";
+pub const PENS_BLACK: &str = "pens.black";
+pub const PENS_WHITE: &str = "pens.white";
+pub const PENS_VIEW_2D: &str = "pens.view_2d";
+pub const PENS_VIEW_ZAXNES: &str = "pens.view_zaxnes";
+pub const PENS_VIEW_3DSEN: &str = "pens.view_3dsen";
+pub const PENS_VIEW_HANDHELD: &str = "pens.view_handheld";
+
+// ------------------------------------------------------- profile chooser
+pub const PROFILE_TWO_DIMENSIONAL: &str = "profile.two_dimensional";
+pub const PROFILE_SOURCE_TWO_DIMENSIONAL: &str = "profile.source.two_dimensional";
+pub const PROFILE_SOURCE_DEFAULT_THREE_D: &str = "profile.source.default_3d";
+pub const PROFILE_SOURCE_BUILT_IN: &str = "profile.source.built_in";
+pub const PROFILE_SOURCE_PROGRAM_FOLDER: &str = "profile.source.program_folder";
+pub const PROFILE_SOURCE_USER: &str = "profile.source.user";
+
+// ------------------------------------------------------------- shortcuts
+pub const SHORTCUT_ALT_ENTER: &str = "shortcut.alt_enter";
+pub const SHORTCUT_SHIFT_PREFIX: &str = "shortcut.shift_prefix";
+pub const SHORTCUT_QUICK_SAVE: &str = "shortcut.quick_save";
+pub const SHORTCUT_QUICK_LOAD: &str = "shortcut.quick_load";
+pub const SHORTCUT_FAST_FORWARD: &str = "shortcut.fast_forward";
+pub const SHORTCUT_ROLLBACK: &str = "shortcut.rollback";
+pub const SHORTCUT_SAVE_SLOTS: &str = "shortcut.save_slots";
+pub const SHORTCUT_LOAD_SLOTS: &str = "shortcut.load_slots";
+pub const SHORTCUT_LONG_PRESS_MENU: &str = "shortcut.long_press_menu";
+
+// ------------------------------------------- handheld interface (Rust-only)
+pub const HANDHELD_GAMES_TITLE: &str = "handheld.games_title";
+pub const HANDHELD_ROMS_EMPTY: &str = "handheld.roms_empty";
+pub const HANDHELD_TAG_2D: &str = "handheld.tag_2d";
+pub const HANDHELD_PROFILE_FOR: &str = "handheld.profile_for";
+pub const HANDHELD_HINT_PLAY: &str = "handheld.hint.play";
+pub const HANDHELD_HINT_PROFILE: &str = "handheld.hint.profile";
+pub const HANDHELD_HINT_OPTIONS: &str = "handheld.hint.options";
+pub const HANDHELD_HINT_BACK: &str = "handheld.hint.back";
+pub const HANDHELD_HINT_JUMP: &str = "handheld.hint.jump";
+pub const HANDHELD_HINT_CHOOSE: &str = "handheld.hint.choose";
+pub const HANDHELD_HINT_CHANGE: &str = "handheld.hint.change";
+pub const HANDHELD_HINT_REBIND: &str = "handheld.hint.rebind";
+pub const HANDHELD_HINT_CANCEL: &str = "handheld.hint.cancel";
+pub const HANDHELD_EXIT_HOLD: &str = "handheld.exit_hold";
+pub const HANDHELD_MENU_TITLE: &str = "handheld.menu.title";
+pub const HANDHELD_MENU_RESUME: &str = "handheld.menu.resume";
+pub const HANDHELD_MENU_SAVE_STATE: &str = "handheld.menu.save_state";
+pub const HANDHELD_MENU_LOAD_STATE: &str = "handheld.menu.load_state";
+pub const HANDHELD_MENU_FAST_FORWARD: &str = "handheld.menu.fast_forward";
+pub const HANDHELD_MENU_QUIT_TO_LIST: &str = "handheld.menu.quit_to_list";
+pub const HANDHELD_MENU_EXIT: &str = "handheld.menu.exit";
+pub const HANDHELD_OPTION_RENDER_SCALE: &str = "handheld.option.render_scale";
+pub const HANDHELD_OPTION_FRAME_CAP: &str = "handheld.option.frame_cap";
+pub const HANDHELD_OPTION_CAMERA: &str = "handheld.option.camera";
+pub const HANDHELD_OPTION_CONTROLS: &str = "handheld.option.controls";
+pub const HANDHELD_OPTION_REGION: &str = "handheld.option.region";
+pub const HANDHELD_OPTION_OVERSCAN: &str = "handheld.option.overscan";
+pub const HANDHELD_OPTION_CATCH_UP: &str = "handheld.option.catch_up";
+pub const HANDHELD_OPTION_PIPELINE: &str = "handheld.option.pipeline";
+pub const HANDHELD_OPTION_OPTIMIZATIONS: &str = "handheld.option.optimizations";
+pub const HANDHELD_REGION_AUTO: &str = "handheld.region.auto";
+pub const HANDHELD_OPTION_TOUCH_PAD: &str = "handheld.option.touch_pad";
+pub const HANDHELD_OPTION_ADVANCED: &str = "handheld.option.advanced";
+pub const HANDHELD_TOUCH_PAD_ON: &str = "handheld.touch_pad.on";
+pub const HANDHELD_TOUCH_PAD_OFF: &str = "handheld.touch_pad.off";
+pub const HANDHELD_CAMERA_RESET: &str = "handheld.camera.reset";
+pub const HANDHELD_CAMERA_KEPT: &str = "handheld.camera.kept";
+pub const HANDHELD_CAMERA_RESTORED: &str = "handheld.camera.restored";
+pub const HANDHELD_CONTROLS_PLAYER: &str = "handheld.controls.player";
+pub const HANDHELD_STATES_SAVE_TITLE: &str = "handheld.states.save_title";
+pub const HANDHELD_STATES_LOAD_TITLE: &str = "handheld.states.load_title";
+pub const HANDHELD_STATES_NO_PICTURE: &str = "handheld.states.no_picture";
+pub const HANDHELD_HINT_SAVE_HERE: &str = "handheld.hint.save_here";
+pub const HANDHELD_HINT_LOAD: &str = "handheld.hint.load";
+pub const HANDHELD_HINT_PAGE: &str = "handheld.hint.page";
+pub const HANDHELD_GAME_OPTIONS_TITLE: &str = "handheld.game_options.title";
+pub const HANDHELD_GAME_OPTIONS_RESET: &str = "handheld.game_options.reset";
+pub const HANDHELD_USE_GLOBAL: &str = "handheld.game_options.use_global";
+/// RO-3 §2 rule 1: what a console row of a game's options shows while it uses the global value.
+/// Shorter than [`HANDHELD_USE_GLOBAL`], which the desktop menu still uses for its entry.
+pub const HANDHELD_GLOBAL_VALUE: &str = "handheld.game_options.global";
+/// RO-3 §2 rule 2: how many values of its own a game has under a row that opens a page.
+pub const HANDHELD_OWN_COUNT: &str = "handheld.game_options.own_count";
+/// Q-103, the console's own, shorter note: Run-ahead is held at 0 by this game's scripts.
+pub const HANDHELD_RUN_AHEAD_FORCED: &str = "handheld.options.run_ahead_forced";
+pub const HANDHELD_HINT_GAME_OPTIONS: &str = "handheld.hint.game_options";
+/// L2 on the home screen: the favourite mark of the selected game (AMD-053 REQ-UI-210).
+pub const HANDHELD_HINT_FAVORITE: &str = "handheld.hint.favorite";
+pub const HANDHELD_HINT_RESET_ALL: &str = "handheld.hint.reset_all";
+pub const SHORTCUT_HOME: &str = "shortcut.home";
+pub const HACKS_TITLE: &str = "hacks.title";
+pub const HACKS_NONE: &str = "hacks.none";
+pub const HACKS_PATCH_NOTE: &str = "hacks.patch_note";
+pub const HACKS_PATCH_LIVE_NOTE: &str = "hacks.patch_live_note";
+pub const HACK_WIDESCREEN: &str = "hacks.widescreen";
+pub const HACK_RATIO: &str = "hacks.ratio";
+pub const HACK_MARGIN: &str = "hacks.margin";
+/// The advanced mode of a game's widescreen.
+pub const HACK_ADVANCED: &str = "hacks.advanced";
+pub const HACK_ON: &str = "hacks.on";
+/// What a game a widescreen hack is made for, but not for this ROM of it, is told.
+pub const HACKS_OTHER_ROM: &str = "hacks.other_rom";
+/// The forcing of the patch of another ROM of the game: the row, the question, its button, and
+/// what is said when the size does not allow it.
+pub const HACK_FORCE: &str = "hacks.force";
+pub const HACKS_FORCE_QUESTION: &str = "hacks.force_question";
+pub const HACKS_FORCE_BUTTON: &str = "hacks.force_button";
+pub const HACKS_FORCE_SIZE: &str = "hacks.force_size";
+/// What is said when the hack is a hack pack, which is never forced: its signatures decide.
+pub const HACKS_PACK_SIGNATURES: &str = "hacks.pack_signatures";
+pub const HACK_COMPAT: &str = "hack.compat";
+pub const HACK_COMPAT_ORIGINAL: &str = "hack.compat.original";
+pub const HACK_COMPAT_FULL: &str = "hack.compat.full";
+pub const HACK_COMPAT_PARTIAL: &str = "hack.compat.partial";
+pub const HACK_COMPAT_NONE: &str = "hack.compat.none";
+pub const HACKS_COMPAT_ORIGINAL: &str = "hacks.compat.original";
+pub const HACKS_COMPAT_FULL: &str = "hacks.compat.full";
+pub const HACKS_COMPAT_FULL_BODY: &str = "hacks.compat.full_body";
+pub const HACKS_COMPAT_PARTIAL: &str = "hacks.compat.partial";
+pub const HACKS_COMPAT_PARTIAL_BODY: &str = "hacks.compat.partial_body";
+pub const HACKS_COMPAT_NONE: &str = "hacks.compat.none";
+pub const HACKS_COMPAT_MAPPER: &str = "hacks.compat.mapper";
+pub const HACKS_COMPAT_REGION: &str = "hacks.compat.region";
+pub const HACKS_COMPAT_PART_DIFFERS: &str = "hacks.compat.part_differs";
+pub const HACKS_COMPAT_PART_NEEDS: &str = "hacks.compat.part_needs";
+pub const HACKS_COMPAT_EXPECTED: &str = "hacks.compat.expected";
+/// What the hacks of a game say once the patch of another ROM of it is forced.
+pub const HACKS_FORCED_NOTE: &str = "hacks.forced_note";
+pub const HACK_OFF: &str = "hacks.off";
+pub const MENU_HACKS: &str = "menu.hacks";
+pub const MENU_WIDESCREEN_SETTINGS: &str = "menu.widescreen_settings";
+pub const MENU_AIDS: &str = "menu.aids";
+pub const HANDHELD_HOLD_FOR_SETTINGS: &str = "handheld.hold_for_settings";
+pub const HANDHELD_HINT_HACKS: &str = "handheld.hint.hacks";
+
+// ------------------------------------------------- commands of REQ-UI-205
+pub const COMMAND_PREFIX: &str = "cmd.";
+
+// --------------------------------------------- labels of SPEC-09 settings
+pub const SETTING_PREFIX: &str = "setting.";
+
+// ------------------------------------------- labels of enumerated values
+pub const OPTION_PREFIX: &str = "option.";
+
+// -------------------- the detailed tooltip of every shown setting (RO-1 point 3)
+/// The paragraph the desktop options window shows on hover, keyed by the setting's stable key.
+///
+/// It is the detail RO-1 adds **beside** the short `help.<key>` sentence the amendments give,
+/// never a copy of it: `ui::options::tooltip_of` puts the two together, the amendment's words
+/// first. A setting the amendments give no sentence for has the paragraph alone.
+///
+/// Desktop only: the console pages and Android have no hover.
+pub const DETAIL_PREFIX: &str = "detail.";
+
+/// The label key of the command named `command`.
+#[must_use]
+pub fn command(command: &str) -> String {
+    format!("{COMMAND_PREFIX}{command}")
+}
+
+/// The label key of the setting whose stable key is `key`.
+#[must_use]
+pub fn setting(key: &str) -> String {
+    format!("{SETTING_PREFIX}{key}")
+}
+
+/// The label key of the domain value `label` of SPEC-09 §4.1.
+#[must_use]
+pub fn option(label: &str) -> String {
+    format!("{OPTION_PREFIX}{label}")
+}
+
+/// The detailed-tooltip key of the setting whose stable key is `key`.
+#[must_use]
+pub fn detail(key: &str) -> String {
+    format!("{DETAIL_PREFIX}{key}")
+}
+
+// ----------------------------------------------------------- RetroAchievements (Rust-only)
+/// Tab of the options window: RetroAchievements.
+pub const TAB_ACHIEVEMENTS: &str = "options.tab.achievements";
+// RO-2 part 1 removed `ACH_MENU` ("RetroAchievements", the title of the menu of the bar): the
+// menu is gone, and the key was word for word `TAB_ACHIEVEMENTS` in both languages.
+/// Its entry, and the window, of the game's achievements.
+pub const ACH_LIST: &str = "achievements.list";
+/// What the list says without a game's achievements.
+pub const ACH_LIST_EMPTY: &str = "achievements.list_empty";
+/// The grid of a game's achievements while the list asks the server.
+pub const ACH_GRID_STUDYING: &str = "achievements.grid_studying";
+/// The grid of a game's achievements while nobody is signed in.
+pub const ACH_GRID_SIGNED_OUT: &str = "achievements.grid_signed_out";
+/// The grid of a game RetroAchievements does not know.
+pub const ACH_GRID_NONE: &str = "achievements.grid_none";
+/// Its entry that opens the RetroAchievements options.
+pub const ACH_ACCOUNT: &str = "achievements.account";
+/// The account: nobody signed in.
+pub const ACH_SIGNED_OUT: &str = "achievements.signed_out";
+/// The account: a sign-in under way.
+pub const ACH_SIGNING_IN: &str = "achievements.signing_in";
+/// The account: {0} the name, {1} the softcore points.
+pub const ACH_SIGNED_IN: &str = "achievements.signed_in";
+/// Field of the sign-in.
+pub const ACH_USERNAME: &str = "achievements.username";
+/// Field of the sign-in.
+pub const ACH_PASSWORD: &str = "achievements.password";
+/// Button of the sign-in.
+pub const ACH_SIGN_IN: &str = "achievements.sign_in";
+/// Button that signs out.
+pub const ACH_SIGN_OUT: &str = "achievements.sign_out";
+/// What the sign-in does with the password.
+pub const ACH_PASSWORD_HINT: &str = "achievements.password_hint";
+/// What softcore means.
+pub const ACH_SOFTCORE_HINT: &str = "achievements.softcore_hint";
+/// Why the sign-in is not offered.
+pub const ACH_TURN_ON_HINT: &str = "achievements.turn_on_hint";
+/// First line of the pop-up of an unlock.
+pub const ACH_UNLOCKED: &str = "achievements.unlocked";
+/// Its second line: {0} the title, {1} the points.
+pub const ACH_UNLOCKED_TEXT: &str = "achievements.unlocked_text";
+/// First line of the pop-up of a completed game.
+pub const ACH_COMPLETED: &str = "achievements.completed";
+/// Its second line: {0} the game.
+pub const ACH_COMPLETED_TEXT: &str = "achievements.completed_text";
+/// Second line of the pop-up of a game: {0} of {1} unlocked, {2} of {3} points.
+pub const ACH_GAME_SUMMARY: &str = "achievements.game_summary";
+/// The share of a game's achievements unlocked: "{0} %".
+pub const ACH_PERCENT: &str = "achievements.percent";
+/// Same, for a game without achievements.
+pub const ACH_GAME_NO_ACHIEVEMENTS: &str = "achievements.game_no_achievements";
+/// Notification: the ROM is not known.
+pub const ACH_GAME_UNKNOWN: &str = "achievements.game_unknown";
+/// Notification: {0} the reason.
+pub const ACH_GAME_FAILED: &str = "achievements.game_failed";
+/// Notification of a sign-in: {0} the name, {1} the points.
+pub const ACH_WELCOME: &str = "achievements.welcome";
+/// Notification: {0} the server's reason.
+pub const ACH_SIGN_IN_FAILED: &str = "achievements.sign_in_failed";
+/// Notification: {0} the server's message.
+pub const ACH_SERVER_ERROR: &str = "achievements.server_error";
+/// Notification: unlocks wait for the server.
+pub const ACH_DISCONNECTED: &str = "achievements.disconnected";
+/// Notification: they reached it.
+pub const ACH_RECONNECTED: &str = "achievements.reconnected";
+/// Indicator of a challenge under way.
+pub const ACH_CHALLENGE: &str = "achievements.challenge";
+/// Points of an achievement in the list: {0}.
+pub const ACH_POINTS: &str = "achievements.points";
+/// Share of players who have it: {0}.
+pub const ACH_RARITY: &str = "achievements.rarity";
+/// Group of the list.
+pub const ACH_BUCKET_LOCKED: &str = "achievements.bucket.locked";
+/// Group of the list.
+pub const ACH_BUCKET_UNLOCKED: &str = "achievements.bucket.unlocked";
+/// Group of the list.
+pub const ACH_BUCKET_RECENT: &str = "achievements.bucket.recent";
+/// Group of the list.
+pub const ACH_BUCKET_CHALLENGE: &str = "achievements.bucket.challenge";
+/// Group of the list.
+pub const ACH_BUCKET_ALMOST: &str = "achievements.bucket.almost";
+/// Group of the list.
+pub const ACH_BUCKET_UNOFFICIAL: &str = "achievements.bucket.unofficial";
+/// Group of the list.
+pub const ACH_BUCKET_UNSUPPORTED: &str = "achievements.bucket.unsupported";
+/// Group of the list.
+pub const ACH_BUCKET_UNSYNCED: &str = "achievements.bucket.unsynced";
+/// Hint of the keyboard on the screen: types the key.
+pub const ACH_KEY_TYPE: &str = "achievements.key.type";
+/// Hint and key: removes the last character.
+pub const ACH_KEY_DELETE: &str = "achievements.key.delete";
+/// Hint: the next layout of keys.
+pub const ACH_KEY_SHIFT: &str = "achievements.key.shift";
+/// Key: a space.
+pub const ACH_KEY_SPACE: &str = "achievements.key.space";
+/// Hint and key: the text is done.
+pub const ACH_KEY_DONE: &str = "achievements.key.done";
+
+/// Every key published above, for the parity tests (the prefixes are not keys).
+pub const PUBLISHED: &[&str] = &[
+    MENU_FILE,
+    MENU_EMULATION,
+    MENU_VIDEO,
+    MENU_AUDIO,
+    MENU_TOOLS,
+    MENU_RECENT_ROMS,
+    MENU_LOAD_STATE,
+    MENU_SAVE_STATE,
+    MENU_DELETE_STATE,
+    MENU_SPEED,
+    MENU_REGION,
+    MENU_PORTS,
+    MENU_CAMERA_MODE,
+    MENU_VOLUME,
+    MENU_NOTHING_HERE,
+    MENU_REGION_AUTO,
+    MENU_PORT,
+    MENU_PORT_CONTROLLER,
+    MENU_PORT_ZAPPER,
+    MENU_CAMERA_ORBITAL,
+    MENU_CAMERA_FIRST_PERSON,
+    SLOT_EMPTY,
+    SLOT_OTHER_PATCH,
+    SLOT_OTHER_HACK_VERSION,
+    MENU_MOVIES,
+    WINDOW_MOVIE_NOTE,
+    MOVIE_NOTE_WRITE,
+    WINDOW_ROMS_FOLDER,
+    BUTTON_BROWSE,
+    ROMS_FOLDER_HINT,
+    SLOT_QUICK,
+    SLOT_PREFIX,
+    WINDOW_OPTIONS,
+    WINDOW_KEY_CONFIG,
+    WINDOW_ABOUT,
+    WINDOW_PROFILE_CHOOSER,
+    WINDOW_OPEN_ROM,
+    WINDOW_OPEN_MOVIE,
+    WINDOW_IMPORT_PROFILE,
+    WINDOW_IMPORT_COVER,
+    WINDOW_IMPORT_THREE_DSEN,
+    BUTTON_CLOSE,
+    BUTTON_CANCEL,
+    BUTTON_OPEN,
+    BUTTON_LAUNCH,
+    BUTTON_PARENT_FOLDER,
+    BUTTON_RESET_DEFAULTS,
+    BUTTON_RESET_BINDINGS,
+    BUTTON_STOP_BINDING,
+    BUTTON_YES,
+    BUTTON_NO,
+    BUTTON_OK,
+    BUTTON_REPLACE,
+    DIALOG_IMPORT_REFUSED_TITLE,
+    DIALOG_IMPORT_REFUSED_BODY,
+    DIALOG_IMPORT_BUILT_IN_TITLE,
+    DIALOG_IMPORT_BUILT_IN_BODY,
+    DIALOG_IMPORT_REPLACE_TITLE,
+    DIALOG_IMPORT_REPLACE_BODY,
+    NOTIFY_ROLL_BACK,
+    NOTIFY_FAST_FORWARD,
+    NOTIFY_QUICK_SAVE,
+    NOTIFY_QUICK_LOAD,
+    NOTIFY_CORRUPTED_ZIP,
+    NOTIFY_STATE_OTHER_PATCH,
+    NOTIFY_STATE_OTHER_HACK_VERSION,
+    CONFIRM_TURN_HACK_ON,
+    CONFIRM_TURN_HACK_OFF,
+    CONFIRM_OTHER_COMPONENTS,
+    BUTTON_LOAD_AS_SET,
+    BUTTON_LOAD_ALIGNED,
+    NOTIFY_UNCOMPRESSION_FAILED,
+    NOTIFY_INVALID_ROM,
+    NOTIFY_GAME_MISSING,
+    NOTIFY_LOADING_TIMED_OUT,
+    NOTIFY_FOREIGN_CORE,
+    NOTIFY_NOT_A3DN_FILE,
+    NOTIFY_UNSUPPORTED3DN_VERSION,
+    NOTIFY_OBSOLETE_PROFILE_FORMAT,
+    NOTIFY_SETTINGS_UNREADABLE,
+    NOTIFY_SETTINGS_NEWER_VERSION,
+    NOTIFY_GAME_LIST_UNREADABLE,
+    NOTIFY_GAME_LIST_NEWER_VERSION,
+    NOTIFY_BINDINGS_UNREADABLE,
+    NOTIFY_BINDINGS_NEWER_VERSION,
+    NOTIFY_THREE_DSEN_SUMMARY,
+    CONFIRM_DELETE_GAME,
+    CONFIRM_DELETE_SLOT,
+    HINT_IMPORT_THREE_DSEN,
+    HINT_RES_SCALE_DIRECT,
+    HINT_RUN_AHEAD_FORCED,
+    HINT_PRESS_ACONTROL,
+    HINT_CLICK_ACELL,
+    HINT_AT_NEXT_START,
+    HINT_AT_NEXT_LOAD,
+    HINT_PROFILE_SETTING,
+    // RO-1: the groups of the window, and the reasons a row is greyed out.
+    GROUP_RESOLUTION,
+    GROUP_PERFORMANCE,
+    GROUP_OVERSCAN,
+    GROUP_WIDESCREEN,
+    GROUP_REGION,
+    GROUP_ADVANCED,
+    GROUP_GEOMETRY,
+    // RO-3: the pages and the group titles the console tree adds.
+    PAGE_ENHANCED_EFFECTS,
+    PAGE_GEOMETRY,
+    GROUP_REFLECTIONS,
+    GROUP_AMBIENT_OCCLUSION,
+    COMPACT_OVERSCAN_NTSC,
+    COMPACT_OVERSCAN_PAL,
+    CAPTION_TOP,
+    CAPTION_BOTTOM,
+    CAPTION_LEFT,
+    CAPTION_RIGHT,
+    HINT_RES_SCALE_AUTOMATIC,
+    HINT_NEEDS_SHADOWS,
+    HINT_NEEDS_LUA_OPTIMIZED,
+    HINT_BG_COLOR_UNUSED,
+    HINT_NEEDS_ARC,
+    HINT_NEEDS_CURVATURE,
+    HINT_REGION_AUTOMATIC,
+    HINT_SINGLE_CORE,
+    HINT_NEEDS_ACHIEVEMENTS,
+    HINT_STYLE_CLASSIC,
+    HINT_MENU_BUTTON_UNUSED,
+    // AUDIO-2: the fallback to the output of v0.4.2, and why the latency row is greyed with it.
+    HELP_CLASSIC_AUDIO_OUTPUT,
+    HINT_CLASSIC_AUDIO,
+    // AMD-043 §6 and AMD-046 §3: the help sentences of the curvature settings.
+    HELP_BEND_LR,
+    HELP_BEND_TB,
+    HELP_ARC_H,
+    HELP_ARC_CENTER,
+    HELP_BEND_2D_MODE,
+    HELP_BACKDROP_LIGHTING,
+    // AMD-055 §4: the group, its thirteen help sentences and the note on the greyed Thickness.
+    GROUP_STYLE,
+    HELP_VISUAL_STYLE,
+    HELP_STYLE_AO,
+    HELP_STYLE_AO_STRENGTH,
+    HELP_STYLE_AO_RADIUS,
+    HELP_STYLE_AO_THICKNESS,
+    HELP_STYLE_AO_QUALITY,
+    HELP_STYLE_PIXEL_SHADOW,
+    HELP_STYLE_VOXEL_GRID,
+    HELP_STYLE_REFLECTIONS,
+    HELP_STYLE_SSR_SHINE,
+    HELP_STYLE_SSR_CLARITY,
+    HELP_STYLE_SSR_LENGTH,
+    HELP_STYLE_SSR_QUALITY,
+    HINT_THICKNESS_NO_EFFECT,
+    FIELD_SEARCH,
+    COLUMN_ACTION,
+    COLUMN_KEYBOARD,
+    COLUMN_GAMEPAD,
+    VALUE_NO_GAMEPAD,
+    WELCOME_HINT,
+    WELCOME_RECENT,
+    WELCOME_NO_RECENT,
+    ABOUT_LICENCE,
+    ABOUT_CREDIT_INSPIRED,
+    ABOUT_CREDIT_ADAPTED,
+    ABOUT_CREDIT_DISCLAIMER,
+    ABOUT_VERSION_PREFIX,
+    TAB_DISPLAY,
+    TAB_NES_PICTURE,
+    TAB_RENDER_3D,
+    TAB_CAMERA,
+    TAB_LIGHT,
+    TAB_AUDIO,
+    TAB_EMULATION,
+    TAB_INTERFACE,
+    KEYS_PLAYER_ONE,
+    KEYS_PLAYER_TWO,
+    KEYS_CAMERA,
+    KEYS_HOTKEYS,
+    KEYS_COMMANDS,
+    BROWSER_COMPUTER,
+    BROWSER_FILTER_NES_ROMS,
+    BROWSER_FILTER_NES_FILES,
+    BROWSER_FILTER_ZIP,
+    BROWSER_FILTER_PROFILES,
+    BROWSER_FILTER_BUNDLE,
+    BROWSER_FILTER_PNG,
+    BROWSER_FILTER_MOVIES,
+    BROWSER_FILTER_ALL,
+    MOVIE_BAR_PLAY,
+    MOVIE_BAR_PAUSE,
+    MOVIE_BAR_SEEKING,
+    PENS_HAND,
+    PENS_UNDO,
+    PENS_CLEAR,
+    PENS_RED,
+    PENS_BLUE,
+    PENS_BLACK,
+    PENS_WHITE,
+    PENS_VIEW_2D,
+    PENS_VIEW_ZAXNES,
+    PENS_VIEW_3DSEN,
+    PENS_VIEW_HANDHELD,
+    PROFILE_TWO_DIMENSIONAL,
+    PROFILE_SOURCE_TWO_DIMENSIONAL,
+    PROFILE_SOURCE_DEFAULT_THREE_D,
+    PROFILE_SOURCE_BUILT_IN,
+    PROFILE_SOURCE_PROGRAM_FOLDER,
+    PROFILE_SOURCE_USER,
+    SHORTCUT_ALT_ENTER,
+    SHORTCUT_SHIFT_PREFIX,
+    SHORTCUT_QUICK_SAVE,
+    SHORTCUT_QUICK_LOAD,
+    SHORTCUT_FAST_FORWARD,
+    SHORTCUT_ROLLBACK,
+    SHORTCUT_SAVE_SLOTS,
+    SHORTCUT_LOAD_SLOTS,
+    SHORTCUT_LONG_PRESS_MENU,
+    HANDHELD_GAMES_TITLE,
+    HANDHELD_ROMS_EMPTY,
+    HANDHELD_TAG_2D,
+    HANDHELD_PROFILE_FOR,
+    HANDHELD_HINT_PLAY,
+    HANDHELD_HINT_PROFILE,
+    HANDHELD_HINT_OPTIONS,
+    HANDHELD_HINT_BACK,
+    HANDHELD_HINT_JUMP,
+    HANDHELD_HINT_CHOOSE,
+    HANDHELD_HINT_CHANGE,
+    HANDHELD_HINT_REBIND,
+    HANDHELD_HINT_CANCEL,
+    HANDHELD_EXIT_HOLD,
+    HANDHELD_MENU_TITLE,
+    HANDHELD_MENU_RESUME,
+    HANDHELD_MENU_SAVE_STATE,
+    HANDHELD_MENU_LOAD_STATE,
+    HANDHELD_MENU_FAST_FORWARD,
+    HANDHELD_MENU_QUIT_TO_LIST,
+    HANDHELD_MENU_EXIT,
+    HANDHELD_OPTION_RENDER_SCALE,
+    HANDHELD_OPTION_FRAME_CAP,
+    HANDHELD_OPTION_CAMERA,
+    HANDHELD_OPTION_CONTROLS,
+    HANDHELD_OPTION_REGION,
+    HANDHELD_OPTION_OVERSCAN,
+    HANDHELD_OPTION_CATCH_UP,
+    HANDHELD_OPTION_PIPELINE,
+    HANDHELD_OPTION_OPTIMIZATIONS,
+    HANDHELD_REGION_AUTO,
+    HANDHELD_OPTION_TOUCH_PAD,
+    HANDHELD_OPTION_ADVANCED,
+    HANDHELD_TOUCH_PAD_ON,
+    HANDHELD_TOUCH_PAD_OFF,
+    HANDHELD_CAMERA_RESET,
+    HANDHELD_CAMERA_KEPT,
+    HANDHELD_CAMERA_RESTORED,
+    HANDHELD_CONTROLS_PLAYER,
+    HANDHELD_STATES_SAVE_TITLE,
+    HANDHELD_STATES_LOAD_TITLE,
+    HANDHELD_STATES_NO_PICTURE,
+    HANDHELD_HINT_SAVE_HERE,
+    HANDHELD_HINT_LOAD,
+    HANDHELD_HINT_PAGE,
+    HANDHELD_GAME_OPTIONS_TITLE,
+    HANDHELD_GAME_OPTIONS_RESET,
+    HANDHELD_USE_GLOBAL,
+    HANDHELD_GLOBAL_VALUE,
+    HANDHELD_OWN_COUNT,
+    HANDHELD_RUN_AHEAD_FORCED,
+    HANDHELD_HINT_GAME_OPTIONS,
+    HANDHELD_HINT_FAVORITE,
+    HANDHELD_HINT_RESET_ALL,
+    SHORTCUT_HOME,
+    HACKS_TITLE,
+    HACKS_NONE,
+    HACKS_PATCH_NOTE,
+    HACKS_PATCH_LIVE_NOTE,
+    HACK_ADVANCED,
+    HACK_WIDESCREEN,
+    HACK_RATIO,
+    HACK_MARGIN,
+    HACK_ON,
+    HACKS_OTHER_ROM,
+    HACK_FORCE,
+    HACKS_FORCE_QUESTION,
+    HACKS_FORCE_BUTTON,
+    HACKS_FORCE_SIZE,
+    HACKS_PACK_SIGNATURES,
+    HACK_COMPAT,
+    HACK_COMPAT_ORIGINAL,
+    HACK_COMPAT_FULL,
+    HACK_COMPAT_PARTIAL,
+    HACK_COMPAT_NONE,
+    HACKS_COMPAT_ORIGINAL,
+    HACKS_COMPAT_FULL,
+    HACKS_COMPAT_FULL_BODY,
+    HACKS_COMPAT_PARTIAL,
+    HACKS_COMPAT_PARTIAL_BODY,
+    HACKS_COMPAT_NONE,
+    HACKS_COMPAT_MAPPER,
+    HACKS_COMPAT_REGION,
+    HACKS_COMPAT_PART_DIFFERS,
+    HACKS_COMPAT_PART_NEEDS,
+    HACKS_COMPAT_EXPECTED,
+    HACKS_FORCED_NOTE,
+    HACK_OFF,
+    MENU_HACKS,
+    MENU_WIDESCREEN_SETTINGS,
+    MENU_AIDS,
+    HANDHELD_HOLD_FOR_SETTINGS,
+    HANDHELD_HINT_HACKS,
+    TAB_ACHIEVEMENTS,
+    ACH_LIST,
+    ACH_LIST_EMPTY,
+    ACH_GRID_STUDYING,
+    ACH_GRID_SIGNED_OUT,
+    ACH_GRID_NONE,
+    ACH_ACCOUNT,
+    ACH_SIGNED_OUT,
+    ACH_SIGNING_IN,
+    ACH_SIGNED_IN,
+    ACH_USERNAME,
+    ACH_PASSWORD,
+    ACH_SIGN_IN,
+    ACH_SIGN_OUT,
+    ACH_PASSWORD_HINT,
+    ACH_SOFTCORE_HINT,
+    ACH_TURN_ON_HINT,
+    ACH_UNLOCKED,
+    ACH_UNLOCKED_TEXT,
+    ACH_COMPLETED,
+    ACH_COMPLETED_TEXT,
+    ACH_GAME_SUMMARY,
+    ACH_PERCENT,
+    ACH_GAME_NO_ACHIEVEMENTS,
+    ACH_GAME_UNKNOWN,
+    ACH_GAME_FAILED,
+    ACH_WELCOME,
+    ACH_SIGN_IN_FAILED,
+    ACH_SERVER_ERROR,
+    ACH_DISCONNECTED,
+    ACH_RECONNECTED,
+    ACH_CHALLENGE,
+    ACH_POINTS,
+    ACH_RARITY,
+    ACH_BUCKET_LOCKED,
+    ACH_BUCKET_UNLOCKED,
+    ACH_BUCKET_RECENT,
+    ACH_BUCKET_CHALLENGE,
+    ACH_BUCKET_ALMOST,
+    ACH_BUCKET_UNOFFICIAL,
+    ACH_BUCKET_UNSUPPORTED,
+    ACH_BUCKET_UNSYNCED,
+    ACH_KEY_TYPE,
+    ACH_KEY_DELETE,
+    ACH_KEY_SHIFT,
+    ACH_KEY_SPACE,
+    ACH_KEY_DONE,
+];

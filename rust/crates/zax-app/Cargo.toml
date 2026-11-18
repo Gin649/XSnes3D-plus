@@ -1,0 +1,70 @@
+[package]
+name = "zax-app"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "zaxnes"
+path = "src/main.rs"
+
+[features]
+# The platform's own file dialog (Windows Explorer, the XDG portal on Linux) in place of the
+# ImGui browser; the browser stays as the fallback at run time.
+default = ["native-dialog"]
+native-dialog = ["dep:rfd"]
+# Statically links SDL2 (Windows, aarch64); forwarded to zax-platform.
+bundled = ["zax-platform/bundled"]
+# Links the firmware's libSDL2-2.0.so.0 dynamically (handhelds); forwarded to zax-platform.
+firmware-sdl = ["zax-platform/firmware-sdl"]
+# Android: SDL2 built from source as a shared library, shipped in the APK next to the app's
+# (`libSDL2.so`, which holds SDL's Java bindings); forwarded to zax-platform.
+android = ["zax-platform/android"]
+# The Vulkan and DirectX 12 renderer (`video.backend`, `--backend`), desktop only: the handheld
+# package never turns it on.
+wgpu = ["dep:wgpu", "zax-render/wgpu", "zax-platform/wgpu"]
+# RetroArch slang shaders on the game picture (prototype: `ZAXNES_SHADER=<preset.slangp>`).
+shaders = ["wgpu", "zax-platform/shaders"]
+
+[dependencies]
+zax-snes = { path = "../zax-snes" }
+zax-settings = { path = "../zax-settings" }
+zax-profiles = { path = "../zax-profiles" }
+zax-scripting = { path = "../zax-scripting" }
+zax-engine3d = { path = "../zax-engine3d" }
+zax-render = { path = "../zax-render" }
+zax-platform = { path = "../zax-platform" }
+zax-achievements = { path = "../zax-achievements" }
+serde = { workspace = true }
+serde_json = { workspace = true }
+thiserror = "2"
+time = { version = "0.3", features = ["formatting", "macros", "local-offset"] }
+sha1 = { version = "0.11.0", default-features = false }
+zip = { version = "7.3.0", default-features = false, features = ["deflate"] }
+sdl2 = "0.38"
+glow = "0.16"
+wgpu = { version = "30.0.0", optional = true, default-features = false, features = [
+    "std",
+    "parking_lot",
+    "dx12",
+    "vulkan",
+    "wgsl",
+] }
+sys-locale = "0.3.2"
+rfd = { version = "0.17", default-features = false, features = ["xdg-portal"], optional = true }
+imgui = { version = "0.12", features = ["tables-api"] }
+jpeg-encoder = "0.7"
+png = "0.17"
+
+[dev-dependencies]
+rstest = "0.26"
+walkdir = "2"
+
+[build-dependencies]
+# The slang shader pack (feature `shaders`), zipped into the executable by build.rs.
+zip = { version = "7.3.0", default-features = false, features = ["deflate"] }

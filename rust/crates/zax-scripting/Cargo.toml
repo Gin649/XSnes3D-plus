@@ -1,0 +1,22 @@
+[package]
+name = "zax-scripting"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+mlua = { version = "0.11", features = ["lua54", "vendored"] }
+getrandom = "0.3"
+thiserror = "2"
+zax-engine3d = { path = "../zax-engine3d" }
+zax-profiles = { path = "../zax-profiles" }
+zax-settings = { path = "../zax-settings" }
+
+
+[dev-dependencies]
+zax-snes = { path = "../zax-snes" }
