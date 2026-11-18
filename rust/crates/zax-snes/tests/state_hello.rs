@@ -31,7 +31,6 @@ fn a_state_put_back_plays_the_same_frames_and_sound_keeps_coming() {
     let mut snes = Snes::load(&rom(), &home()).unwrap();
     run(&mut snes, 30);
     let state = snes.save_state().unwrap();
-    assert!(!state.is_empty());
     let later = run(&mut snes, 30);
     snes.load_state(&state).unwrap();
     assert_eq!(

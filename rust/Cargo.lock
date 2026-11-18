@@ -2784,8 +2784,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1ebf944e87a7c253233ad6766e082e3cd714b5d03812acc24c318f549614536e"
 
 [[package]]
+name = "xsnes-preview"
+version = "0.1.0"
+dependencies = [
+ "png 0.17.16",
+ "zax-engine3d",
+ "zax-profiles",
+ "zax-render",
+ "zax-settings",
+ "zax-snes",
+]
+
+[[package]]
 name = "zax-achievements"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "cc",
  "ureq",
@@ -2793,14 +2805,14 @@ dependencies = [
 
 [[package]]
 name = "zax-android"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "zax-app",
 ]
 
 [[package]]
 name = "zax-app"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "glow",
  "imgui",
@@ -2819,59 +2831,27 @@ dependencies = [
  "wgpu",
  "zax-achievements",
  "zax-engine3d",
- "zax-nes",
  "zax-platform",
  "zax-profiles",
  "zax-render",
  "zax-scripting",
  "zax-settings",
+ "zax-snes",
  "zip",
 ]
 
 [[package]]
 name = "zax-engine3d"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "rstest",
  "thiserror 2.0.21",
- "zax-nes",
  "zax-profiles",
-]
-
-[[package]]
-name = "zax-goldens"
-version = "0.5.0"
-dependencies = [
- "serde",
- "serde_json",
-]
-
-[[package]]
-name = "zax-harness"
-version = "0.5.0"
-dependencies = [
- "serde_json",
- "sha2",
- "zax-engine3d",
- "zax-goldens",
- "zax-nes",
- "zax-profiles",
- "zax-render",
- "zax-scripting",
- "zax-settings",
-]
-
-[[package]]
-name = "zax-nes"
-version = "0.5.0"
-dependencies = [
- "sha2",
- "zax-goldens",
 ]
 
 [[package]]
 name = "zax-platform"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "glow",
  "imgui",
@@ -2886,7 +2866,7 @@ dependencies = [
 
 [[package]]
 name = "zax-profiles"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "getrandom 0.3.4",
  "rstest",
@@ -2900,7 +2880,7 @@ dependencies = [
 
 [[package]]
 name = "zax-render"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "flate2",
  "glow",
@@ -2913,32 +2893,41 @@ dependencies = [
  "wgpu",
  "windows-sys 0.61.2",
  "zax-engine3d",
- "zax-nes",
  "zax-profiles",
  "zax-render",
 ]
 
 [[package]]
 name = "zax-scripting"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "getrandom 0.3.4",
  "mlua",
  "thiserror 2.0.21",
  "zax-engine3d",
- "zax-nes",
  "zax-profiles",
  "zax-settings",
+ "zax-snes",
 ]
 
 [[package]]
 name = "zax-settings"
-version = "0.5.0"
+version = "0.1.0"
 dependencies = [
  "rstest",
  "serde_json",
  "thiserror 2.0.21",
  "time",
+]
+
+[[package]]
+name = "zax-snes"
+version = "0.1.0"
+dependencies = [
+ "cc",
+ "png 0.17.16",
+ "zax-engine3d",
+ "zax-profiles",
 ]
 
 [[package]]
