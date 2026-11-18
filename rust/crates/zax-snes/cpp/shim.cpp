@@ -10,6 +10,7 @@
 #include <sstream>
 #include <string>
 #include <vector>
+#include "Lua/lua.hpp"
 #include "Shared/Emulator.h"
 #include "Shared/EmuSettings.h"
 #include "Shared/SettingTypes.h"
@@ -358,3 +359,12 @@ void xs_destroy(XsSnes* snes)
 }
 
 } // extern "C"
+
+// Mesen's own copy of Lua adds a watchdog timer that stops a runaway script. That copy is not
+// built (Lua comes from mlua-sys, see build.rs), and Mesen's script engine never runs here, so
+// the watchdog does nothing.
+extern "C" void lua_setwatchdogtimer(lua_State* L, lua_WatchDogHook func, int count) {
+	(void)L;
+	(void)func;
+	(void)count;
+}

@@ -2925,6 +2925,7 @@ name = "zax-snes"
 version = "0.1.0"
 dependencies = [
  "cc",
+ "mlua-sys",
  "png 0.17.16",
  "zax-engine3d",
  "zax-profiles",

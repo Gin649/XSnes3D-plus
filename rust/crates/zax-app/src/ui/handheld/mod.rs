@@ -198,6 +198,10 @@ enum HeadOn {
     Shown,
 }
 
+/// XSnes3D+: X and Y are SNES buttons in a game, so the handheld interface keeps its hands off
+/// them there (the NES app used them for the default view and the 2D view).
+const FACE_BUTTONS_PLAY: bool = true;
+
 /// How long L2 is held to keep the camera, and Y to see the game in 2D from the front.
 const CAMERA_KEEP_SECONDS: f32 = 0.6;
 /// Seconds the list rests on a game before its ROM is studied (owner request).
@@ -486,8 +490,9 @@ impl HandheldUi {
     /// camera is left alone: back in 3D, it has the angle and the zoom it had.
     fn update_flat_view(&mut self, pad: &PadState, seconds: f32, host: &mut AppHost) {
         self.follow_head_on(host);
-        // Xnes3D+: on Android, Y is turbo B in a game (the input source), not the 2D view.
-        if self.screen != Screen::InGame || cfg!(target_os = "android") {
+        // XSnes3D+: Y is a SNES button in a game, so it never switches the view; the 2D view is
+        // in the menu. The code is kept for a free button later.
+        if self.screen != Screen::InGame || FACE_BUTTONS_PLAY {
             self.flat_view = None;
             return;
         }
@@ -776,10 +781,10 @@ impl HandheldUi {
             }
             // X: the default view (owner request); Y and L2 are held buttons, followed by
             // `update_flat_view` and `update_camera_memory`.
-            // Xnes3D+: on Android X is turbo A in a game, so the default view is in the menu
+            // XSnes3D+: X is a SNES button in a game, so the default view is in the menu
             // (Camera preset) instead.
             Screen::InGame => {
-                if button == PadButton::X && !cfg!(target_os = "android") {
+                if button == PadButton::X && !FACE_BUTTONS_PLAY {
                     frame
                         .host
                         .enqueue(Command::ResetView, CommandArgs::default());

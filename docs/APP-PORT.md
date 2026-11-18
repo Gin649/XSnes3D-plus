@@ -12,19 +12,42 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
 - The layer engines and how their tiles are put together (`zax_snes::layers`) are shared by
   `snes-preview` and the app.
 
-## In progress (getting `cargo check -p zax-app` to pass)
+## Done in the port
+- `cargo check -p zax-app --all-targets` passes.
 - `zax-app/src/snes.rs`: `SnesCore` (with stand-ins for the NES app's 2D picture path, memory
-  reads for scripts, run-ahead, battery RAM: Mesen keeps its own battery saves).
+  reads for scripts, run-ahead, battery RAM: Mesen keeps its own battery saves). Sound goes
+  through a ring that resamples Mesen's 48 kHz to the rate the audio stream asks for.
 - `InputAction` has X, Y, L, R; `routing::core_word` gives a `PadWord` (player 1 low half,
   player 2 high half, Mesen's bit order).
 - `GameSession`: its engine runs layer 0, `LayerEngines` the others, `build_draw_list` merges;
   `exchange_draw_list` swaps the merged list.
-- Removed: movies (modules, commands, menus, movie bar, note dialog), hacks/widescreen (host
-  modules, compat cache, handheld and desktop hacks screens, game-options rows), the Zapper,
-  the demo game, port types (commands).
-- Next: the handheld UI's widescreen/hacks parts (`ui/handheld/mod.rs`, `draw.rs`,
-  `rom_list`), `script_reload.rs`, `save_states.rs`, `application.rs`, `mcp/tools.rs`,
-  `app_settings.rs` (NES region), `audio/stream.rs`, achievements (ROM hashing).
+- Achievements: rcheevos is told the console is a SNES and hashes the ROM file itself.
+  Memory reads for achievements still give 0 (see "Still to do").
+- The MCP tools: the movie tools are gone; `dump_frame` writes the tiles layer by layer with
+  the 256 finished colours.
+- Removed: movies (modules, commands, menus, movie bar, note dialog, MCP tools), hacks and
+  widescreen (host modules, compat cache, handheld and desktop hacks screens, game-options
+  rows), the Zapper, the demo game and its editor example, port types (commands and menus).
+- Controls: X, Y, L and R are bound by default (keyboard S, A, Q, W; pads in SNES places, L and
+  R on the shoulders). On Android, X and Y are no longer turbo A and B, and L1/R1 no longer
+  quick load and save (those are in the menu). In a game the handheld interface leaves X and Y
+  alone (the NES app used them for the default view and the 2D view).
+- Lua: Mesen's own copy of Lua is not built; Mesen links the Lua of `mlua-sys`, the one the
+  app's scripts use, because two copies clash when the app is linked. Mesen's watchdog hook is a
+  stub in the shim (Mesen's script engine never runs).
+- Tests: the NES-only test files are deleted (movies, hacks, Zapper, run-ahead, CHR-RAM, the
+  NES bus). The test ROM of the others is `tests/roms/hello.sfc`. They run with
+  `--test-threads=1`, since only one Mesen may run at a time.
+
+## Still to do
+- Run the app tests and fix what the SNES core changes (some read RAM through `ReadMem`, which
+  gives 0 for now).
+- The renderer's 2D picture path for RGB (the 2D view is blank until then).
+- A SNES memory map for `ReadMem`, `WriteMem` and achievements (work RAM, then save RAM).
+- Leftover NES settings and words (widescreen, region, port menus, "NES" in strings).
+- Controls: check the labels on the controls pages.
+- Look: XSnes3D+ names, SNES purple, grey and black with VT323.
+- Desktop build, then the Android package.
 
 ## Plan
 1. `crate::snes` in `zax-app`: the SNES core as the app sees it (`SnesCore`, wrapping

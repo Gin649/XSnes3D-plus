@@ -13,6 +13,44 @@ use std::process::Command;
 /// The Mesen folders the core needs.
 const MESEN_FOLDERS: [&str; 4] = ["Core", "Utilities", "SevenZip", "Lua"];
 
+/// The files of the Lua language itself in Mesen's `Lua` folder. They are not compiled: Lua
+/// comes from `mlua-sys` (the same Lua 5.4 the app's scripts use), because two copies of Lua in
+/// one program clash when it is linked. Mesen's other files there (luasocket) are compiled.
+const LUA_FILES: [&str; 32] = [
+    "lapi.c",
+    "lauxlib.c",
+    "lbaselib.c",
+    "lcode.c",
+    "lcorolib.c",
+    "lctype.c",
+    "ldblib.c",
+    "ldebug.c",
+    "ldo.c",
+    "ldump.c",
+    "lfunc.c",
+    "lgc.c",
+    "linit.c",
+    "liolib.c",
+    "llex.c",
+    "lmathlib.c",
+    "lmem.c",
+    "loadlib.c",
+    "lobject.c",
+    "lopcodes.c",
+    "loslib.c",
+    "lparser.c",
+    "lstate.c",
+    "lstring.c",
+    "lstrlib.c",
+    "ltable.c",
+    "ltablib.c",
+    "ltm.c",
+    "lundump.c",
+    "lutf8lib.c",
+    "lvm.c",
+    "lzio.c",
+];
+
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let crate_dir = PathBuf::from(env::var("CARGO_MANIFEST_DIR")?);
     let mesen = crate_dir.join("../../../external/mesen2");
@@ -127,6 +165,17 @@ fn collect_sources(folder: &Path, c: &mut Vec<PathBuf>, cpp: &mut Vec<PathBuf>) 
         if path.is_dir() {
             collect_sources(&path, c, cpp)?;
         } else {
+            let name = path
+                .file_name()
+                .and_then(|name| name.to_str())
+                .unwrap_or("");
+            let in_lua = path
+                .parent()
+                .and_then(Path::file_name)
+                .is_some_and(|parent| parent == "Lua");
+            if in_lua && LUA_FILES.contains(&name) {
+                continue;
+            }
             match path.extension().and_then(|ext| ext.to_str()) {
                 Some("c") => c.push(path),
                 Some("cpp") => cpp.push(path),

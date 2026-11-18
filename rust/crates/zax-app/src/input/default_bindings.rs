@@ -3,18 +3,22 @@
 use zax_platform::input::{standard_gamepad, Key, PhysicalControl};
 
 use super::binding_set::BindingSet;
-use super::binding_target::{BindingDeviceKind, BindingTarget};
+use super::binding_target::BindingDeviceKind;
 use super::input_action::InputAction;
 
 /// Player one's default keys. `QuickSave` and `QuickLoad` have no default key: the combinations of
 /// REQ-INP-104 are the only default route to the quick slot (SPEC-08 §4.2, §4.3).
-pub const PLAYER_ONE_KEYBOARD: [(InputAction, Key); 17] = [
+pub const PLAYER_ONE_KEYBOARD: [(InputAction, Key); 21] = [
     (InputAction::LEFT, Key::Left),
     (InputAction::RIGHT, Key::Right),
     (InputAction::UP, Key::Up),
     (InputAction::DOWN, Key::Down),
     (InputAction::A, Key::X),
     (InputAction::B, Key::Z),
+    (InputAction::X, Key::S),
+    (InputAction::Y, Key::A),
+    (InputAction::L, Key::Q),
+    (InputAction::R, Key::W),
     (InputAction::SELECT, Key::Space),
     (InputAction::START, Key::Enter),
     (InputAction::ROT_LEFT, Key::F5),
@@ -28,9 +32,11 @@ pub const PLAYER_ONE_KEYBOARD: [(InputAction, Key); 17] = [
     (InputAction::FAST_FORWARD, Key::Period),
 ];
 
-/// The defaults of a gamepad that answers to the standard numbering (SPEC-08 §4.3).
+/// The defaults of a gamepad that answers to the standard numbering (SPEC-08 §4.3), with the
+/// SNES buttons where a SNES pad has them: B bottom, A right, Y left, X top, L and R on the
+/// shoulders. Fast forward is on the left stick's click; rollback has no button by default.
 #[must_use]
-pub fn standard_gamepad_set() -> [(InputAction, PhysicalControl); 17] {
+pub fn standard_gamepad_set() -> [(InputAction, PhysicalControl); 20] {
     [
         (
             InputAction::LEFT,
@@ -50,11 +56,27 @@ pub fn standard_gamepad_set() -> [(InputAction, PhysicalControl); 17] {
         ),
         (
             InputAction::A,
-            PhysicalControl::button(standard_gamepad::SOUTH),
+            PhysicalControl::button(standard_gamepad::EAST),
         ),
         (
             InputAction::B,
+            PhysicalControl::button(standard_gamepad::SOUTH),
+        ),
+        (
+            InputAction::X,
+            PhysicalControl::button(standard_gamepad::NORTH),
+        ),
+        (
+            InputAction::Y,
             PhysicalControl::button(standard_gamepad::WEST),
+        ),
+        (
+            InputAction::L,
+            PhysicalControl::button(standard_gamepad::LEFT_BUMPER),
+        ),
+        (
+            InputAction::R,
+            PhysicalControl::button(standard_gamepad::RIGHT_BUMPER),
         ),
         (
             InputAction::SELECT,
@@ -65,12 +87,8 @@ pub fn standard_gamepad_set() -> [(InputAction, PhysicalControl); 17] {
             PhysicalControl::button(standard_gamepad::START),
         ),
         (
-            InputAction::ROLL_BACK,
-            PhysicalControl::button(standard_gamepad::NORTH),
-        ),
-        (
             InputAction::FAST_FORWARD,
-            PhysicalControl::button(standard_gamepad::EAST),
+            PhysicalControl::button(standard_gamepad::LEFT_STICK),
         ),
         (
             InputAction::ROT_LEFT,
@@ -130,11 +148,12 @@ pub fn create_keyboard(player: usize) -> BindingSet {
 }
 
 /// The defaults of a handheld console's pad (Rust-only, owner request), whose face buttons the
-/// platform names by their labels (A right, B bottom, X top, Y left): NES A and B on A and B,
-/// zoom on the shoulders, fast forward on R2. X, Y and L2 are the handheld interface's (default
-/// view, 2D/3D, camera memory); no rewind on a handheld.
+/// platform names by their labels (A right, B bottom, X top, Y left): the SNES buttons on the
+/// buttons of the same name, L and R on the shoulders, fast forward on R2. L2 is the handheld
+/// interface's (camera memory); zoom has no button by default (a pinch of the screen); no rewind
+/// on a handheld.
 #[must_use]
-pub fn handheld_gamepad_set() -> [(InputAction, PhysicalControl); 15] {
+pub fn handheld_gamepad_set() -> [(InputAction, PhysicalControl); 17] {
     [
         (
             InputAction::LEFT,
@@ -159,6 +178,22 @@ pub fn handheld_gamepad_set() -> [(InputAction, PhysicalControl); 15] {
         (
             InputAction::B,
             PhysicalControl::button(standard_gamepad::EAST),
+        ),
+        (
+            InputAction::X,
+            PhysicalControl::button(standard_gamepad::NORTH),
+        ),
+        (
+            InputAction::Y,
+            PhysicalControl::button(standard_gamepad::WEST),
+        ),
+        (
+            InputAction::L,
+            PhysicalControl::button(standard_gamepad::LEFT_BUMPER),
+        ),
+        (
+            InputAction::R,
+            PhysicalControl::button(standard_gamepad::RIGHT_BUMPER),
         ),
         (
             InputAction::SELECT,
@@ -188,14 +223,6 @@ pub fn handheld_gamepad_set() -> [(InputAction, PhysicalControl); 15] {
             InputAction::ROT_DOWN,
             PhysicalControl::axis_negative(standard_gamepad::RIGHT_STICK_Y),
         ),
-        (
-            InputAction::ZOOM_OUT,
-            PhysicalControl::button(standard_gamepad::LEFT_BUMPER),
-        ),
-        (
-            InputAction::ZOOM_IN,
-            PhysicalControl::button(standard_gamepad::RIGHT_BUMPER),
-        ),
     ]
 }
 
@@ -214,7 +241,7 @@ pub fn create_gamepad(standard: bool) -> BindingSet {
 
 /// The gamepad set of the desktop, which plays as its console mode (Rust-only, owner request):
 /// the handheld defaults with the face buttons where a handheld has them, not by their labels,
-/// as Mesen has them: NES A on the right button (Xbox B), NES B on the bottom one (Xbox A). The
+/// as Mesen has them: SNES A on the right button (Xbox B), SNES B on the bottom one (Xbox A). The
 /// rollback, which a handheld has not, goes on the right stick's click.
 #[must_use]
 pub fn create_desktop_console_gamepad(standard: bool) -> BindingSet {
@@ -271,12 +298,12 @@ pub fn create_former_android_gamepad(standard: bool) -> BindingSet {
     set
 }
 
-/// The gamepad set of the Android package. Xnes3D+: the handheld defaults, with the face
-/// buttons where the handheld has them (NES A on the right button, which the AYN Thor labels A
-/// and reports as the pad's east one; NES B on the bottom one), and the shoulders and the left
-/// trigger as RetroArch players expect them: L2 rewinds (held), R2 fast forwards, R1 saves a
-/// state and L1 loads the newest one. Zoom stays on a pinch of the screen, and both sticks
-/// pressed in open the menu (the handheld interface, not a binding).
+/// The gamepad set of the Android package: the handheld defaults, with the face buttons where
+/// the handheld has them (SNES A on the right button, which the AYN Thor labels A and reports as
+/// the pad's east one; SNES B on the bottom one; X on top, Y on the left), L and R on the
+/// shoulders, and the triggers as RetroArch players expect them: L2 rewinds (held), R2 fast
+/// forwards. Quick save and load are in the menu. Zoom stays on a pinch of the screen, and both
+/// sticks pressed in open the menu (the handheld interface, not a binding).
 #[must_use]
 pub fn create_android_gamepad(standard: bool) -> BindingSet {
     let mut set = create_android_gamepad_by_labels(standard);
@@ -293,25 +320,16 @@ pub fn create_android_gamepad(standard: bool) -> BindingSet {
     set
 }
 
-/// Xnes3D+: the Android set up to v1.0.0, with NES A and B on the pad's A and B labels, which
-/// the AYN Thor swaps. What a pad saved then still has, so it moves to [`create_android_gamepad`].
+/// The Android set with SNES A and B on the pad's A and B labels, which the AYN Thor swaps (the
+/// Xnes3D+ set up to its v1.0.0, kept so a saved pad of that shape moves to
+/// [`create_android_gamepad`]).
 #[must_use]
 pub fn create_android_gamepad_by_labels(standard: bool) -> BindingSet {
     let mut set = create_handheld_gamepad(standard);
     if standard {
-        set.clear(&BindingTarget::of(InputAction::ZOOM_IN));
-        set.clear(&BindingTarget::of(InputAction::ZOOM_OUT));
         set.set_action(
             InputAction::ROLL_BACK,
             PhysicalControl::trigger(standard_gamepad::LEFT_TRIGGER),
-        );
-        set.set_action(
-            InputAction::QUICK_LOAD,
-            PhysicalControl::button(standard_gamepad::LEFT_BUMPER),
-        );
-        set.set_action(
-            InputAction::QUICK_SAVE,
-            PhysicalControl::button(standard_gamepad::RIGHT_BUMPER),
         );
     }
     set

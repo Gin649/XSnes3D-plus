@@ -46,14 +46,18 @@ pub const COMMANDS_NEEDING_ARGUMENTS: [Command; 10] = [
     Command::SetVolume,
 ];
 
-/// The eight NES buttons, in the order of the window.
-pub const NES_BUTTONS: [InputAction; 8] = [
+/// The twelve SNES buttons, in the order of the window.
+pub const PAD_BUTTONS: [InputAction; 12] = [
     InputAction::LEFT,
     InputAction::RIGHT,
     InputAction::UP,
     InputAction::DOWN,
     InputAction::A,
     InputAction::B,
+    InputAction::X,
+    InputAction::Y,
+    InputAction::L,
+    InputAction::R,
     InputAction::SELECT,
     InputAction::START,
 ];
@@ -142,11 +146,11 @@ impl KeyConfigModel {
         self.sections = vec![
             KeyConfigSection {
                 title: strings::get(keys::KEYS_PLAYER_ONE),
-                rows: action_rows(&NES_BUTTONS, 0),
+                rows: action_rows(&PAD_BUTTONS, 0),
             },
             KeyConfigSection {
                 title: strings::get(keys::KEYS_PLAYER_TWO),
-                rows: action_rows(&NES_BUTTONS, 1),
+                rows: action_rows(&PAD_BUTTONS, 1),
             },
             KeyConfigSection {
                 title: strings::get(keys::KEYS_CAMERA),

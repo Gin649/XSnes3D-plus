@@ -54,13 +54,17 @@ pub enum RetroAnalogAxis {
 }
 
 /// The joypad buttons that map to an action.
-pub const BUTTONS: [(RetroPadButton, InputAction); 10] = [
+pub const BUTTONS: [(RetroPadButton, InputAction); 14] = [
     (RetroPadButton::Left, InputAction::LEFT),
     (RetroPadButton::Right, InputAction::RIGHT),
     (RetroPadButton::Up, InputAction::UP),
     (RetroPadButton::Down, InputAction::DOWN),
     (RetroPadButton::A, InputAction::A),
     (RetroPadButton::B, InputAction::B),
+    (RetroPadButton::X, InputAction::X),
+    (RetroPadButton::Y, InputAction::Y),
+    (RetroPadButton::L, InputAction::L),
+    (RetroPadButton::R, InputAction::R),
     (RetroPadButton::Select, InputAction::SELECT),
     (RetroPadButton::Start, InputAction::START),
     (RetroPadButton::L2, InputAction::ZOOM_IN),

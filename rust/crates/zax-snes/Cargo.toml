@@ -9,6 +9,8 @@ publish.workspace = true
 build = "build.rs"
 
 [dependencies]
+# Lua for Mesen's own scripting code, shared with the app's scripts (see build.rs).
+mlua-sys = { version = "0.10", features = ["lua54", "vendored"] }
 png = "0.17"
 zax-engine3d = { path = "../zax-engine3d" }
 zax-profiles = { path = "../zax-profiles" }

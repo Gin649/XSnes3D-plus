@@ -4,6 +4,9 @@
 //! picture. Mesen itself is C++ and is built by `build.rs`; `cpp/shim.cpp` is the small C
 //! interface this file calls.
 
+// Links the Lua that Mesen's scripting code uses (see build.rs).
+use mlua_sys as _;
+
 use std::ffi::{c_char, c_int, CString};
 use std::fmt;
 use std::path::Path;
