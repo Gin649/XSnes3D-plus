@@ -123,24 +123,18 @@ impl EngineSet {
     }
 }
 
-/// The frame's layers from the front one to the back one, as the SNES puts them for the mode:
-/// by their priority without the tile priority bit, background 3 of mode 1 in front when its
-/// priority bit is set (the status bar of most games).
+/// The frame's layers from the front one to the back one, as the SNES puts them: by the
+/// layer's priority in the mode (Mesen's `RenderMode0` to `RenderMode4`, the higher of a
+/// layer's two priorities), so mode 1's background 3 comes first when its priority bit is set
+/// (the text or status bar of most games).
 fn front_to_back(input: &EngineInput) -> Vec<u8> {
-    // The normal priorities of Mesen's RenderMode0 to RenderMode4.
-    let priority = |layer: u8| -> u8 {
-        match (input.bg_mode, layer) {
-            (0, 0) => 8,
-            (0, 1) => 7,
-            (0, 2) | (1 | 2 | 3 | 4, 1) => 2,
-            (0, 3) => 1,
-            (1, 0) => 6,
-            (1, 2) => 1,
-            _ => 3,
-        }
+    let priorities: [u8; 4] = match input.bg_mode {
+        0 => [11, 10, 5, 4],
+        1 => [9, 8, if input.bg3_priority { 11 } else { 3 }, 0],
+        _ => [7, 5, 0, 0],
     };
     let mut layers: Vec<u8> = input.layers.iter().map(|l| l.layer).collect();
-    layers.sort_by_key(|&layer| std::cmp::Reverse(priority(layer)));
+    layers.sort_by_key(|&layer| std::cmp::Reverse(priorities[usize::from(layer)]));
     layers
 }
 

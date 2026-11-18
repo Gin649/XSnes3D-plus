@@ -45,6 +45,9 @@ pub struct EngineInput {
     pub colors: Box<[Rgb24; 256]>,
     /// The background mode at the end of the frame.
     pub bg_mode: u8,
+    /// Mode 1's background 3 priority bit at the end of the frame: when set, background 3's
+    /// high priority tiles go in front of everything (the status bar or text of most games).
+    pub bg3_priority: bool,
 }
 
 impl EngineInput {
@@ -139,6 +142,7 @@ impl TileCapture {
             }
         }
         let bg_mode = last.map_or(0, |c| c.bg_mode);
+        let bg3_priority = last.is_some_and(|c| c.bg3_priority != 0);
 
         let (layers, used, sprites_on) = self.background_tiles();
         let sprites = if sprites_on {
@@ -174,6 +178,7 @@ impl TileCapture {
             layers: out,
             colors,
             bg_mode,
+            bg3_priority,
         }
     }
     /// The background rows put together per layer, which layers were drawn, and whether
