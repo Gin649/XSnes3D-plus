@@ -12,6 +12,7 @@ mod games;
 mod jobs;
 mod notices;
 mod resume;
+mod rom_crcs;
 mod save_states;
 mod script_reload;
 

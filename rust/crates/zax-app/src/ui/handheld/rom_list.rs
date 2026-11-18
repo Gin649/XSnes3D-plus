@@ -1,6 +1,5 @@
-//! The home screen as data: the `.nes` files of the ROM folder, sorted, with the selection and the
-//! 3D profile each game matches; the shoulder buttons are the widescreen and the hacks of the
-//! selected game (owner request). It draws nothing.
+//! The home screen as data: the SNES games of the ROM folder, sorted, with the selection and the
+//! 3D profile each game matches. It draws nothing.
 
 use std::path::{Path, PathBuf};
 
@@ -28,21 +27,8 @@ pub struct RomEntry {
     pub name: String,
     /// The profile remembered or found for the game, if any.
     pub profile: Option<ProfileMatch>,
-    /// The CRC-32 of its data (iNES header excluded), when the file could be read.
+    /// The CRC-32 of the file, when the cache knows it.
     pub crc: Option<u32>,
-    /// Whether a widescreen hack is made for the game (Rust-only, owner request).
-    pub widescreen: bool,
-    /// Whether the widescreen is on for the game.
-    pub widescreen_on: bool,
-    /// The name of the built-in patch of the game, when it is made for another ROM of it (the
-    /// profile or the name says the game, its data says another version): [W] in red.
-    pub widescreen_other: Option<&'static str>,
-    /// Whether that patch is forced on the game all the same.
-    pub widescreen_forced: bool,
-    /// Whether the ROM was not studied yet (its hacks screen never opened, the game never
-    /// started): `widescreen_other` is the patch its profile or its name says, which may fit it
-    /// or not ([W] in dark grey).
-    pub widescreen_unstudied: bool,
     /// Whether the library entry the game plays with is marked as a favourite (AMD-053
     /// REQ-UI-210). The handheld list shows the marker and L2 toggles it: no text is typed, so
     /// the function fits a gamepad-only screen.
@@ -64,11 +50,6 @@ impl RomEntry {
             name,
             profile: None,
             crc: None,
-            widescreen: false,
-            widescreen_on: false,
-            widescreen_other: None,
-            widescreen_forced: false,
-            widescreen_unstudied: false,
             favorite: false,
             resume: false,
         }
@@ -116,10 +97,6 @@ pub enum RomListCommand {
     GameOptions(PathBuf),
     /// Open the options.
     Options,
-    /// L1 went down on the selected game (Rust-only, owner request): its widescreen's settings show.
-    Widescreen(PathBuf),
-    /// Open the hacks of the selected game, its aids (Rust-only, owner request).
-    Hacks(PathBuf),
     /// Open the achievements of the selected game (R2, while RetroAchievements is on).
     Achievements(PathBuf),
     /// Load the resume point (AMD-053 REQ-LOOP-076): the `Resume` row at the head of the list.
@@ -127,6 +104,10 @@ pub enum RomListCommand {
     /// Mark or unmark the selected game as a favourite (AMD-053 REQ-UI-210, L2).
     ToggleFavorite(PathBuf),
 }
+
+/// The file extensions of SNES games the list shows: the two usual ones and the archives
+/// Mesen opens.
+pub const SNES_EXTENSIONS: [&str; 4] = ["sfc", "smc", "zip", "7z"];
 
 /// The ROM files of `directory`, sorted by name without regard to case. A folder that cannot be
 /// read is an empty list.
@@ -140,9 +121,11 @@ pub fn scan(directory: &Path) -> Vec<RomEntry> {
         .map(|entry| entry.path())
         .filter(|path| {
             path.is_file()
-                && path
-                    .extension()
-                    .is_some_and(|extension| extension.eq_ignore_ascii_case("nes"))
+                && path.extension().is_some_and(|extension| {
+                    SNES_EXTENSIONS
+                        .iter()
+                        .any(|known| extension.eq_ignore_ascii_case(known))
+                })
         })
         .map(RomEntry::new)
         .collect();
@@ -291,19 +274,6 @@ impl RomListModel {
                     .map(|entry| RomListCommand::ToggleFavorite(entry.path.clone()));
             }
             PadButton::X => return Some(RomListCommand::Options),
-            // L1 the widescreen, R1 the hacks; Start plays, as A does (owner request).
-            PadButton::L1 => {
-                return self
-                    .selected_entry()
-                    .filter(|entry| !entry.resume)
-                    .map(|entry| RomListCommand::Widescreen(entry.path.clone()));
-            }
-            PadButton::R1 => {
-                return self
-                    .selected_entry()
-                    .filter(|entry| !entry.resume)
-                    .map(|entry| RomListCommand::Hacks(entry.path.clone()));
-            }
             PadButton::R2 => {
                 return self
                     .selected_entry()
@@ -377,10 +347,10 @@ mod tests {
     }
 
     #[test]
-    fn the_scan_keeps_the_nes_files_in_alphabetical_order() {
+    fn the_scan_keeps_the_snes_files_in_alphabetical_order() {
         let folder = std::env::temp_dir().join(format!("zax-rom-list-{}", std::process::id()));
         std::fs::create_dir_all(&folder).unwrap();
-        for name in ["b.nes", "A.NES", "c.txt", "Zelda.nes"] {
+        for name in ["b.sfc", "A.SMC", "c.txt", "Zelda.zip", "d.nes"] {
             std::fs::write(folder.join(name), b"x").unwrap();
         }
         let names: Vec<String> = scan(&folder).into_iter().map(|entry| entry.name).collect();

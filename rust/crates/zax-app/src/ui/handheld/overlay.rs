@@ -20,11 +20,6 @@ pub enum OverlayItem {
     Camera,
     /// The options.
     Options,
-    /// The widescreen of the game (owner request): A turns it on with everything or off, A held
-    /// shows its settings.
-    Widescreen,
-    /// The hacks of the game, its aids (Rust-only, owner request).
-    Hacks,
     /// The game's achievements (Rust-only, owner request): shown while RetroAchievements is on.
     Achievements,
     /// Stop the game and show the ROM list.
@@ -34,15 +29,13 @@ pub enum OverlayItem {
 }
 
 /// The rows, in order.
-pub const ITEMS: [OverlayItem; 11] = [
+pub const ITEMS: [OverlayItem; 9] = [
     OverlayItem::Resume,
     OverlayItem::SaveState,
     OverlayItem::LoadState,
     OverlayItem::FastForward,
     OverlayItem::Camera,
     OverlayItem::Options,
-    OverlayItem::Widescreen,
-    OverlayItem::Hacks,
     OverlayItem::Achievements,
     OverlayItem::QuitToList,
     OverlayItem::ExitToLauncher,
@@ -90,11 +83,6 @@ pub enum OverlayCommand {
     SetCamera(CameraPreset),
     /// Show the options.
     Options,
-    /// A went down on the widescreen: released, it turns it on or off; held, it shows its
-    /// settings.
-    Widescreen,
-    /// Show the hacks of the game.
-    Hacks,
     /// Show the game's achievements.
     Achievements,
     /// Stop the game, back to the ROM list.
@@ -225,8 +213,6 @@ impl OverlayModel {
             OverlayItem::FastForward => OverlayCommand::ToggleFastForward,
             OverlayItem::Camera => OverlayCommand::SetCamera(self.camera),
             OverlayItem::Options => OverlayCommand::Options,
-            OverlayItem::Widescreen => OverlayCommand::Widescreen,
-            OverlayItem::Hacks => OverlayCommand::Hacks,
             OverlayItem::Achievements => OverlayCommand::Achievements,
             OverlayItem::QuitToList => OverlayCommand::QuitToList,
             OverlayItem::ExitToLauncher => OverlayCommand::ExitToLauncher,

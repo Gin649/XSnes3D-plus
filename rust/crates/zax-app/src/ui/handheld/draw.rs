@@ -10,7 +10,6 @@ use zax_platform::input::labels;
 use zax_settings::catalogue::SettingId;
 
 use super::achievements::{AchievementsRow, SpecialKey, SPECIAL_KEYS};
-use super::compat::Tone;
 use super::game_options::{GameRow, GAME_MAIN};
 use super::layout::{self, Hint, Metrics};
 use super::options;
@@ -131,8 +130,8 @@ struct Painter<'ui> {
     heading: Option<imgui::FontId>,
     /// Where the rows and the hints drawn lie.
     zones: &'ui RefCell<Vec<Zone>>,
-    /// The widescreen button being held (owner request): its hint's label and how far the hold
-    /// is to the widescreen's settings, 0 to 1, drawn as a ring filling round the label.
+    /// A button being held: its hint's label and how far the hold is, 0 to 1, drawn as a ring
+    /// filling round the label (none is held for long on the SNES app yet).
     hold_ring: Option<(&'static str, f32)>,
     /// How many lines the hints drawn took, for the sizes of the next frame.
     hint_lines: &'ui Cell<u8>,
@@ -212,8 +211,8 @@ impl Painter<'_> {
         self.row_parts(slot, (selected, focus), left, &[], right, x1);
     }
 
-    /// One row of a list with `badges` before `right`, left to right (the [W] of a game a
-    /// widescreen hack is made for, the share of its achievements the player has).
+    /// One row of a list with `badges` before `right`, left to right (the share of the game's
+    /// achievements the player has).
     fn row_badged(
         &self,
         slot: usize,
@@ -616,7 +615,6 @@ impl HandheldUi {
         match self.screen {
             Screen::Home => self.draw_home(ui, frame),
             Screen::GameOptions => self.draw_game_options(ui, frame),
-            Screen::Hacks => self.draw_hacks(ui),
             Screen::Profiles => self.draw_profiles(ui),
             Screen::Options => self.draw_options(ui, frame),
             Screen::Controls => self.draw_controls(ui, frame),
@@ -646,12 +644,7 @@ impl HandheldUi {
             heading: self.heading_font,
             zones: &self.zones,
             hint_lines: &self.hint_lines,
-            hold_ring: self
-                .widescreen_hold
-                .as_ref()
-                .filter(|hold| hold.held > 0.0)
-                // Only A is held for the widescreen now: L1 on the list opens its settings.
-                .map(|hold| ("A", (hold.held / super::WIDESCREEN_HOLD_SECONDS).min(1.0))),
+            hold_ring: None,
         }
     }
 
@@ -702,23 +695,6 @@ impl HandheldUi {
             } else {
                 tag.1
             };
-            if entry.widescreen || entry.widescreen_other.is_some() {
-                // Grey while off, coloured once on, red for a version of the game the hack is
-                // not made for (owner request).
-                // Orange once forced and on; dark grey while the ROM was not studied.
-                let badge = if entry.widescreen_forced && entry.widescreen_on {
-                    OTHER_MODE
-                } else if entry.widescreen_unstudied {
-                    UNSTUDIED
-                } else if entry.widescreen_other.is_some() {
-                    WARNING
-                } else if entry.widescreen_on {
-                    GAME_OWN
-                } else {
-                    DIM
-                };
-                badges.push(("[W]", badge));
-            }
             if let Some(percent) = &percent {
                 badges.push((percent, FOCUS));
             }
@@ -745,26 +721,6 @@ impl HandheldUi {
                 (hint.button, strings::get(hint.meaning), colour)
             })
             .collect();
-        // L1 the widescreen of the selected game, in the colour of its [W]; R1 its hacks.
-        if let Some(entry) = self
-            .roms
-            .selected_entry()
-            .filter(|entry| entry.widescreen || entry.widescreen_other.is_some())
-        {
-            let colour = if entry.widescreen_forced && entry.widescreen_on {
-                OTHER_MODE
-            } else if entry.widescreen_unstudied {
-                TEXT
-            } else if entry.widescreen_other.is_some() {
-                WARNING
-            } else if entry.widescreen_on {
-                GAME_OWN
-            } else {
-                TEXT
-            };
-            hints.push(("L1", strings::get(keys::HACK_WIDESCREEN), colour));
-            hints.push(("R1", strings::get(keys::MENU_AIDS), TEXT));
-        }
         // R2 the game's achievements, while RetroAchievements is on (owner request).
         if frame.host.achievements.is_enabled() && self.roms.selected_entry().is_some() {
             hints.push(("R2", strings::get(keys::TAB_ACHIEVEMENTS), TEXT));
@@ -866,78 +822,6 @@ impl HandheldUi {
             }
         }
         painter.hints(layout::hints(Screen::GameOptions));
-    }
-
-    /// The hacks of one game: the widescreen, its ratio and margin, the options of its patch.
-    fn draw_hacks(&self, ui: &Ui) {
-        let (Some(_window), Some(hacks)) = (full_screen(ui, "##hacks", BACKGROUND), &self.hacks)
-        else {
-            return;
-        };
-        let painter = self.painter(ui);
-        let title = strings::format(&strings::get(keys::HACKS_TITLE), &[hacks.name()]);
-        painter.title(&title, "");
-        // The detail of how the hack fits this ROM, in place of the rows.
-        if hacks.compat_open() {
-            let lines: Vec<_> = hacks
-                .compat_lines()
-                .into_iter()
-                .map(|(text, tone)| {
-                    let colour = match tone {
-                        Tone::Good => PROFILE,
-                        Tone::Warning => OTHER_MODE,
-                        Tone::Bad => WARNING,
-                        Tone::Plain => DIM,
-                    };
-                    (text, colour)
-                })
-                .collect();
-            painter.lines(&lines);
-            painter.hints(layout::hints(Screen::Hacks));
-            return;
-        }
-        let rows = hacks.rows();
-        if rows.is_empty() {
-            match hacks.other_rom_message() {
-                Some(message) => painter.message(&message, WARNING),
-                None => painter.message(&strings::get(keys::HACKS_NONE), DIM),
-            }
-        }
-        // Another version of the game: what it is, under the rows that force the patch.
-        let other = hacks.other_rom_message().filter(|_| !rows.is_empty());
-        // The note on the patch takes the place of a row or two at the bottom.
-        let visible = self.metrics.visible_rows(painter.size[1]);
-        let visible = if other.is_some() {
-            visible.saturating_sub(3).max(1)
-        } else if hacks.patch().is_some() {
-            visible.saturating_sub(2).max(1)
-        } else {
-            visible
-        };
-        let selected = hacks.selected_index();
-        let first = first_visible(selected, visible, rows.len());
-        for (slot, (index, row)) in rows
-            .iter()
-            .enumerate()
-            .skip(first)
-            .take(visible)
-            .enumerate()
-        {
-            let focused = index == selected;
-            let colour = match (hacks.is_own(*row), focused) {
-                (true, true) => GAME_OWN_ON_FOCUS,
-                (true, false) => GAME_OWN,
-                (false, _) => DIM,
-            };
-            let shown = format!("< {} >", hacks.value_text(*row));
-            painter.row(slot, focused, &hacks.label(*row), (&shown, colour));
-        }
-        if let Some(other) = other {
-            painter.note(visible, &other);
-        } else if let Some(note) = hacks.patch_note() {
-            painter.note(visible, &strings::get(note));
-        }
-        painter.hints(layout::hints(Screen::Hacks));
     }
 
     fn draw_profiles(&self, ui: &Ui) {
@@ -1238,8 +1122,6 @@ impl HandheldUi {
             OverlayItem::FastForward => keys::HANDHELD_MENU_FAST_FORWARD,
             OverlayItem::Camera => keys::HANDHELD_OPTION_CAMERA,
             OverlayItem::Options => keys::WINDOW_OPTIONS,
-            OverlayItem::Widescreen => keys::HACK_WIDESCREEN,
-            OverlayItem::Hacks => keys::MENU_AIDS,
             OverlayItem::Achievements => keys::TAB_ACHIEVEMENTS,
             OverlayItem::QuitToList => keys::HANDHELD_MENU_QUIT_TO_LIST,
             OverlayItem::ExitToLauncher => keys::HANDHELD_MENU_EXIT,
@@ -1254,15 +1136,6 @@ impl HandheldUi {
                 format!("< {} >", menu_bar::slot_label(slot, record))
             }
             OverlayItem::Camera => format!("< {} >", options::camera_label(self.overlay.camera())),
-            OverlayItem::Widescreen => {
-                let settings = frame.host.settings();
-                let on = settings.get(SettingId::VideoWidescreen).as_int() != 0;
-                format!(
-                    "{} - {}",
-                    strings::get(if on { keys::HACK_ON } else { keys::HACK_OFF }),
-                    strings::get(keys::HANDHELD_HOLD_FOR_SETTINGS)
-                )
-            }
             _ => String::new(),
         }
     }
