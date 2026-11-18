@@ -148,7 +148,6 @@ fn req_ui_200_every_entry_of_the_table_exists_and_names_a_command() {
         (text::menu_emulation(), Command::SetSpeed),
         (text::menu_emulation(), Command::SetRegion),
         (text::menu_emulation(), Command::ToggleAutoRegion),
-        (text::menu_emulation(), Command::SetPortType),
         (text::menu_video(), Command::ToggleTwoDimensional),
         (text::menu_video(), Command::SetCameraMode),
         (text::menu_video(), Command::ResetView),

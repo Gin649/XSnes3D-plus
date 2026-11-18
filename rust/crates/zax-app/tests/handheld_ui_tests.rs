@@ -12,7 +12,6 @@ use common::SyntheticRom;
 use ui_harness::{ImGuiHarness, UiHarness};
 use zax_app::emulation::emulation_state::EmulationState;
 use zax_app::persistence::app_settings::{AppSettings as _, AppSettingsMut as _};
-use zax_app::ui::handheld::hacks::HacksView;
 use zax_app::ui::handheld::pad::{PadButton, PadState};
 use zax_app::ui::handheld::states::StatesMode;
 use zax_app::ui::handheld::{HandheldUi, Screen};
@@ -498,74 +497,6 @@ fn another_rom_folder_lists_its_games() {
     assert_eq!(["New"], names.as_slice());
 }
 
-/// The hacks of a game (Rust-only, owner request) open from the list (Start), from the game's
-/// options (their last row) and from the in-game menu; B goes back where they came from. A game
-/// no hack is made for has none to show, and its list entry no [W].
-#[test]
-fn the_hacks_open_from_the_list_the_game_options_and_the_menu() {
-    let (mut harness, mut handheld) = start(&[], &["Game.nes"]);
-    assert!(!handheld.roms().entries()[0].widescreen);
-    // The list reads no file: the ROM is studied when its hacks open.
-    assert!(handheld.roms().entries()[0].crc.is_none());
-
-    tap(&mut harness, &mut handheld, PadButton::R1);
-    assert_eq!(Screen::Hacks, handheld.screen());
-    assert_eq!(0, handheld.hacks().unwrap().rows().len());
-    assert!(handheld.roms().entries()[0].crc.is_some());
-    assert!(!handheld.roms().entries()[0].widescreen);
-    tap(&mut harness, &mut handheld, PadButton::B);
-    assert_eq!(Screen::Home, handheld.screen());
-
-    tap(&mut harness, &mut handheld, PadButton::Select);
-    tap(&mut harness, &mut handheld, PadButton::Up);
-    tap(&mut harness, &mut handheld, PadButton::A);
-    assert_eq!(Screen::Hacks, handheld.screen());
-    tap(&mut harness, &mut handheld, PadButton::B);
-    assert_eq!(Screen::GameOptions, handheld.screen());
-    tap(&mut harness, &mut handheld, PadButton::B);
-    assert_eq!(Screen::Home, handheld.screen());
-
-    // The in-game menu (owner request): the hacks, the aids alone, then the widescreen.
-    play(&mut harness, &mut handheld);
-    for _ in 0..7 {
-        tap(&mut harness, &mut handheld, PadButton::Down);
-    }
-    tap(&mut harness, &mut handheld, PadButton::A);
-    assert_eq!(Screen::Hacks, handheld.screen());
-    assert_eq!(HacksView::Aids, handheld.hacks().unwrap().view());
-    tap(&mut harness, &mut handheld, PadButton::B);
-    assert_eq!(Screen::Overlay, handheld.screen());
-    // A on the widescreen let go at once turns it on, again off.
-    tap(&mut harness, &mut handheld, PadButton::Up);
-    let widescreen = |harness: &UiHarness| {
-        harness
-            .host
-            .settings()
-            .get(SettingId::VideoWidescreen)
-            .as_int()
-            != 0
-    };
-    let before = widescreen(&harness);
-    tap(&mut harness, &mut handheld, PadButton::A);
-    press(&mut harness, &mut handheld, &[]);
-    assert_eq!(Screen::Overlay, handheld.screen());
-    assert_ne!(before, widescreen(&harness));
-    tap(&mut harness, &mut handheld, PadButton::A);
-    press(&mut harness, &mut handheld, &[]);
-    assert_eq!(before, widescreen(&harness));
-    // A held shows its settings.
-    let mut held = PadState::new();
-    held.set(PadButton::A, true);
-    for _ in 0..6 {
-        frame(&mut harness, &mut handheld, &held, 0.1);
-        // Held, not pressed again.
-        held.end_frame();
-    }
-    assert_eq!(Screen::Hacks, handheld.screen());
-    assert_eq!(HacksView::Widescreen, handheld.hacks().unwrap().view());
-    assert_eq!(before, widescreen(&harness));
-}
-
 /// The options of a game saved from their screen keep its hacks, which are not theirs: the
 /// widescreen of the game stays.
 #[test]
@@ -702,39 +633,3 @@ fn ro_3_the_advanced_options_of_a_game_are_a_hub_of_pages() {
     assert_eq!(own, harness.host.game_options(&rom));
 }
 
-/// A version of a game a widescreen hack is made for another ROM of (here by its name): a dark
-/// grey [W] while the ROM was not studied, then L2 opens its widescreen and hacks, which study it:
-/// no hack fits, the [W] turns red and nothing changes in the game's options.
-#[test]
-fn another_version_of_a_widened_game_is_studied_when_its_hacks_open() {
-    let (mut harness, mut handheld) =
-        start(&[], &["Zelda II - The Adventure of Link (Europe).nes"]);
-    let entry = &handheld.roms().entries()[0];
-    assert!(!entry.widescreen);
-    assert!(entry.widescreen_unstudied);
-    assert_eq!(
-        Some(zax_nes::builtin_patches::ZELDA2_USA),
-        entry.widescreen_other
-    );
-    tap(&mut harness, &mut handheld, PadButton::R1);
-    assert_eq!(Screen::Hacks, handheld.screen());
-    assert_eq!(
-        Some(zax_nes::builtin_patches::ZELDA2_USA),
-        handheld
-            .hacks()
-            .unwrap()
-            .other_rom_patch()
-            .map(|patch| patch.name)
-    );
-    let entry = &handheld.roms().entries()[0];
-    assert!(!entry.widescreen_unstudied, "studied as the hacks opened");
-    assert!(!entry.widescreen);
-    tap(&mut harness, &mut handheld, PadButton::B);
-    assert_eq!(Screen::Home, handheld.screen());
-    let rom = harness
-        .root
-        .path()
-        .join("roms")
-        .join("Zelda II - The Adventure of Link (Europe).nes");
-    assert_eq!(0, harness.host.game_options(&rom.to_string_lossy()).len());
-}

@@ -108,11 +108,6 @@ const HOME_HINTS: &[Hint] = &[
     hint("L2", keys::HANDHELD_HINT_FAVORITE),
 ];
 // Xnes3D+: every screen shows A (choose) and B (back), so A always confirms and B always backs.
-const HACKS_HINTS: &[Hint] = &[
-    hint("A", keys::HANDHELD_HINT_CHOOSE),
-    hint("</>", keys::HANDHELD_HINT_CHANGE),
-    hint("B", keys::HANDHELD_HINT_BACK),
-];
 const PROFILES_HINTS: &[Hint] = &[
     hint("A", keys::HANDHELD_HINT_CHOOSE),
     hint("B", keys::HANDHELD_HINT_BACK),
@@ -175,7 +170,6 @@ pub const fn hints(screen: Screen) -> &'static [Hint] {
         Screen::Profiles => PROFILES_HINTS,
         Screen::Options | Screen::Overscan => OPTIONS_HINTS,
         Screen::GameOptions => GAME_OPTIONS_HINTS,
-        Screen::Hacks => HACKS_HINTS,
         Screen::Controls => CONTROLS_HINTS,
         Screen::Overlay => OVERLAY_HINTS,
         Screen::States => STATES_SAVE_HINTS,

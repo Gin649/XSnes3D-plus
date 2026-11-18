@@ -15,8 +15,6 @@ use zax_app::input::input_action::{self, InputAction};
 use zax_app::input::libretro_input_map::{self, RetroAnalogAxis, RetroPadButton};
 use zax_app::input::menu_navigation::{MenuNavigation, MenuNavigationEvents};
 use zax_app::input::routing;
-use zax_app::input::zapper::RELEASED_BYTE;
-use zax_nes::ControllerPortType::{Controller, Zapper};
 use zax_platform::input::{calibration, standard_gamepad, GamepadDevice};
 use zax_render::camera::SceneCamera;
 use zax_render::controls::{self, CameraAction};
@@ -112,84 +110,6 @@ fn req_inp_002_sources_are_combined_with_a_bitwise_or() {
     assert_eq!((InputAction::NONE | pad).bits(), 0x01);
 }
 
-/// REQ-INP-004: port 1 is the low byte and port 2 the next one.
-#[test]
-fn req_inp_004_the_word_carries_player_one_low_and_player_two_high() {
-    let word = routing::controller_word(
-        InputAction::RIGHT | InputAction::A,
-        InputAction::UP | InputAction::START,
-    );
-    assert_eq!(word & 0xFF, 0x81);
-    assert_eq!((word >> 8) & 0xFF, 0x18);
-}
-
-/// REQ-INP-006: the camera and system bits above `0x80` are never transmitted to the core.
-#[test]
-fn req_inp_006_only_the_eight_low_bits_reach_the_core() {
-    let mask = InputAction::RIGHT
-        | InputAction::A
-        | InputAction::ROLL_BACK
-        | InputAction::ROT_RIGHT
-        | InputAction::MENU
-        | InputAction::FAST_FORWARD
-        | InputAction::QUICK_SAVE
-        | InputAction::QUICK_LOAD
-        | InputAction::ZOOM_IN;
-    assert_eq!(input_action::controller_byte(mask), 0x81);
-    assert_eq!(routing::controller_word(mask, InputAction::NONE), 0x81);
-}
-
-/// REQ-INP-004: port 2 in Zapper sees no controller button at all even while J2 holds A.
-#[test]
-fn req_inp_004_a_zapper_port_carries_no_controller_button() {
-    let zapper = routing::core_word(
-        InputAction::NONE,
-        InputAction::A,
-        Controller,
-        Zapper,
-        RELEASED_BYTE,
-    );
-    assert_eq!((zapper >> 8) & 0xFF, 0x10);
-
-    let controller = routing::core_word(
-        InputAction::NONE,
-        InputAction::A,
-        Controller,
-        Controller,
-        RELEASED_BYTE,
-    );
-    assert_eq!((controller >> 8) & 0xFF, 0x01);
-}
-
-/// REQ-INP-080: the camera is driven by the OR of the masks of the players whose port is a
-/// controller; a player in Zapper does not turn it.
-#[test]
-fn req_inp_080_a_zapper_player_does_not_drive_the_camera() {
-    assert_eq!(
-        routing::camera_sources(
-            InputAction::NONE,
-            InputAction::ROT_LEFT,
-            Controller,
-            Controller
-        ),
-        InputAction::ROT_LEFT
-    );
-    assert_eq!(
-        routing::camera_sources(InputAction::NONE, InputAction::ROT_LEFT, Controller, Zapper),
-        InputAction::NONE
-    );
-    // J1 still turns it while port 2 is a Zapper.
-    assert_eq!(
-        routing::camera_sources(
-            InputAction::ROT_LEFT,
-            InputAction::ROT_RIGHT,
-            Controller,
-            Zapper
-        ),
-        InputAction::ROT_LEFT
-    );
-}
-
 /// The camera actions map onto the renderer's controls.
 #[test]
 fn req_inp_080_the_camera_actions_map_onto_the_renderer_controls() {
@@ -197,27 +117,6 @@ fn req_inp_080_the_camera_actions_map_onto_the_renderer_controls() {
         InputAction::ROT_LEFT | InputAction::ZOOM_OUT | InputAction::A,
     );
     assert_eq!(actions, CameraAction::ROTATE_LEFT | CameraAction::ZOOM_OUT);
-}
-
-/// SPEC-08 §5.1, the mask vectors of the default configuration with both ports on controllers.
-#[rstest]
-#[case(InputAction::UP | InputAction::A, 0x11, 0x11)]
-#[case(InputAction::START | InputAction::SELECT, 0x0C, 0x0C)]
-#[case(InputAction::ROT_LEFT | InputAction::ZOOM_IN, 0x500, 0x00)]
-#[case(InputAction::DOWN | InputAction::A | InputAction::B, 0x23, 0x23)]
-#[case(InputAction::NONE, 0x00, 0x00)]
-#[case(InputAction::ROT_RIGHT, 0x800, 0x00)]
-#[case(InputAction::MENU, 0x4000, 0x00)]
-fn section_5_1_the_mask_vectors(
-    #[case] mask: InputAction,
-    #[case] expected_mask: u32,
-    #[case] expected_port_byte: u16,
-) {
-    assert_eq!(mask.bits(), expected_mask);
-    assert_eq!(
-        routing::controller_word(mask, InputAction::NONE) & 0xFF,
-        expected_port_byte
-    );
 }
 
 /// REQ-INP-071 and REQ-INP-072: the script pad is OR-merged into the mask of the player it is
@@ -467,10 +366,3 @@ fn req_inp_082_zoom_moves_seventy_units_per_second() {
     assert!((67.0..=73.0).contains(&(held - camera.current().distance())));
 }
 
-/// REQ-INP-061: the Zapper is active only while a game runs and a port is in Zapper.
-#[test]
-fn req_inp_061_the_zapper_is_active_only_with_a_zapper_port_in_a_running_game() {
-    assert!(!routing::zapper_active(true, Controller, Controller));
-    assert!(routing::zapper_active(true, Controller, Zapper));
-    assert!(!routing::zapper_active(false, Controller, Zapper));
-}

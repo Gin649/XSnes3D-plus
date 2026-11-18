@@ -275,14 +275,14 @@ int zax_ra_user(zax_ra_t* ra, const char** display_name, const char** username, 
 }
 
 void zax_ra_load_game(zax_ra_t* ra, const uint8_t* data, size_t size, const char* path) {
-  rc_client_begin_identify_and_load_game(ra->client, RC_CONSOLE_NINTENDO, path, data, size,
+  rc_client_begin_identify_and_load_game(ra->client, RC_CONSOLE_SUPER_NINTENDO, path, data, size,
                                          zax_ra_game_done, NULL);
 }
 
 /* The hash RetroAchievements knows a NES ROM by (an iNES file: its header is left out), without
  * a client: the list of the games studies them. 1 when `hash` (33 bytes) holds it. */
-int zax_ra_hash_nes(const uint8_t* data, size_t size, char* hash) {
-  return rc_hash_generate_from_buffer(hash, RC_CONSOLE_NINTENDO, data, size);
+int zax_ra_hash_snes(const uint8_t* data, size_t size, char* hash) {
+  return rc_hash_generate_from_buffer(hash, RC_CONSOLE_SUPER_NINTENDO, data, size);
 }
 
 void zax_ra_unload_game(zax_ra_t* ra) {

@@ -21,12 +21,32 @@ pub const SAMPLE_RATE: i32 = 48_000;
 /// share of the rate, either way).
 pub const MAX_RATIO_ADJUSTMENT: f64 = 0.005;
 
-/// Sound kept for the audio stream at most, in stereo frames (half a second).
+/// Sound kept for the audio stream at most, in stereo frames (half a second at the highest
+/// usual rate).
 const RING_FRAMES: usize = 24_000;
+
+/// The least sound the audio stream's ring is sized for, in frames.
+pub const MIN_BUFFER_SAMPLES: usize = 10_000;
 
 /// The pads of both players in one word: player 1 in bits 0 to 11, player 2 in bits 16 to
 /// 27, each in Mesen's order (A, B, X, Y, L, R, Select, Start, Up, Down, Left, Right).
 pub type PadWord = u32;
+
+/// The TV region the settings name. The NES app's four (Dendy and the dual-region "Multi"
+/// carts are the NES's); the SNES core reads its game's own region, so this only steers the
+/// frame pacer.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum TvRegion {
+    /// 60 frames a second.
+    #[default]
+    Ntsc,
+    /// 50 frames a second.
+    Pal,
+    /// Either; played as NTSC.
+    Multi,
+    /// The NES clones' PAL timing; played as PAL.
+    Dendy,
+}
 
 /// What a ROM load gave.
 #[derive(Debug, Clone, Default)]
@@ -37,10 +57,52 @@ pub struct RomLoadResult {
     pub error: Option<String>,
 }
 
-/// Sound made by the core and not played yet: stereo frames, left first, -1 to 1.
-#[derive(Default)]
+/// Sound made by the core and not played yet: stereo frames, left first, -1 to 1, at the
+/// rate the stream asked for (Mesen mixes at [`SAMPLE_RATE`]; [`SampleRing::push`] resamples).
 struct SampleRing {
     samples: std::collections::VecDeque<f32>,
+    /// The stream's rate.
+    rate: f64,
+    /// Where the next output frame falls between the last input frame and the next one.
+    phase: f64,
+    /// The last input frame.
+    last: [f32; 2],
+}
+
+impl Default for SampleRing {
+    fn default() -> Self {
+        Self {
+            samples: std::collections::VecDeque::new(),
+            rate: f64::from(SAMPLE_RATE),
+            phase: 0.0,
+            last: [0.0; 2],
+        }
+    }
+}
+
+impl SampleRing {
+    /// Adds Mesen's stereo frames, resampled to the stream's rate (straight lines between
+    /// frames: Mesen's own output is already filtered).
+    fn push(&mut self, samples: &[i16]) {
+        let step = f64::from(SAMPLE_RATE) / self.rate;
+        for frame in samples.chunks_exact(2) {
+            let current = [f32::from(frame[0]) / 32_768.0, f32::from(frame[1]) / 32_768.0];
+            while self.phase < 1.0 {
+                #[allow(clippy::cast_possible_truncation)] // Between 0 and 1.
+                let t = self.phase as f32;
+                for channel in 0..2 {
+                    let value = self.last[channel] + (current[channel] - self.last[channel]) * t;
+                    self.samples.push_back(value);
+                }
+                self.phase += step;
+            }
+            self.phase -= 1.0;
+            self.last = current;
+        }
+        // The oldest sound goes when the stream falls behind.
+        let over = self.samples.len().saturating_sub(RING_FRAMES * 2);
+        self.samples.drain(..over);
+    }
 }
 
 fn lock(ring: &Mutex<SampleRing>) -> MutexGuard<'_, SampleRing> {
@@ -54,10 +116,17 @@ pub struct AudioReader {
 }
 
 impl AudioReader {
-    /// Fills `destination` (stereo pairs when `stereo`, else mono) when that much sound is
-    /// waiting; returns how many values were written: all of them, or 0 when not enough
-    /// sound is there yet.
-    pub fn read_samples(&self, destination: &mut [f32], stereo: bool) -> usize {
+    /// Fills `destination` (stereo pairs when `stereo`, else the two channels mixed) when that
+    /// much sound is waiting; returns how many values were written: all of them, or 0 when not
+    /// enough sound is there yet.
+    ///
+    /// # Errors
+    ///
+    /// An odd-sized stereo buffer.
+    pub fn read_samples(&self, destination: &mut [f32], stereo: bool) -> Result<usize, String> {
+        if stereo && destination.len() % 2 != 0 {
+            return Err("a stereo buffer holds pairs".to_owned());
+        }
         let mut ring = lock(&self.ring);
         let frames = if stereo {
             destination.len() / 2
@@ -65,7 +134,7 @@ impl AudioReader {
             destination.len()
         };
         if frames == 0 || ring.samples.len() / 2 < frames {
-            return 0;
+            return Ok(0);
         }
         for i in 0..frames {
             let left = ring.samples.pop_front().unwrap_or(0.0);
@@ -77,30 +146,34 @@ impl AudioReader {
                 destination[i] = f32::midpoint(left, right);
             }
         }
-        if stereo {
-            frames * 2
-        } else {
-            frames
-        }
+        Ok(if stereo { frames * 2 } else { frames })
     }
 
-    /// Stereo frames waiting.
+    /// Frames waiting (one value each once mixed to mono).
     #[must_use]
     pub fn available_samples(&self) -> usize {
         lock(&self.ring).samples.len() / 2
     }
 
     fn push(&self, samples: &[i16]) {
-        let mut ring = lock(&self.ring);
-        ring.samples
-            .extend(samples.iter().map(|&s| f32::from(s) / 32_768.0));
-        // The oldest sound goes when the stream falls behind.
-        let over = ring.samples.len().saturating_sub(RING_FRAMES * 2);
-        ring.samples.drain(..over);
+        lock(&self.ring).push(samples);
     }
 
     fn clear(&self) {
         lock(&self.ring).samples.clear();
+    }
+
+    fn set_rate(&self, rate: i32) {
+        let mut ring = lock(&self.ring);
+        ring.rate = f64::from(rate.max(8_000));
+        ring.samples.clear();
+        ring.phase = 0.0;
+    }
+
+    fn rate(&self) -> i32 {
+        #[allow(clippy::cast_possible_truncation)] // A sample rate.
+        let rate = lock(&self.ring).rate as i32;
+        rate
     }
 }
 
@@ -402,20 +475,23 @@ impl SnesCore {
         self.speed
     }
 
-    /// The sample rate of the sound: Mesen's, whatever the stream asks.
+    /// The sample rate of the sound the stream reads.
     #[must_use]
-    pub const fn sample_rate(&self) -> i32 {
-        SAMPLE_RATE
+    pub fn sample_rate(&self) -> i32 {
+        self.audio.rate()
     }
 
-    /// Asks for a sample rate. Mesen mixes at [`SAMPLE_RATE`] and the audio stream resamples,
-    /// so the request is accepted and changes nothing.
+    /// The sample rate the stream reads at: Mesen mixes at [`SAMPLE_RATE`], and the sound is
+    /// resampled to this one.
     ///
     /// # Errors
     ///
-    /// Never; the signature is the NES app's.
-    pub const fn set_sample_rate(&mut self, rate: i32) -> Result<(), String> {
-        let _ = rate;
+    /// A rate under 8 kHz or over 384 kHz.
+    pub fn set_sample_rate(&mut self, rate: i32) -> Result<(), String> {
+        if !(8_000..=384_000).contains(&rate) {
+            return Err(format!("sample rate {rate} is out of range"));
+        }
+        self.audio.set_rate(rate);
         Ok(())
     }
 
@@ -564,14 +640,25 @@ mod tests {
     }
 
     #[test]
+    fn sound_is_resampled_to_the_stream_rate() {
+        let audio = AudioReader::default();
+        audio.set_rate(24_000);
+        audio.push(&[0; 2 * 4800]);
+        assert_eq!(audio.available_samples(), 2400);
+    }
+
+    #[test]
     fn sound_is_read_whole_or_not_at_all() {
         let audio = AudioReader::default();
-        audio.push(&[16_384, -16_384, 0, 0]);
+        // At Mesen's own rate a frame in is a frame out, one frame late (the line starts at
+        // the frame before, silence).
+        audio.push(&[16_384, -16_384, 16_384, -16_384]);
         let mut out = [0.0f32; 6];
-        assert_eq!(audio.read_samples(&mut out, true), 0);
+        assert_eq!(audio.read_samples(&mut out, true), Ok(0));
         let mut out = [0.0f32; 4];
-        assert_eq!(audio.read_samples(&mut out, true), 4);
-        assert!((out[0] - 0.5).abs() < 1e-6 && (out[1] + 0.5).abs() < 1e-6);
+        assert_eq!(audio.read_samples(&mut out, true), Ok(4));
+        assert!(out[0].abs() < 1e-6 && (out[2] - 0.5).abs() < 1e-6 && (out[3] + 0.5).abs() < 1e-6);
         assert_eq!(audio.available_samples(), 0);
+        assert!(audio.read_samples(&mut [0.0; 3], true).is_err());
     }
 }

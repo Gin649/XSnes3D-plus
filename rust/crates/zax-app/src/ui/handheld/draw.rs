@@ -38,8 +38,6 @@ const PROFILE: [f32; 4] = [0.45, 0.92, 0.55, 1.0];
 const PROFILE_ON_FOCUS: [f32; 4] = [0.02, 0.32, 0.08, 1.0];
 const BAR: [f32; 4] = [0.1, 0.1, 0.16, 1.0];
 const WARNING: [f32; 4] = [1.0, 0.45, 0.35, 1.0];
-/// The [W] of a game whose ROM was not studied yet: its profile or its name says a hack.
-const UNSTUDIED: [f32; 4] = [0.42, 0.44, 0.5, 1.0];
 /// Xnes3D+: the NES look. The red of the stripe under the title, and of the A and B button
 /// badges of the hints; the grey of the other buttons; the line between rows.
 const NES_RED: [f32; 4] = [0.85, 0.09, 0.15, 1.0];
@@ -489,23 +487,6 @@ impl Painter<'_> {
             .push_text_wrap_pos_with_pos(2.0 * metrics.padding + width);
         let _colour = self.ui.push_style_color(StyleColor::Text, DIM);
         self.ui.text_wrapped(text);
-    }
-
-    /// Paragraphs one under the other from the top of the list area, each in its colour.
-    fn lines(&self, lines: &[(String, [f32; 4])]) {
-        let metrics = &self.metrics;
-        let width = self.size[0] - 4.0 * metrics.padding;
-        self.ui
-            .set_cursor_pos([2.0 * metrics.padding, self.row_top(0) + metrics.padding]);
-        let _wrap = self
-            .ui
-            .push_text_wrap_pos_with_pos(2.0 * metrics.padding + width);
-        for (text, colour) in lines {
-            let y = self.ui.cursor_pos()[1];
-            self.ui.set_cursor_pos([2.0 * metrics.padding, y]);
-            let _colour = self.ui.push_style_color(StyleColor::Text, *colour);
-            self.ui.text_wrapped(text);
-        }
     }
 
     /// A paragraph in the middle of the list area.

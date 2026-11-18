@@ -19,7 +19,7 @@ use super::tools;
 
 /// The protocol versions this server speaks, newest first.
 const PROTOCOL_VERSIONS: [&str; 2] = ["2025-06-18", "2025-03-26"];
-/// The longest a tool call waits for the main thread (a long exact seek included).
+/// The longest a tool call waits for the main thread (a script reload included).
 const CALL_TIMEOUT: Duration = Duration::from_secs(300);
 /// The largest request body read.
 const MAX_BODY: usize = 4 * 1024 * 1024;

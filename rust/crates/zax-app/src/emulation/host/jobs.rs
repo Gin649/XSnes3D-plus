@@ -6,9 +6,7 @@ use std::path::Path;
 
 use zax_engine3d::settings::RenderAlgorithm;
 use zax_engine3d::state_codec;
-use zax_profiles::enums::TvRegionMode;
 use zax_settings::catalogue::SettingId;
-use zax_settings::values::SettingValue;
 
 use super::games::{ConfirmationRequest, ConfirmedAction, NO_LABEL};
 use super::{EmulationHost, GameView};
@@ -17,7 +15,6 @@ use crate::emulation::emulation_state::EmulationState;
 use crate::emulation::game_catalog::{GameCatalog, ResolvedGame};
 use crate::emulation::rom_file::{self, RomData, INVALID_ROM_MESSAGE};
 use crate::game_session::{GameSession, SessionRequest};
-use crate::persistence::app_settings::{AppSettings, AppSettingsMut, TvRegionSetting};
 use crate::persistence::save_slots::is_valid_slot_id;
 use crate::persistence::save_state_file::{
     self, SaveStateContent, CORRUPTED_MESSAGE, GAME_MISSING_MESSAGE,
@@ -131,10 +128,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         // `SnesCore::looks_like_a_game`); a file Mesen refuses still fails the launch.
         if !crate::snes::SnesCore::looks_like_a_game(&rom.image, &rom.name) {
             self.notifications.show_error(INVALID_ROM_MESSAGE);
-            self.log(&format!(
-                "{rom_path}: {}",
-                validation.error.unwrap_or_default()
-            ));
+            self.log(&format!("{rom_path}: not a SNES game file"));
             return;
         }
         // AMD-010 REQ-UI-200: the ROM joins the ten recent ones once it is known to be valid.

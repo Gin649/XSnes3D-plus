@@ -33,13 +33,6 @@ pub enum ConfirmedAction {
     LoadSlotAligned(String),
     /// Nothing: a message the user only acknowledges (no cancelling button).
     Acknowledge,
-    /// Force the built-in patch called `patch` on the ROM in `rom` (Rust-only).
-    ForcePatch {
-        /// The ROM file.
-        rom: String,
-        /// The patch's name.
-        patch: String,
-    },
 }
 
 /// A question the interface puts to the user before a deletion (REQ-UI-110).
@@ -128,31 +121,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             ConfirmedAction::LoadSlotAsSet(slot_id) => self.load_slot_checked(&slot_id, false),
             ConfirmedAction::LoadSlotAligned(slot_id) => self.load_slot_aligned(&slot_id),
             ConfirmedAction::Acknowledge => {}
-            ConfirmedAction::ForcePatch { rom, patch } => self.force_patch(&rom, &patch),
         }
-    }
-
-    /// Asks whether to force `patch` on the ROM in `rom`, `message` saying why it is not made
-    /// for it; `force` and `cancel` are the labels of the buttons.
-    pub fn ask_to_force_patch(
-        &mut self,
-        (title, message): (&str, &str),
-        (force, cancel): (&str, &str),
-        rom: &str,
-        patch: &str,
-    ) {
-        self.log(&format!("{title}: {message}"));
-        self.confirm(ConfirmationRequest {
-            title: title.to_owned(),
-            message: message.to_owned(),
-            confirm_label: force.to_owned(),
-            cancel_label: cancel.to_owned(),
-            alternative: None,
-            action: ConfirmedAction::ForcePatch {
-                rom: rom.to_owned(),
-                patch: patch.to_owned(),
-            },
-        });
     }
 
     /// Shows `message` under `title` until the user acknowledges it (Rust-only): a question with

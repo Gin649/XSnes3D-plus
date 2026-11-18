@@ -76,18 +76,6 @@ const DOCUMENTS: &[(&str, &str)] = &[
     ("docs/RECIPES.md", include_str!("../editor/RECIPES.md")),
     ("docs/CHECKLIST.md", include_str!("../editor/CHECKLIST.md")),
     (
-        "examples/flappyzaxnes/README.md",
-        include_str!("../editor/examples/flappyzaxnes/README.md"),
-    ),
-    (
-        "examples/flappyzaxnes/profile.json",
-        include_str!("../demo/source/profile/flappyzaxnes.json"),
-    ),
-    (
-        "examples/flappyzaxnes/profile3d.py",
-        include_str!("../demo/source/tools/profile3d.py"),
-    ),
-    (
         "examples/classify-rules.json",
         include_str!("../editor/examples/classify-rules.json"),
     ),
@@ -624,47 +612,6 @@ mod tests {
         let second = create_project(&dir, "Metal Force [Korea][Unl][!]").ok();
         assert!(second.is_some_and(|second| second.folder.ends_with("Metal Force Korea Unl 2")));
         assert!(build_project(&project.folder).is_ok_and(|built| built.patterns == 1));
-        let _ = std::fs::remove_dir_all(&dir);
-    }
-
-    #[test]
-    fn a_project_made_from_a_profile_builds_the_same_patterns_and_scripts() {
-        let dir = scratch("export");
-        let _ = deploy(&dir);
-        let source = dir.join("flappy.3dn");
-        let _ = std::fs::write(&source, include_bytes!("../demo/flappyzaxnes.3dn"));
-        let Ok(project) = export_project(&dir, "FlappyZaxNes", &source) else {
-            panic!("the project was not made");
-        };
-        let original = description::dump(&source, true).unwrap_or_default();
-        let rebuilt = description::dump(&project.profile_file, true).unwrap_or_default();
-        // the first line names the profile, which has its own title
-        let body = |text: &str| {
-            text.lines().skip(1).collect::<Vec<_>>().join(
-                "
-",
-            )
-        };
-        assert_ne!(body(&original).len(), 0);
-        assert_eq!(body(&original), body(&rebuilt));
-        let load = |path: &Path| {
-            std::fs::read(path)
-                .ok()
-                .and_then(|bytes| zax_profiles::format::load(&bytes, None, None).ok())
-                .map(|document| document.profile)
-        };
-        let (Some(before), Some(after)) = (load(&source), load(&project.profile_file)) else {
-            panic!("a profile does not load");
-        };
-        assert_eq!(before.scripts.len(), after.scripts.len());
-        for (a, b) in before.scripts.iter().zip(&after.scripts) {
-            assert_eq!(
-                (&a.name, a.enabled, &a.source, &a.tag_string),
-                (&b.name, b.enabled, &b.source, &b.tag_string)
-            );
-        }
-        assert_ne!(before.id, after.id);
-        assert!(after.title.is_some_and(|title| title.ends_with(" (Lua)")));
         let _ = std::fs::remove_dir_all(&dir);
     }
 

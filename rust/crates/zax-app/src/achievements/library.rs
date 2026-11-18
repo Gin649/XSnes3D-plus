@@ -296,16 +296,11 @@ fn entry(stamp: &Stamp, user: String, game: Option<KnownGame>) -> Entry {
     }
 }
 
-/// The ROM in `path` as rcheevos hashes a NES game: an iNES header (left out of the hash), the
-/// PRG and the CHR data, as the game played is hashed.
+/// The hash of the ROM in `path` as RetroAchievements knows the game: the ROM file, a copier
+/// header left out.
 fn hash_of(path: &Path) -> Result<String, String> {
     let file = crate::emulation::rom_file::read(path)?;
-    let rom =
-        zax_nes::rom::RomImage::try_load(&file.image, "").map_err(|error| error.to_string())?;
-    let mut image = vec![0x4E, 0x45, 0x53, 0x1A, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    image.extend_from_slice(rom.prg_rom());
-    image.extend_from_slice(rom.chr_rom());
-    zax_achievements::nes_hash(&image).ok_or_else(|| "no hash".to_owned())
+    zax_achievements::snes_hash(&file.image).ok_or_else(|| "no hash".to_owned())
 }
 
 /// Asks the server for the game of the ROM in `path` and the player's achievements in it.

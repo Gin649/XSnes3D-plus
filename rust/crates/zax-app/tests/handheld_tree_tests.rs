@@ -42,6 +42,7 @@ fn row_key(row: OptionRow) -> String {
         OptionRow::Controls => "page.controls".to_owned(),
         OptionRow::Achievements => "page.achievements".to_owned(),
         OptionRow::TouchPad => "row.touch_pad".to_owned(),
+        OptionRow::Android(action) => format!("row.android.{action:?}"),
         OptionRow::Shader(slot) => format!("row.shader.{}", slot.ids().mode.key()),
         OptionRow::ShaderBackend => "video.backend".to_owned(),
         OptionRow::ShaderPreFilter(slot) => {
@@ -92,7 +93,7 @@ impl Tree {
                 .iter()
                 .filter_map(|row| match row {
                     GameRow::Option(row) => Some(*row),
-                    GameRow::ResetAll | GameRow::Widescreen | GameRow::Hacks => None,
+                    GameRow::ResetAll => None,
                 })
                 .collect(),
         }
@@ -462,8 +463,6 @@ fn tree_text() -> String {
     for row in game_options::GAME_MAIN {
         match row {
             GameRow::ResetAll => line(&mut out, 1, "row.reset_all"),
-            GameRow::Widescreen => line(&mut out, 1, "row.widescreen"),
-            GameRow::Hacks => line(&mut out, 1, "page.hacks"),
             GameRow::Option(row) => emit(Tree::Game, &[row], 1, &mut out),
         }
     }

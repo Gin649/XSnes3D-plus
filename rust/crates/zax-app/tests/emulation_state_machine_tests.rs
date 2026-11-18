@@ -10,10 +10,9 @@ use zax_app::emulation::commands::{Command, CommandArgs};
 use zax_app::emulation::emulation_state::EmulationState;
 use zax_app::emulation::notification_center::NotificationSeverity;
 use zax_app::emulation::rom_file::INVALID_ROM_MESSAGE;
-use zax_app::persistence::app_settings::{AppSettings, AppSettingsMut, TvRegionSetting};
+use zax_app::persistence::app_settings::{AppSettings, AppSettingsMut};
 use zax_app::persistence::save_slots::QUICK_SLOT_ID;
 use zax_app::persistence::settings_store::SettingsStore;
-use zax_nes::NesRegion;
 use zax_settings::model::SettingsModel;
 
 fn launch(harness: &mut LoopHarness, game_id: &str) {
@@ -246,35 +245,6 @@ fn req_loop_052_the_exit_persists_settings_and_slots() {
     SettingsStore::new(&harness.paths).load(&mut reread, now);
     assert!((reread.volume() - 0.25).abs() < 1e-6);
     assert!(reread.auto_tv_mode());
-}
-
-#[test]
-fn req_loop_017_automatic_region_follows_the_rom_header() {
-    let mut harness = LoopHarness::create();
-    // Byte 9 bit 0 = 1 marks PAL in the iNES header.
-    let mut image = SyntheticRom::counter();
-    image[9] = 0x01;
-    let rom = harness.write_rom(&image, "pal.nes");
-    harness.catalog().add("pal", Some(&rom));
-    harness
-        .host
-        .update_settings(|model| model.set_auto_tv_mode(true));
-    harness.run_with(Command::LaunchGame, CommandArgs::of_text("pal"));
-    assert_eq!(TvRegionSetting::Pal, harness.host.settings().tv_mode());
-    assert_eq!(
-        NesRegion::Pal,
-        harness.host.session().expect("a session").core().region()
-    );
-    assert!((harness.host.pacer.nominal_rate - 50.0).abs() < f64::EPSILON);
-    harness
-        .host
-        .update_settings(|model| model.set_tv_mode(TvRegionSetting::Ntsc));
-    assert_eq!(
-        NesRegion::Ntsc,
-        harness.host.session().expect("a session").core().region()
-    );
-    harness.tick_frame();
-    assert!((harness.host.pacer.nominal_rate - 60.0).abs() < f64::EPSILON);
 }
 
 #[test]

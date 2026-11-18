@@ -60,7 +60,6 @@ fn req_ui_205_the_model_enumerates_every_menu_command() {
         SpeedDown,
         SetRegion,
         ToggleAutoRegion,
-        SetPortType,
         ToggleTwoDimensional,
         ResetView,
         SetCameraMode,
@@ -68,8 +67,6 @@ fn req_ui_205_the_model_enumerates_every_menu_command() {
         SetSkybox,
         ToggleShadows,
         ToggleReflections,
-        // Rust-only (owner request): the options of the game's built-in patch.
-        ToggleHackOption,
         ToggleFullscreen,
         ToggleFpsCounter,
         SetVolume,
@@ -81,17 +78,8 @@ fn req_ui_205_the_model_enumerates_every_menu_command() {
         ShowKeyConfig,
         ShowDataFolder,
         ShowAbout,
-        // Rust-only (owner request): the movies.
-        ToggleMovieRecording,
-        PlayMovie,
-        // Rust-only (EDITOR-1): an .fm2 or a Zaxnes movie from anywhere.
-        OpenMovie,
-        StopMovie,
-        // Rust-only (EDITOR-1): going to a frame of the movie being played.
-        SeekMovie,
         // Rust-only (EDITOR-1): the profile's scripts read again, the game kept where it is.
         ReloadScript,
-        AnnotateMovie,
         // Rust-only (owner request): the editor mode, a blank Lua profile, the agent's prompt.
         ToggleEditorMode,
         NewLuaProfile,

@@ -25,7 +25,7 @@
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
 
-use zax_nes::apu::AudioReader;
+use crate::snes::AudioReader;
 use zax_platform::audio::{AudioRender, CHANNELS};
 
 /// Default target latency of the ring, in milliseconds (`audio.latency_ms`, Q-153 §2).
@@ -637,14 +637,14 @@ impl AudioRender for AudioStream {
 /// threshold plus one emulated frame of production.
 pub const CONTROL_HEADROOM_MS: f32 = 70.0;
 
-/// The capacity the core gives its output ring at `sample_rate`: at least 10 000 mono samples,
-/// otherwise 200 ms (SPEC-02 REQ-CORE-071, `Apu2A03::set_sample_rate`).
+/// The capacity the core gives its output ring at `sample_rate`: at least
+/// [`crate::snes::MIN_BUFFER_SAMPLES`] frames, otherwise 200 ms.
 ///
 /// Mirrored here because the target latency has to be decided when the device opens, before any
 /// core exists. It is a read of the core's rule, not a change to it.
 #[must_use]
 pub fn core_ring_samples(sample_rate: u32) -> usize {
-    zax_nes::apu::Apu2A03::MIN_BUFFER_SAMPLES.max(sample_rate as usize / 5)
+    crate::snes::MIN_BUFFER_SAMPLES.max(sample_rate as usize / 5)
 }
 
 /// The target latency the core's ring can really hold, in milliseconds (Q-153 §3).

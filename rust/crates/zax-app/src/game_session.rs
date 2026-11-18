@@ -13,7 +13,6 @@
 //! conversion engine that can reach a hook borrows them for its length (`scripted`), through
 //! `zax_scripting::lend_context`, so the compiler rules out a conflicting access.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{channel, Receiver, Sender};
 
 use zax_engine3d::draw_list::FrameDrawList;

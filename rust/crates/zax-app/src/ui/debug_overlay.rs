@@ -91,8 +91,7 @@ pub fn draw(ui: &Ui, host: &AppHost, chrome_height: f32, info: &DebugInfo<'_>) {
         ui.text_wrapped(title);
         if let Some(session) = host.session() {
             ui.text(format!(
-                "{:?}  {} fps nominal  frame {}",
-                session.core().region(),
+                "SNES  {} fps nominal  frame {}",
                 session.nominal_frame_rate(),
                 session.core().frame_count()
             ));

@@ -13,7 +13,7 @@ use zax_app::persistence::save_state_file::{
     self, CAMERA_SECTION_BYTES, CORRUPTED_MESSAGE, GAME_MISSING_MESSAGE, LEGACY_SIGNATURE,
     SIGNATURE,
 };
-use zax_nes::NesCore;
+use zax_app::snes::SnesCore as NesCore;
 use zax_scripting::persistent;
 
 #[test]
@@ -129,17 +129,6 @@ fn req_pers_056_the_signature_and_version_are_checked(#[case] signature: &str) {
     assert!(save_state_file::try_read(&file).is_none());
 }
 
-fn replace_core_name(block: &[u8], name: &str) -> Vec<u8> {
-    let stored_length =
-        usize::try_from(i32::from_le_bytes(block[8..12].try_into().unwrap())).unwrap();
-    let replacement = name.as_bytes();
-    let mut result = block[..8].to_vec();
-    result.extend_from_slice(&i32::try_from(replacement.len()).unwrap().to_le_bytes());
-    result.extend_from_slice(replacement);
-    result.extend_from_slice(&block[12 + stored_length..]);
-    result
-}
-
 #[test]
 fn amd_029_a_savestate_of_the_old_name_is_still_read() {
     let mut harness = LoopHarness::create();
@@ -156,15 +145,6 @@ fn amd_029_a_savestate_of_the_old_name_is_still_read() {
     assert_eq!(written.lua, content.lua);
     assert_eq!(written.camera, content.camera);
     assert_eq!(written.conversion, content.conversion);
-    // And the core block itself: the legacy core name is accepted, a third one never is.
-    let mut core = NesCore::new();
-    let legacy = replace_core_name(&content.core, NesCore::LEGACY_CORE_NAME);
-    assert!(core.try_load_state(&legacy, 0).is_ok());
-    let mut foreign = NesCore::new();
-    let error = foreign
-        .try_load_state(&replace_core_name(&content.core, "Nestopia"), 0)
-        .unwrap_err();
-    assert_eq!(NesCore::FOREIGN_CORE_MESSAGE, error.message);
 }
 
 #[test]

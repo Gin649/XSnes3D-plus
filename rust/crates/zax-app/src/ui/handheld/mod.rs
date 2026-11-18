@@ -861,16 +861,6 @@ impl HandheldUi {
         self.screen = Screen::AchievementGrid;
     }
 
-    /// The title of the 3D profile the list found for the game in `path`, if any.
-    fn profile_title_of(&self, path: &Path) -> Option<String> {
-        self.roms
-            .entries()
-            .iter()
-            .find(|entry| entry.path == path)
-            .and_then(RomEntry::profile_title)
-            .map(str::to_owned)
-    }
-
     /// The options of a game, while their screen is open.
     #[must_use]
     pub const fn game_options(&self) -> Option<&GameOptionsModel> {

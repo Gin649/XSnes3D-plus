@@ -39,7 +39,6 @@ use crate::audio::stream::{self as stream, AudioLink};
 use crate::audio::AudioMixer;
 use crate::frame_profiler::{Stage, StageClock, StageTimes};
 use crate::game_session::{GameSession, SessionEvent, SessionFrame};
-use crate::input::routing;
 use crate::input::InputSnapshot;
 use crate::persistence::app_settings::AppSettings;
 use crate::persistence::battery_ram_store::BatteryRamStore;
@@ -287,9 +286,6 @@ pub struct EmulationHost<C: GameCatalog, V: GameView = NoView> {
     /// The slots shared by every game before the files were named after the ROM: a game's
     /// states move to its files when it is chosen.
     pub legacy_slots: SaveSlotIndex,
-    /// Whether each slot's state fits the built-in ROM patches, by slot, save time and setting.
-    slot_patch_cache:
-        std::cell::RefCell<std::collections::HashMap<(String, i64, bool), jobs::SlotPatchStatus>>,
     /// The CRC-32 of the ROM files.
     rom_crcs: std::cell::RefCell<crate::persistence::rom_crc_cache::RomCrcCache>,
     /// RetroAchievements (Rust-only, owner request), softcore.
@@ -435,9 +431,8 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             shader_report: crate::ui::shader_panel::ShaderReport::default(),
             slots: SaveSlotIndex::new(),
             legacy_slots,
-            slot_patch_cache: std::cell::RefCell::default(),
             rom_crcs: std::cell::RefCell::new(rom_crcs),
-            achievements: AchievementSystem::new(&format!("Zaxnes/{}", env!("CARGO_PKG_VERSION")))
+            achievements: AchievementSystem::new(&format!("XSnes3D/{}", env!("CARGO_PKG_VERSION")))
                 .with_cache(achievement_cache),
             catch_up: None,
             defer_conversion: false,
@@ -614,7 +609,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 let source: crate::audio::audio_mixer::AudioSampleSource =
                     Box::new(move |destination| {
                         // A mono read cannot be refused; an empty buffer reads as silence.
-                        reader.read_samples(destination, false)
+                        reader.read_samples(destination, false).unwrap_or(0)
                     });
                 mixer.set_emulation_source(Some(source));
             }

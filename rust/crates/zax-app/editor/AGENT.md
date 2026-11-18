@@ -94,7 +94,7 @@ The tools (detail: `docs/EDITOR.md` §4):
 
 The method learnt on a full game, its measured facts and its pitfalls:
 `docs/EDITOR-PROFILE-WORKFLOW.md`. Read its §3 and §5 before placing anything; the usual Lua
-techniques are in `docs/RECIPES.md`, a complete `profile.json` in `examples/flappyzaxnes/`.
+techniques are in `docs/RECIPES.md`.
 Before saying a part is done: `docs/CHECKLIST.md`.
 
 ## 4b. Rules

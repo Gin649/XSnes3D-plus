@@ -6,7 +6,6 @@
 //! ([`Submenu`]) and a choice names what makes it selected ([`Selection`]); the model reads the
 //! host it is given at the moment it builds the children or answers.
 
-use zax_nes::ControllerPortType;
 use zax_render::camera::CameraMode;
 use zax_settings::catalogue::{self, SettingId};
 
@@ -54,18 +53,12 @@ pub enum Submenu {
     Speed,
     /// The video regions.
     Region,
-    /// The two controller ports.
-    Ports,
-    /// The device of one port.
-    Port(usize),
     /// The camera mode.
     CameraMode,
     /// The skyboxes.
     Skybox,
     /// The volume steps.
     Volume,
-    /// The movies of the movies folder.
-    Movies,
 }
 
 /// What makes a [`MenuItemKind::Choice`] the selected one.
@@ -75,8 +68,6 @@ pub enum Selection {
     Speed(i32),
     /// The video region is this one and not detected automatically.
     Region(TvRegionSetting),
-    /// This port holds this device.
-    Port(usize, ControllerPortType),
     /// The camera is in this mode.
     Camera(CameraMode),
     /// The skybox is this one.
@@ -290,12 +281,9 @@ impl MenuBarModel {
             Submenu::DeleteState => delete_slot_items(host),
             Submenu::Speed => speed_items(),
             Submenu::Region => region_items(),
-            Submenu::Ports => port_items(),
-            Submenu::Port(port) => port_device_items(port),
             Submenu::CameraMode => camera_items(),
             Submenu::Skybox => skybox_items(),
             Submenu::Volume => volume_items(),
-            Submenu::Movies => movie_items(host),
         }
     }
 }
@@ -319,7 +307,6 @@ fn is_selected(selection: Selection, host: &AppHost) -> bool {
     match selection {
         Selection::Speed(value) => settings.game_speed() == value,
         Selection::Region(region) => !settings.auto_tv_mode() && settings.tv_mode() == region,
-        Selection::Port(port, device) => host.port_type(port) == device,
         Selection::Camera(mode) => host.scene().camera.mode() == mode,
         Selection::Skybox(value) => settings.skybox() == value,
         Selection::Volume(percent) => {
@@ -388,7 +375,6 @@ fn build_menus() -> Vec<Menu> {
             MenuItem::rule(),
             MenuItem::sub(text::speed(), Submenu::Speed),
             MenuItem::sub(text::region(), Submenu::Region),
-            MenuItem::sub(text::ports(), Submenu::Ports),
         ],
     };
     let video = Menu {
@@ -435,12 +421,7 @@ fn build_menus() -> Vec<Menu> {
             // the account has to stay reachable without one, so it is here.
             MenuItem::of_ui(UiCommand::AchievementsAccount, ""),
             MenuItem::rule(),
-            item(Command::ToggleMovieRecording),
-            MenuItem::sub(text::movies(), Submenu::Movies),
-            item(Command::OpenMovie),
             item(Command::ReloadScript),
-            item(Command::AnnotateMovie),
-            item(Command::StopMovie),
             MenuItem::rule(),
             item(Command::ToggleEditorMode),
             item(Command::NewLuaProfile),
@@ -595,39 +576,6 @@ fn region_items() -> Vec<MenuItem> {
     items
 }
 
-fn port_items() -> Vec<MenuItem> {
-    (0..2)
-        .map(|port| {
-            MenuItem::sub(
-                format!("{} {}", text::port(), port + 1),
-                Submenu::Port(port),
-            )
-        })
-        .collect()
-}
-
-fn port_device_items(port: usize) -> Vec<MenuItem> {
-    let number = i32::try_from(port).unwrap_or(0);
-    [
-        (text::port_controller(), ControllerPortType::Controller),
-        (text::port_zapper(), ControllerPortType::Zapper),
-    ]
-    .into_iter()
-    .map(|(label, device)| {
-        MenuItem::choice(
-            Command::SetPortType,
-            label,
-            CommandArgs {
-                number,
-                text: None,
-                number2: device as i32,
-            },
-            Selection::Port(port, device),
-        )
-    })
-    .collect()
-}
-
 // Q-038
 fn camera_items() -> Vec<MenuItem> {
     vec![
@@ -663,27 +611,6 @@ fn skybox_items() -> Vec<MenuItem> {
                 text::label_of_option(&option.label),
                 CommandArgs::of_number(value),
                 Selection::Skybox(value),
-            )
-        })
-        .collect()
-}
-
-fn movie_items(host: &AppHost) -> Vec<MenuItem> {
-    let files = host.movie_files();
-    if files.is_empty() {
-        return vec![MenuItem::note(text::nothing_here())];
-    }
-    files
-        .iter()
-        .map(|path| {
-            let label = path
-                .file_stem()
-                .map(|stem| stem.to_string_lossy().into_owned())
-                .unwrap_or_default();
-            MenuItem::of(
-                Command::PlayMovie,
-                Some(label),
-                CommandArgs::of_text(&path.to_string_lossy()),
             )
         })
         .collect()

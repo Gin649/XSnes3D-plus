@@ -296,7 +296,7 @@ impl Running {
         install_bundled_profiles(&paths);
         #[cfg(feature = "shaders")]
         install_shader_pack(&paths);
-        let mut catalog = LibraryGameCatalog::open(asset_root.as_deref(), &paths, Box::new(log));
+        let catalog = LibraryGameCatalog::open(asset_root.as_deref(), &paths, Box::new(log));
         if let Some(rom) = options
             .rom_path
             .as_deref()
@@ -2650,10 +2650,6 @@ fn update_cursor(
         input.pointer.set_cursor_visible(visible);
     }
 }
-
-/// The percentages of the `video.widescreen_extra` choices, by index.
-const WIDESCREEN_EXTRA_PERCENT: [u16; 14] =
-    [0, 5, 10, 15, 20, 25, 30, 40, 50, 75, 100, 150, 200, 300];
 
 #[allow(clippy::too_many_lines)] // The scene of a frame, each source of motion in its order.
 fn update_scene(host: &mut AppHost, state: &mut RunState) {

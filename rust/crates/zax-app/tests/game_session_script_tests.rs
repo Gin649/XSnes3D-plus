@@ -9,9 +9,7 @@ mod common;
 
 use common::SyntheticRom;
 use zax_app::game_session::{GameSession, SessionRequest};
-use zax_app::input::zapper::RELEASED_BYTE;
 use zax_app::input::InputAction;
-use zax_nes::ZapperPosition;
 use zax_profiles::profile::GameProfile;
 use zax_profiles::script::ProfileScript;
 use zax_render::scene::SceneState;
@@ -56,7 +54,7 @@ impl Session {
             tiles: None,
         };
         let mut game = GameSession::create(request, &mut model).unwrap();
-        assert!(game.load_rom(&SyntheticRom::counter(), "test.nes").success);
+        assert!(game.load_rom(&SyntheticRom::counter(), "test.sfc").success);
         game.start(&mut model, &mut scene);
         Self { game, scene, model }
     }
@@ -104,8 +102,6 @@ impl Session {
             &mut self.scene,
             player_one,
             InputAction::NONE,
-            RELEASED_BYTE,
-            ZapperPosition::new(0, 0),
         );
     }
 

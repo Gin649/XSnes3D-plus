@@ -18,7 +18,7 @@ use std::sync::Arc;
 use zax_achievements::{
     Achievement, Client, Event, Item, Memory, NoMemory, Summary, Transport, UreqTransport,
 };
-use zax_nes::NesCore;
+use crate::snes::SnesCore as NesCore;
 use zax_platform::ui_image::PictureUpdate;
 use zax_platform::WaveAudio;
 
@@ -41,8 +41,8 @@ pub const GAME_SECONDS: f64 = 6.0;
 /// How long the progress of an achievement stays on screen after it changed.
 pub const PROGRESS_SECONDS: f64 = 2.5;
 
-/// The CPU bus of the console as rcheevos addresses a NES: $0000 to $FFFF, read without side
-/// effects.
+/// The console's memory as rcheevos addresses a SNES (work RAM from 0, then save RAM), read
+/// without side effects.
 pub struct CoreMemory<'a>(pub &'a NesCore);
 
 impl Memory for CoreMemory<'_> {
@@ -821,21 +821,10 @@ fn unlock_text(item: &Item) -> String {
     )
 }
 
-/// The ROM of `core` as rcheevos hashes a NES game: an iNES header (left out of the hash) and
-/// the PRG and CHR data. The player's ROM when a built-in patch changed it in memory.
+/// The ROM of `core` as rcheevos hashes a SNES game: the ROM file as loaded.
 #[must_use]
 pub fn hash_image(core: &NesCore) -> Option<Vec<u8>> {
-    let mut image = vec![0x4E, 0x45, 0x53, 0x1A, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0];
-    if let Some(original) = core.original_image() {
-        let rom = zax_nes::rom::RomImage::try_load(original, "").ok()?;
-        image.extend_from_slice(rom.prg_rom());
-        image.extend_from_slice(rom.chr_rom());
-    } else {
-        let rom = core.cartridge()?.rom();
-        image.extend_from_slice(rom.prg_rom());
-        image.extend_from_slice(rom.chr_rom());
-    }
-    Some(image)
+    core.original_image().map(<[u8]>::to_vec)
 }
 
 /// The jingle of an unlock: a rising arpeggio on a pulse voice, as the console would play it.

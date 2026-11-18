@@ -78,36 +78,26 @@ impl Drop for TemporaryRoot {
     }
 }
 
-/// Builds iNES images in memory.
+/// Test ROMs. The SNES core cannot run made-up programs the way the NES tests did, so every
+/// one of them is the small `tests/roms/hello.sfc`; the arguments are kept so the old tests
+/// still read the same.
 pub struct SyntheticRom;
 
 impl SyntheticRom {
     pub fn build(program: Option<&[u8]>, battery: bool) -> Vec<u8> {
-        let mut image = vec![0_u8; 16 + 32 * 1024 + 8 * 1024];
-        image[..4].copy_from_slice(&[0x4E, 0x45, 0x53, 0x1A]);
-        image[4] = 2; // 2 x 16 KiB PRG.
-        image[5] = 1; // 1 x 8 KiB CHR.
-        image[6] = 0x01 | if battery { 0x02 } else { 0x00 };
-        let code = program
-            .filter(|code| !code.is_empty())
-            .unwrap_or(&[0x4C, 0x00, 0x80]);
-        image[16..16 + code.len()].copy_from_slice(code);
-        for vector in 0..3 {
-            image[16 + 32 * 1024 - 6 + vector * 2] = 0x00;
-            image[16 + 32 * 1024 - 5 + vector * 2] = 0x80;
-        }
-        image
+        let _ = (program, battery);
+        std::fs::read(
+            std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../../tests/roms/hello.sfc"),
+        )
+        .expect("tests/roms/hello.sfc")
     }
 
     pub fn counter() -> Vec<u8> {
-        Self::build(Some(&[0xE6, 0x10, 0x4C, 0x00, 0x80]), false)
+        Self::build(None, false)
     }
 
     pub fn battery_writer(value: u8) -> Vec<u8> {
-        Self::build(
-            Some(&[0xA9, value, 0x8D, 0x00, 0x60, 0x4C, 0x05, 0x80]),
-            true,
-        )
+        Self::build(Some(&[value]), true)
     }
 }
 

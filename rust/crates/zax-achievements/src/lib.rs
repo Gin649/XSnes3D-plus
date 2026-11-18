@@ -403,7 +403,7 @@ impl Client {
         })
     }
 
-    /// Identifies the game by its ROM (`image`: an iNES file) and loads its achievements; the
+    /// Identifies the game by its ROM (`image`: the ROM file) and loads its achievements; the
     /// answer comes as [`Event::GameLoaded`]. Waits for a sign-in in progress.
     pub fn load_game<M: Memory>(&mut self, memory: &M, image: &[u8]) {
         let raw = self.raw.as_ptr();
@@ -668,14 +668,14 @@ impl std::fmt::Debug for Client {
     }
 }
 
-/// The hash RetroAchievements knows a NES game by, from its ROM as an iNES file (the header is
-/// left out): what a game's achievements are asked by. `None` for an image rcheevos refuses.
+/// The hash RetroAchievements knows a SNES game by, from its ROM file (a copier header is left
+/// out): what a game's achievements are asked by. `None` for an image rcheevos refuses.
 #[must_use]
-pub fn nes_hash(image: &[u8]) -> Option<String> {
+pub fn snes_hash(image: &[u8]) -> Option<String> {
     let mut hash = [0 as c_char; 33];
     // SAFETY: `image` is readable for its length and `hash` writable for the 33 bytes rcheevos
     // writes (32 digits and the NUL).
-    let found = unsafe { ffi::zax_ra_hash_nes(image.as_ptr(), image.len(), hash.as_mut_ptr()) };
+    let found = unsafe { ffi::zax_ra_hash_snes(image.as_ptr(), image.len(), hash.as_mut_ptr()) };
     (found != 0)
         .then(|| text(hash.as_ptr()))
         .filter(|hash| hash.len() == 32)
