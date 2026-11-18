@@ -417,6 +417,18 @@ impl TileCapture {
         }
     }
 
+    /// Gives `input`'s colours the look of the finished picture `frame`: each palette entry
+    /// takes the colour it shows there ([`TileCapture::finished_colors`]), so layers blended
+    /// with colour maths (see-through water, fog, glows, a layer only on the sub screen) and
+    /// screen fades keep their look in 3D. Entry 0, the backdrop, is left alone.
+    pub fn apply_finished_colors(&self, input: &mut EngineInput, frame: &crate::Frame) {
+        for (entry, colour) in self.finished_colors(frame).into_iter().enumerate().skip(1) {
+            if let Some([r, g, b]) = colour {
+                input.colors[entry] = Rgb24::new(r, g, b);
+            }
+        }
+    }
+
     /// Adds the sky to `input` as a layer of its own ([`BACKDROP`]), from the finished
     /// picture `frame`: whole tiles whose rows are each line's sky colour. Its colours go in
     /// palette entries no tile of the frame uses (all layers share one palette). Nothing is

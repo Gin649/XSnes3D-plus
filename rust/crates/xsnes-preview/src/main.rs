@@ -288,6 +288,7 @@ fn run() -> Result<(), String> {
         };
         let mut input = capture.engine_input();
         if let Some(frame) = snes.frame() {
+            capture.apply_finished_colors(&mut input, &frame);
             capture.add_backdrop(&mut input, &frame);
         }
         let counter_i32 = i32::try_from(counter).unwrap_or(i32::MAX);

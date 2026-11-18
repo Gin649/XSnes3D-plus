@@ -573,28 +573,57 @@ impl TileCapture {
         mosaic: &mut [MosaicLatch; 4],
         x: u8,
     ) -> Option<u16> {
+        let palette = self.palette(chunk.cgram_index)?;
+        let source = self.pixel_source(chunk, line, sprites, mosaic, x, Screen::Main)?;
+        Some(match source {
+            Source::Entry(entry) => palette[entry],
+            Source::Direct(colour) => colour,
+            Source::Black => 0,
+        })
+    }
+
+    /// Where one pixel's colour comes from, on the main screen (as the console draws it) or
+    /// from the layers only on the sub screen (windows left aside); `None` for a mode that is
+    /// not rebuilt.
+    fn pixel_source(
+        &self,
+        chunk: &RawChunk,
+        line: &RawLine,
+        sprites: &[Option<(u8, u8, u8)>],
+        mosaic: &mut [MosaicLatch; 4],
+        x: u8,
+        screen: Screen,
+    ) -> Option<Source> {
         if chunk.forced_blank != 0 {
-            return Some(0);
+            return Some(Source::Black);
         }
+        let shown = match screen {
+            Screen::Main => chunk.main_layers,
+            Screen::SubOnly => chunk.sub_layers & !chunk.main_layers,
+        };
+        let masked = |layer: usize| {
+            screen == Screen::Main
+                && chunk.window_masked[layer][usize::from(x >> 3)] & (1 << (x & 7)) != 0
+        };
         if chunk.bg_mode == 7 {
-            return self.mode7_pixel(chunk, sprites, x);
+            return Some(self.mode7_source(chunk, sprites, x, shown, &masked));
         }
         let (layers, sprite_priorities) = mode_rules(chunk.bg_mode, chunk.bg3_priority != 0)?;
-        let palette = self.palette(chunk.cgram_index)?;
-        let masked =
-            |layer: usize| chunk.window_masked[layer][usize::from(x >> 3)] & (1 << (x & 7)) != 0;
 
-        let mut best: Option<(u8, u16)> = None;
-        let mut offer = |priority: u8, colour: u16| {
+        let mut best: Option<(u8, Source)> = None;
+        let mut offer = |priority: u8, source: Source| {
             if best.is_none_or(|(current, _)| current < priority) {
-                best = Some((priority, colour));
+                best = Some((priority, source));
             }
         };
 
-        if chunk.main_layers & 0x10 != 0 && !masked(4) {
+        if shown & 0x10 != 0 && !masked(4) {
             if let Some((color, sprite_palette, priority)) = sprites[usize::from(x)] {
                 let index = 128 + usize::from(sprite_palette) * 16 + usize::from(color);
-                offer(sprite_priorities[usize::from(priority)], palette[index]);
+                offer(
+                    sprite_priorities[usize::from(priority)],
+                    Source::Entry(index),
+                );
             }
         }
 
@@ -639,23 +668,45 @@ impl TileCapture {
             }
 
             // Mesen checks the main screen and window per pixel, after mosaic.
-            if color == 0 || chunk.main_layers & (1 << index) == 0 || masked(index) {
+            if color == 0 || shown & (1 << index) == 0 || masked(index) {
                 continue;
             }
-            let layer_colour = if rule.bpp == 8 && chunk.direct_color != 0 {
-                direct_color(tile_palette, color)
+            let source = if rule.bpp == 8 && chunk.direct_color != 0 {
+                Source::Direct(direct_color(tile_palette, color))
             } else if rule.bpp == 8 {
-                palette[usize::from(rule.palette_base) + usize::from(color)]
+                Source::Entry(usize::from(rule.palette_base) + usize::from(color))
             } else {
-                palette[usize::from(rule.palette_base)
-                    + usize::from(tile_palette) * (1 << rule.bpp)
-                    + usize::from(color)]
+                Source::Entry(
+                    usize::from(rule.palette_base)
+                        + usize::from(tile_palette) * (1 << rule.bpp)
+                        + usize::from(color),
+                )
             };
-            offer(priority, layer_colour);
+            offer(priority, source);
         }
 
-        Some(best.map_or(palette[0], |(_, colour)| colour))
+        Some(best.map_or(Source::Entry(0), |(_, source)| source))
     }
+}
+
+/// Which screen [`TileCapture::pixel_source`] looks at.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Screen {
+    /// The main screen, as drawn.
+    Main,
+    /// The layers that are only on the sub screen.
+    SubOnly,
+}
+
+/// Where a pixel's colour comes from.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum Source {
+    /// A palette entry (0 is the backdrop).
+    Entry(usize),
+    /// A direct colour (15-bit BGR).
+    Direct(u16),
+    /// Forced blank.
+    Black,
 }
 
 impl TileCapture {
@@ -668,45 +719,47 @@ impl TileCapture {
             .map(|l| &l.color)
     }
 
-    /// One main screen pixel of a Mode 7 line, as Mesen's `RenderMode7`.
-    fn mode7_pixel(
+    /// Where one pixel of a Mode 7 line comes from, as Mesen's `RenderMode7`.
+    fn mode7_source(
         &self,
         chunk: &RawChunk,
         sprites: &[Option<(u8, u8, u8)>],
         x: u8,
-    ) -> Option<u16> {
+        shown: u8,
+        masked: &impl Fn(usize) -> bool,
+    ) -> Source {
         const SPRITE_PRIORITIES: [u8; 4] = [2, 4, 6, 7];
-        let palette = self.palette(chunk.cgram_index)?;
-        let masked =
-            |layer: usize| chunk.window_masked[layer][usize::from(x >> 3)] & (1 << (x & 7)) != 0;
-        let mut best: Option<(u8, u16)> = None;
-        let mut offer = |priority: u8, colour: u16| {
+        let mut best: Option<(u8, Source)> = None;
+        let mut offer = |priority: u8, source: Source| {
             if best.is_none_or(|(current, _)| current < priority) {
-                best = Some((priority, colour));
+                best = Some((priority, source));
             }
         };
-        if chunk.main_layers & 0x10 != 0 && !masked(4) {
+        if shown & 0x10 != 0 && !masked(4) {
             if let Some((color, sprite_palette, priority)) = sprites[usize::from(x)] {
                 let index = 128 + usize::from(sprite_palette) * 16 + usize::from(color);
-                offer(SPRITE_PRIORITIES[usize::from(priority)], palette[index]);
+                offer(
+                    SPRITE_PRIORITIES[usize::from(priority)],
+                    Source::Entry(index),
+                );
             }
         }
-        if chunk.main_layers & 0x01 != 0 && !masked(0) {
+        if shown & 0x01 != 0 && !masked(0) {
             if let Some(&color) = self
                 .mode7_line(chunk.scanline, 0)
                 .map(|l| &l[usize::from(x)])
             {
                 if color != 0 {
-                    let colour = if chunk.direct_color != 0 {
-                        direct_color(0, color)
+                    let source = if chunk.direct_color != 0 {
+                        Source::Direct(direct_color(0, color))
                     } else {
-                        palette[usize::from(color)]
+                        Source::Entry(usize::from(color))
                     };
-                    offer(3, colour);
+                    offer(3, source);
                 }
             }
         }
-        if chunk.main_layers & 0x02 != 0 && !masked(1) {
+        if shown & 0x02 != 0 && !masked(1) {
             if let Some(&value) = self
                 .mode7_line(chunk.scanline, 1)
                 .map(|l| &l[usize::from(x)])
@@ -715,14 +768,88 @@ impl TileCapture {
                 if color != 0 {
                     offer(
                         if value & 0x80 != 0 { 5 } else { 1 },
-                        palette[usize::from(color)],
+                        Source::Entry(usize::from(color)),
                     );
                 }
             }
         }
-        Some(best.map_or(palette[0], |(_, colour)| colour))
+        best.map_or(Source::Entry(0), |(_, source)| source)
+    }
+
+    /// The colour each palette entry shows in the finished picture `frame`, after colour
+    /// maths (transparency, glows, fog) and brightness: for every entry of the palette in
+    /// force at the end of the frame, the most common finished colour of the pixels it
+    /// drew, `None` for an entry seen on fewer than [`FINISHED_MIN_PIXELS`] pixels. A layer
+    /// only on the sub screen counts where the main screen shows the backdrop, which is
+    /// where it is blended in.
+    #[must_use]
+    pub fn finished_colors(&self, frame: &crate::Frame) -> Vec<Option<[u8; 3]>> {
+        let mut counts: Vec<Vec<([u8; 3], u32)>> = vec![Vec::new(); 256];
+        let first_row = u16::from(frame.height < 239);
+        let last = self
+            .chunks
+            .iter()
+            .max_by_key(|c| (c.scanline, c.end_x))
+            .map(|c| c.cgram_index);
+        for line in &self.lines {
+            let Some(y) = line.scanline.checked_sub(first_row) else {
+                continue;
+            };
+            let sprites = self.sprite_line(line.scanline);
+            let mut main_mosaic = [MosaicLatch::default(); 4];
+            let mut sub_mosaic = [MosaicLatch::default(); 4];
+            for chunk in self.chunks.iter().filter(|c| c.scanline == line.scanline) {
+                for x in chunk.start_x..=chunk.end_x {
+                    let main =
+                        self.pixel_source(chunk, line, &sprites, &mut main_mosaic, x, Screen::Main);
+                    let sub = self.pixel_source(
+                        chunk,
+                        line,
+                        &sprites,
+                        &mut sub_mosaic,
+                        x,
+                        Screen::SubOnly,
+                    );
+                    if Some(chunk.cgram_index) != last {
+                        continue;
+                    }
+                    // Where the main screen shows the backdrop, a layer only on the sub screen
+                    // is what shows through.
+                    let entry = match (main, sub) {
+                        (Some(Source::Entry(0)), Some(Source::Entry(entry)))
+                        | (Some(Source::Entry(entry)), _)
+                            if entry != 0 =>
+                        {
+                            entry
+                        }
+                        _ => continue,
+                    };
+                    let Some(colour) = frame.pixel(u32::from(x), u32::from(y)) else {
+                        continue;
+                    };
+                    let seen = &mut counts[entry];
+                    match seen.iter_mut().find(|(c, _)| *c == colour) {
+                        Some((_, count)) => *count += 1,
+                        None => seen.push((colour, 1)),
+                    }
+                }
+            }
+        }
+        counts
+            .into_iter()
+            .map(|seen| {
+                seen.into_iter()
+                    .filter(|&(_, count)| count >= FINISHED_MIN_PIXELS)
+                    .max_by_key(|&(colour, count)| (count, std::cmp::Reverse(colour)))
+                    .map(|(colour, _)| colour)
+            })
+            .collect()
     }
 }
+
+/// How many pixels a palette entry must draw before [`TileCapture::finished_colors`] trusts
+/// the colour they show.
+pub const FINISHED_MIN_PIXELS: u32 = 4;
 
 /// Mosaic state of one layer across a line, as Mesen keeps it.
 #[derive(Debug, Clone, Copy, Default)]
