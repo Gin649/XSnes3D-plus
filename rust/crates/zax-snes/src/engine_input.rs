@@ -435,11 +435,34 @@ impl TileCapture {
     /// added when the sky is one colour all the way down (the scene's background colour shows
     /// it then) or cannot be found.
     pub fn add_backdrop(&self, input: &mut EngineInput, frame: &crate::Frame) {
+        let pixels = self.sky_pixels(frame);
         let sky = self.sky_by_line(frame);
         let Some(&(_, first)) = sky.first() else {
             return;
         };
-        if sky.iter().all(|(_, color)| *color == first) {
+        // Each line's colour, a line without one taking the line above's (or the first).
+        let mut by_line = [first; 240];
+        let mut current = first;
+        let mut known = sky.iter().peekable();
+        for (scanline, slot) in by_line.iter_mut().enumerate() {
+            if let Some(&&(line, color)) = known.peek() {
+                if usize::from(line) == scanline {
+                    current = color;
+                    known.next();
+                }
+            }
+            *slot = current;
+        }
+        // Each pixel: the sky it shows, or behind a layer its line's colour.
+        let last_line = frame.height.min(239) as usize;
+        let colour_at = |scanline: usize, x: usize| {
+            pixels
+                .get(scanline * 256 + x)
+                .copied()
+                .flatten()
+                .unwrap_or(by_line[scanline.min(239)])
+        };
+        if (1..=last_line).all(|line| (0..256).all(|x| colour_at(line, x) == first)) {
             return;
         }
 
@@ -459,58 +482,50 @@ impl TileCapture {
             }
         }
         let mut free = (0..256).filter(|&entry| !taken[entry]);
-
-        // Each line's colour, a line without one taking the line above's (or the first).
-        let mut by_line = [None; 240];
-        for &(scanline, color) in &sky {
-            if let Some(slot) = by_line.get_mut(usize::from(scanline)) {
-                *slot = Some(color);
-            }
-        }
         let mut placed: Vec<([u8; 3], usize)> = Vec::new();
-        let mut entry_of_line = [0usize; 240];
-        let mut current = first;
-        let last_line = frame.height.min(239) as usize;
-        for line in 1..=last_line {
-            if let Some(color) = by_line[line] {
-                current = color;
+        let mut entry_of = |colour: [u8; 3], colors: &mut [Rgb24; 256]| {
+            if let Some(&(_, entry)) = placed.iter().find(|(c, _)| *c == colour) {
+                return entry;
             }
-            let entry = if let Some(&(_, entry)) = placed.iter().find(|(c, _)| *c == current) {
-                entry
-            } else if let Some(entry) = free.next() {
-                let [r, g, b] = current;
-                input.colors[entry] = Rgb24::new(r, g, b);
-                placed.push((current, entry));
-                entry
-            } else {
-                // No free entry left: the closest colour already placed.
-                placed
-                    .iter()
-                    .min_by_key(|(c, _)| distance(*c, current))
-                    .map_or(0, |&(_, entry)| entry)
-            };
-            entry_of_line[line] = entry;
-        }
-        if placed.is_empty() {
-            return;
-        }
+            if let Some(entry) = free.next() {
+                let [r, g, b] = colour;
+                colors[entry] = Rgb24::new(r, g, b);
+                placed.push((colour, entry));
+                return entry;
+            }
+            // No free entry left: the closest colour already placed.
+            placed
+                .iter()
+                .min_by_key(|(c, _)| distance(*c, colour))
+                .map_or(0, |&(_, entry)| entry)
+        };
 
         // Tiles cover screen lines 0 up, as the background tiles do (scanline 1 is line 0).
         let mut records = Vec::new();
         for row in 0..last_line.div_ceil(8) {
-            let mut builder = Builder::default();
-            for r in 0..8 {
-                let entry = entry_of_line.get(row * 8 + r + 1).copied().unwrap_or(0);
-                for (plane, slot) in builder.planes.iter_mut().enumerate() {
-                    if entry & (1 << plane) != 0 {
-                        *slot |= 0xFF << (8 * r);
+            for column in 0..32usize {
+                let mut builder = Builder::default();
+                for r in 0..8 {
+                    let scanline = row * 8 + r + 1;
+                    if scanline > last_line {
+                        continue;
+                    }
+                    for c in 0..8 {
+                        let entry =
+                            entry_of(colour_at(scanline, column * 8 + c), &mut input.colors);
+                        for (plane, slot) in builder.planes.iter_mut().enumerate() {
+                            if entry & (1 << plane) != 0 {
+                                *slot |= 1 << (8 * r + 7 - c);
+                            }
+                        }
                     }
                 }
-            }
-            for column in 0..32 {
                 let index = records.len() as i32;
-                records.push(builder.record(column * 8, (row * 8) as i16, index, true));
+                records.push(builder.record((column * 8) as i16, (row * 8) as i16, index, true));
             }
+        }
+        if placed.is_empty() {
+            return;
         }
         input.layers.push(LayerInput {
             layer: BACKDROP,

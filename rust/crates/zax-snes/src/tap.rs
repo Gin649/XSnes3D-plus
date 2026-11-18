@@ -342,76 +342,60 @@ impl TileCapture {
     /// main screen shows only the backdrop. Lines without such a pixel are left out.
     #[must_use]
     pub fn sky_by_line(&self, frame: &crate::Frame) -> Vec<(u16, [u8; 3])> {
-        let first_row = u16::from(frame.height < 239);
+        let pixels = self.sky_pixels(frame);
         let mut result = Vec::new();
-        for line in &self.lines {
-            let Some(chunk) = self.last_chunk(line.scanline) else {
-                continue;
-            };
-            let Some(palette) = self.palette(chunk.cgram_index) else {
-                continue;
-            };
-            let Some(y) = line.scanline.checked_sub(first_row) else {
-                continue;
-            };
+        for (scanline, row) in pixels.chunks(256).enumerate() {
             let mut counts: Vec<([u8; 3], u32)> = Vec::new();
-            for (x, &pixel) in line.reference.iter().enumerate().take(frame.width as usize) {
-                // A layer blended in from the sub screen (Super Mario World's hills) is not sky.
-                if pixel != palette[0] || self.sub_screen_covers(chunk, line, x as u8) {
-                    continue;
-                }
-                let Some(color) = frame.pixel(x as u32, u32::from(y)) else {
-                    continue;
-                };
-                match counts.iter_mut().find(|(c, _)| *c == color) {
+            for color in row.iter().flatten() {
+                match counts.iter_mut().find(|(c, _)| c == color) {
                     Some((_, count)) => *count += 1,
-                    None => counts.push((color, 1)),
+                    None => counts.push((*color, 1)),
                 }
             }
             if let Some((color, _)) = counts
                 .into_iter()
                 .max_by_key(|(color, count)| (*count, std::cmp::Reverse(*color)))
             {
-                result.push((line.scanline, color));
+                result.push((scanline as u16, color));
             }
         }
         result
     }
 
-    /// Whether a background layer that is only on the sub screen has a pixel at `x` (mosaic
-    /// left aside).
-    fn sub_screen_covers(&self, chunk: &RawChunk, line: &RawLine, x: u8) -> bool {
-        let sub_only = chunk.sub_layers & !chunk.main_layers;
-        if sub_only.trailing_zeros() >= 4 {
-            return false;
-        }
-        if chunk.bg_mode == 7 {
-            return (0..2u8).any(|layer| {
-                sub_only & (1 << layer) != 0
-                    && self
-                        .mode7_line(chunk.scanline, layer)
-                        .is_some_and(|colors| colors[usize::from(x)] & 0x7F != 0)
-            });
-        }
-        let Some((layers, _)) = mode_rules(chunk.bg_mode, chunk.bg3_priority != 0) else {
-            return false;
-        };
-        layers.iter().enumerate().any(|(index, rule)| {
-            let Some(rule) = rule else { return false };
-            if sub_only & (1 << index) == 0 {
-                return false;
-            }
-            let hscroll = chunk.hscroll[index];
-            let column = ((u16::from(x) + (hscroll & 0x07)) >> 3) as usize;
-            let tile = line.tiles[index][column];
-            let offset = ((u16::from(x) + hscroll) & 0x07) as u8;
-            let shift = if tile.tilemap & 0x4000 != 0 {
-                offset
-            } else {
-                7 - offset
+    /// The finished picture's colour at each pixel where the main screen shows only the
+    /// backdrop, 256 per scanline (scanlines 0 to 239), `None` elsewhere. A layer blended in
+    /// from the sub screen (Super Mario World's hills) is not sky.
+    #[must_use]
+    pub fn sky_pixels(&self, frame: &crate::Frame) -> Vec<Option<[u8; 3]>> {
+        let first_row = u16::from(frame.height < 239);
+        let mut result = vec![None; 256 * 240];
+        for line in self.lines.iter().filter(|l| l.scanline < 240) {
+            let Some(y) = line.scanline.checked_sub(first_row) else {
+                continue;
             };
-            pixel_color(tile.chr, rule.bpp, shift) != 0
-        })
+            let sprites = self.sprite_line(line.scanline);
+            let mut main_mosaic = [MosaicLatch::default(); 4];
+            let mut sub_mosaic = [MosaicLatch::default(); 4];
+            for chunk in self.chunks.iter().filter(|c| c.scanline == line.scanline) {
+                for x in chunk.start_x..=chunk.end_x {
+                    let main =
+                        self.pixel_source(chunk, line, &sprites, &mut main_mosaic, x, Screen::Main);
+                    let sub = self.pixel_source(
+                        chunk,
+                        line,
+                        &sprites,
+                        &mut sub_mosaic,
+                        x,
+                        Screen::SubOnly,
+                    );
+                    if main == Some(Source::Entry(0)) && sub == Some(Source::Entry(0)) {
+                        result[usize::from(line.scanline) * 256 + usize::from(x)] =
+                            frame.pixel(u32::from(x), u32::from(y));
+                    }
+                }
+            }
+        }
+        result
     }
 
     /// The last chunk drawn on `scanline`: the settings a line's tiles are filed under.
