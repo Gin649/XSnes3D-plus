@@ -16,6 +16,10 @@ pub const NTSC_FRAME_RATE: f64 = 60.098_8;
 /// The sample rate Mesen mixes its sound at.
 pub const SAMPLE_RATE: i32 = 48_000;
 
+/// The most the sound's speed may be nudged to keep the audio stream's buffer steady (the
+/// share of the rate, either way).
+pub const MAX_RATIO_ADJUSTMENT: f64 = 0.005;
+
 /// Sound kept for the audio stream at most, in stereo frames (half a second).
 const RING_FRAMES: usize = 24_000;
 

@@ -10,6 +10,7 @@ mod commands;
 mod game_options;
 mod games;
 mod jobs;
+mod notices;
 mod resume;
 mod save_states;
 mod script_reload;
@@ -18,8 +19,6 @@ use std::collections::VecDeque;
 use std::sync::Arc;
 
 use time::OffsetDateTime;
-use zax_nes::NesRegion;
-use zax_nes::RegionTiming;
 use zax_scripting::{HookTime, NullScriptLog, ScriptLog};
 use zax_settings::catalogue::SettingId;
 use zax_settings::model::SettingsModel;
@@ -40,7 +39,6 @@ use crate::audio::AudioMixer;
 use crate::frame_profiler::{Stage, StageClock, StageTimes};
 use crate::game_session::{GameSession, SessionEvent, SessionFrame};
 use crate::input::routing;
-use crate::input::zapper::{ZapperInput, ZapperState};
 use crate::input::InputSnapshot;
 use crate::persistence::app_settings::AppSettings;
 use crate::persistence::battery_ram_store::BatteryRamStore;
@@ -229,13 +227,6 @@ pub struct EmulationHost<C: GameCatalog, V: GameView = NoView> {
     pause_thumbnail: Option<Vec<u8>>,
     /// The file of the movie being played, where the notes written on it go.
     movie_file: Option<std::path::PathBuf>,
-    /// The checkpoints of the movie being played and the seek under way (EDITOR-1); `None`
-    /// unless a movie plays.
-    movie_timeline: Option<super::movie_timeline::MovieTimeline>,
-    /// The movie to play once the next game has started (`--movie`).
-    movie_after_launch: Option<String>,
-    /// The thread exploring the movie being played, while it runs (EDITOR-1).
-    movie_explorer: Option<super::movie_explorer::MovieExplorer>,
     /// The drawings over the view and the editor's pens (EDITOR-1).
     annotations: super::annotations::Annotations,
     /// What the editor mode is asked to do, for the application (`editor_mode.rs`).
@@ -298,12 +289,8 @@ pub struct EmulationHost<C: GameCatalog, V: GameView = NoView> {
     /// Whether each slot's state fits the built-in ROM patches, by slot, save time and setting.
     slot_patch_cache:
         std::cell::RefCell<std::collections::HashMap<(String, i64, bool), jobs::SlotPatchStatus>>,
-    /// The CRC of the data of the ROM files, which tells the games a hack is made for.
+    /// The CRC-32 of the ROM files.
     rom_crcs: std::cell::RefCell<crate::persistence::rom_crc_cache::RomCrcCache>,
-    /// What the study of each ROM file found: whether a widescreen hack fits it.
-    hack_compat: std::cell::RefCell<crate::persistence::hack_compat_cache::HackCompatCache>,
-    /// The Zapper.
-    pub zapper: ZapperState,
     /// RetroAchievements (Rust-only, owner request), softcore.
     pub achievements: AchievementSystem,
     /// How far the frame clock catches up when the command line or the environment says so;
@@ -330,15 +317,13 @@ pub struct EmulationHost<C: GameCatalog, V: GameView = NoView> {
     library_search: String,
 }
 
-/// The three caches the host keeps beside the other files of the user data: the CRCs of the ROM
-/// files, what the study of each ROM found, and the folder of the RetroAchievements icons and
-/// lists. With nothing persisted (`persisted` false) none of them has a file.
+/// The two caches the host keeps beside the other files of the user data: the CRCs of the ROM
+/// files and the folder of the RetroAchievements icons and lists. With nothing persisted (`persisted` false) none of them has a file.
 fn caches(
     paths: &UserDataPaths,
     persisted: bool,
 ) -> (
     crate::persistence::rom_crc_cache::RomCrcCache,
-    crate::persistence::hack_compat_cache::HackCompatCache,
     Option<std::path::PathBuf>,
 ) {
     (
@@ -346,11 +331,6 @@ fn caches(
             paths
                 .root
                 .join(crate::persistence::rom_crc_cache::FILE_NAME)
-        })),
-        crate::persistence::hack_compat_cache::HackCompatCache::new(persisted.then(|| {
-            paths
-                .root
-                .join(crate::persistence::hack_compat_cache::FILE_NAME)
         })),
         persisted.then(|| paths.root.join(crate::achievements::CACHE_FOLDER)),
     )
@@ -392,12 +372,12 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         } = options;
         let now: Now = now.unwrap_or_else(|| Box::new(OffsetDateTime::now_utc));
         let persisted = settings_store.is_some();
-        let (rom_crcs, hack_compat, achievement_cache) = caches(&paths, persisted);
+        let (rom_crcs, achievement_cache) = caches(&paths, persisted);
         let mut legacy_slots = SaveSlotIndex::load(&paths, now());
         legacy_slots.reconcile(&paths, |game_id| games.exists(game_id));
         let mut host = Self {
             pacer: FramePacer::new(
-                f64::from(RegionTiming::for_region(NesRegion::Ntsc).nominal_frames_per_second),
+                crate::snes::NTSC_FRAME_RATE,
                 clock.unwrap_or_else(system_clock),
             ),
             display_rate: 60.0,
@@ -426,9 +406,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             game_options_rom: None,
             pause_thumbnail: None,
             movie_file: None,
-            movie_timeline: None,
-            movie_after_launch: None,
-            movie_explorer: None,
             annotations: super::annotations::Annotations::default(),
             editor_request: None,
             job: None,
@@ -459,8 +436,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             legacy_slots,
             slot_patch_cache: std::cell::RefCell::default(),
             rom_crcs: std::cell::RefCell::new(rom_crcs),
-            hack_compat: std::cell::RefCell::new(hack_compat),
-            zapper: ZapperState::new(),
             achievements: AchievementSystem::new(&format!("Zaxnes/{}", env!("CARGO_PKG_VERSION")))
                 .with_cache(achievement_cache),
             catch_up: None,
@@ -846,26 +821,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         self.scene_scale = scale;
     }
 
-    /// The device plugged into `port` of the game being played.
-    #[must_use]
-    pub fn port_type(&self, port: usize) -> zax_nes::ControllerPortType {
-        self.session
-            .as_ref()
-            .map_or(zax_nes::ControllerPortType::Controller, |session| {
-                session.port_type(port)
-            })
-    }
-
-    /// Whether the pointer drives a Zapper (REQ-INP-061).
-    #[must_use]
-    pub fn zapper_active(&self) -> bool {
-        routing::zapper_active(
-            self.state == EmulationState::Running,
-            self.port_type(0),
-            self.port_type(1),
-        )
-    }
-
     /// Whether the interface holds a modal window.
     #[must_use]
     pub const fn modal_window_open(&self) -> bool {
@@ -928,9 +883,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         // The notification timer is real time: neither the pause nor the game speed affect it
         // (REQ-UI-080).
         self.notifications.advance(real_seconds);
-        // REQ-INP-061: the Zapper is refreshed once per displayed frame, before the hotkeys and
-        // before any emulated frame reads its position.
-        self.update_zapper(snapshot);
         self.read_hotkeys(snapshot, real_seconds);
         if self.loading {
             self.advance_load(real_seconds);
@@ -940,13 +892,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             return 0;
         }
         self.apply_commands();
-        if self.advance_movie_seek() {
-            // A seek takes the tick: its frames are the movie's, not the pacer's.
-            self.dispatch_setting_changes();
-            self.publish_state();
-            return 0;
-        }
-        self.check_movie_end();
         self.follow_the_3d_pause();
         let ahead = self.runs_ahead();
         if ahead {
@@ -1135,24 +1080,10 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             // counter is a multiple of 60, so before that frame executes. AMD-042 REQ-LOOP-069:
             // it carries the 64 `PData` values and the camera state as well, read as they stand
             // at that instant and with no script hook involved.
-            // EDITOR-1: a movie being played keeps a checkpoint on those frames as well: one more
-            // `bool` read beside `rollback_enabled`, and nothing more unless the frame is one.
-            if (self.rollback_enabled || self.movie_timeline.is_some())
+            if self.rollback_enabled
                 && RollbackHistory::is_snapshot_frame(session.core().frame_count())
             {
-                if let Some(timeline) = self.movie_timeline.as_mut() {
-                    let frame_count = session.core().frame_count();
-                    if timeline.wants(frame_count) {
-                        if let Ok(state) = session.core().save_state(false) {
-                            let digest = super::movie_timeline::machine_digest(session.core());
-                            let verdict = timeline.record(frame_count, state, digest);
-                            if movies::explorer_verdict(verdict) {
-                                self.movie_explorer = None;
-                            }
-                        }
-                    }
-                }
-                if self.rollback_enabled {
+                {
                     let started = self.stage_clock.start();
                     let extras = SnapshotExtras {
                         persistent_data: session.capture_rollback_data(),
@@ -1251,14 +1182,10 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         player_two: crate::input::InputAction,
         convert: bool,
     ) {
-        let port_byte = self.zapper.port_byte();
-        let position = self.zapper.position();
         if let Some(session) = self.session.as_mut() {
             let frame = SessionFrame {
                 player_one,
                 player_two,
-                zapper_byte: port_byte,
-                zapper_position: position,
             };
             session.launch_ahead(
                 &mut self.settings,
@@ -1280,14 +1207,10 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         player_two: crate::input::InputAction,
     ) {
         self.complete_frame_in_flight();
-        let port_byte = self.zapper.port_byte();
-        let position = self.zapper.position();
         if let Some(session) = self.session.as_mut() {
             let frame = SessionFrame {
                 player_one,
                 player_two,
-                zapper_byte: port_byte,
-                zapper_position: position,
             };
             session.run_frame_timed(
                 &mut self.settings,
@@ -1305,14 +1228,10 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         player_one: crate::input::InputAction,
         player_two: crate::input::InputAction,
     ) {
-        let port_byte = self.zapper.port_byte();
-        let position = self.zapper.position();
         if let Some(session) = self.session.as_mut() {
             let frame = SessionFrame {
                 player_one,
                 player_two,
-                zapper_byte: port_byte,
-                zapper_position: position,
             };
             session.prepare_frame_timed(
                 &mut self.settings,
@@ -1554,10 +1473,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 }
                 self.apply_speed();
             }
-            // The widescreen hack switched while its game plays (see `hack_switch`).
-            SettingId::VideoWidescreen
-            | SettingId::VideoWidescreenAdvanced
-            | SettingId::EmuBuiltinPatches => self.follow_patch_switch(),
             SettingId::AchievementsEnabled
             | SettingId::AchievementsEncore
             | SettingId::AchievementsUnofficial => self.apply_achievement_settings(),
@@ -1606,44 +1521,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         self.events.push(HostEvent::SettingChanged(id));
     }
 
-    // ------------------------------------------------------------------ Zapper and hotkeys
-
-    fn update_zapper(&mut self, snapshot: &InputSnapshot) {
-        if !self.zapper_active() {
-            // In pause, or with no Zapper port, moving the mouse changes nothing of what the
-            // core sees (REQ-INP-061).
-            return;
-        }
-        let aspect = if snapshot.pointer_size[1] > 0.0 {
-            snapshot.pointer_size[0] / snapshot.pointer_size[1]
-        } else {
-            1.0
-        };
-        let view = {
-            let scene = &self.scene;
-            scene.camera.build_view(scene.view_clipping(), aspect)
-        };
-        let offset = self
-            .session
-            .as_ref()
-            .map_or(zax_render::numerics::Vector3::ZERO, |session| {
-                session.zapper_offset().into()
-            });
-        self.zapper.update(
-            true,
-            &ZapperInput {
-                view: &view,
-                pointer: snapshot.pointer,
-                size: snapshot.pointer_size,
-                right_button: snapshot.right_button,
-                offset,
-                scene_scale: self.scene_scale,
-                // AMD-043 REQ-INP-124, with the exception AMD-046 REQ-SCN-074 adds: a flat 2D
-                // mode aims as at curvature 0. One read of a field the renderer already keeps.
-                bend: self.scene.effective_bend(),
-            },
-        );
-    }
+    // ------------------------------------------------------------------ Hotkeys
 
     #[allow(clippy::cast_possible_truncation)] // the C# `(float)realSeconds`
     fn read_hotkeys(&mut self, snapshot: &InputSnapshot, real_seconds: f64) {
@@ -1705,14 +1583,12 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         let Some(audio) = self.audio.clone() else {
             return;
         };
-        let cap = zax_nes::apu::Apu2A03::MAX_RATIO_ADJUSTMENT;
+        let cap = crate::snes::MAX_RATIO_ADJUSTMENT;
         // REQ-AUD-011: at any speed other than 100 % the core is retiming its own resampler, so
-        // there is nothing to correct; and a recorded movie must not depend on the drift of
-        // this machine's sound card.
+        // there is nothing to correct.
         let steady = self.state == EmulationState::Running
             && !self.fast_forward.is_active()
-            && (self.settings.speed_factor() - 1.0).abs() < 1e-9
-            && self.movie_mode() != Some(zax_nes::movie::MovieMode::Recording);
+            && (self.settings.speed_factor() - 1.0).abs() < 1e-9;
         let correction = if steady {
             let error = f64::from(audio.measured_ms() - audio.target_ms());
             self.audio_rate
@@ -1764,7 +1640,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         let error = (available as f64 - TARGET as f64) / TARGET as f64;
         // A proportional correction that saturates at the cap: a full buffer slows the
         // production down, an empty one speeds it up.
-        let cap = zax_nes::apu::Apu2A03::MAX_RATIO_ADJUSTMENT;
+        let cap = crate::snes::MAX_RATIO_ADJUSTMENT;
         let adjustment = (-error * 0.002).clamp(-cap, cap);
         if session
             .core_mut()
@@ -1820,7 +1696,6 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
                 self.log("auto save written.");
             }
         }
-        self.finish_movie();
         if let Some(mut session) = self.session.take() {
             {
                 let core = session.core();

@@ -1,5 +1,5 @@
-//! The CRC-32 of the data of the ROM files (Rust-only, owner request), which tells which games a
-//! hack is made for. Kept in `rom_crc.json` of the user data with the size and the modification
+//! The CRC-32 of the ROM files (Rust-only, owner request), which names a game whatever its
+//! file is called. Kept in `rom_crc.json` of the user data with the size and the modification
 //! time of each file, so that a file is read again only when it changed.
 
 use std::collections::HashMap;
@@ -87,7 +87,7 @@ impl RomCrcCache {
             }
         }
         let image = std::fs::read(path).ok()?;
-        let crc = zax_nes::builtin_patches::data_crc(&image);
+        let crc = crc32(&image);
         self.entries.insert(key, (stamp, crc));
         self.dirty = true;
         Some(crc)
@@ -175,9 +175,29 @@ impl RomCrcCache {
     }
 }
 
+/// The CRC-32 (IEEE) of `bytes`: of the whole file, as RetroAchievements and the game lists
+/// name SNES games.
+#[must_use]
+pub fn crc32(bytes: &[u8]) -> u32 {
+    let mut crc = !0u32;
+    for &byte in bytes {
+        crc ^= u32::from(byte);
+        for _ in 0..8 {
+            let mask = (crc & 1).wrapping_neg();
+            crc = (crc >> 1) ^ (0xEDB8_8320 & mask);
+        }
+    }
+    !crc
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_crc_is_the_usual_one() {
+        assert_eq!(crc32(b"123456789"), 0xCBF4_3926);
+    }
 
     #[test]
     fn a_file_is_read_once_and_again_when_it_changes() {
@@ -188,7 +208,7 @@ mod tests {
         let file = folder.join(FILE_NAME);
         let mut cache = RomCrcCache::new(Some(file.clone()));
         let crc = cache.crc_of(&rom).unwrap();
-        assert_eq!(zax_nes::builtin_patches::crc32(b"DATA"), crc);
+        assert_eq!(crc32(b"NES\x1a0123456789abDATA"), crc);
         cache.save().unwrap();
 
         // A new cache gives the kept value; a changed file is read again.
@@ -200,7 +220,7 @@ mod tests {
 
         std::fs::write(&rom, b"NES\x1a0123456789abOTHER!").unwrap();
         let other = again.crc_of(&rom).unwrap();
-        assert_eq!(zax_nes::builtin_patches::crc32(b"OTHER!"), other);
+        assert_eq!(crc32(b"NES\x1a0123456789abOTHER!"), other);
         assert!(again.dirty);
         assert_eq!(None, again.crc_of(&folder.join("missing.nes")));
         drop(std::fs::remove_dir_all(&folder));

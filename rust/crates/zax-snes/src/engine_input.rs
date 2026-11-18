@@ -66,6 +66,18 @@ pub struct EngineInput {
 }
 
 impl EngineInput {
+    /// A frame with no layers (nothing captured yet).
+    #[must_use]
+    pub fn empty() -> Self {
+        Self {
+            layers: Vec::new(),
+            colors: Box::new([Rgb24::default(); 256]),
+            bg_mode: 0,
+            bg3_priority: false,
+            floor: Vec::new(),
+        }
+    }
+
     /// The engine batch of one layer.
     #[must_use]
     pub fn batch<'a>(&'a self, layer: &'a LayerInput) -> FrameBatch<'a> {
