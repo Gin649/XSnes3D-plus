@@ -66,7 +66,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     //                     it shows neither notification nor dialogue.
     (keys::DIALOG_IMPORT_REFUSED_TITLE, "Cannot import this file"),
     (keys::DIALOG_IMPORT_REFUSED_BODY, "{0}: {1}"),
-    (keys::DIALOG_IMPORT_BUILT_IN_TITLE, "Already in Zaxnes"),
+    (keys::DIALOG_IMPORT_BUILT_IN_TITLE, "Already in XSnes3D+"),
     (keys::DIALOG_IMPORT_BUILT_IN_BODY, "{0} is a built-in profile, so {1} was not imported."),
     (keys::DIALOG_IMPORT_REPLACE_TITLE, "Replace {0}?"),
     (keys::DIALOG_IMPORT_REPLACE_BODY, "The profile will be replaced with the one in {0}. The ROM, cover and save states will be kept."),
@@ -90,7 +90,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     (keys::NOTIFY_FOREIGN_CORE, "Save state used a different core."),
     (keys::NOTIFY_NOT_A3DN_FILE, "This file is not a 3dn file"),
     (keys::NOTIFY_UNSUPPORTED3DN_VERSION, "3dn format version {0}  is not supported"),
-    (keys::NOTIFY_OBSOLETE_PROFILE_FORMAT, "{0} has an obsolete or wrong profile format. This profile is not compatible with the current version of Zaxnes."),
+    (keys::NOTIFY_OBSOLETE_PROFILE_FORMAT, "{0} has an obsolete or wrong profile format. This profile is not compatible with the current version of XSnes3D+."),
     // ------------- notifications of the persisted files (REQ-PERS-022, REQ-PERS-024)
     (keys::NOTIFY_SETTINGS_UNREADABLE, "Settings file was unreadable and has been reset."),
     (keys::NOTIFY_SETTINGS_NEWER_VERSION, "Settings were created by a newer version."),
@@ -173,7 +173,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         keys::HINT_MENU_BUTTON_UNUSED,
-        "(kept for 3dSen: Zaxnes does not act on it)",
+        "(kept for 3dSen: XSnes3D+ does not act on it)",
     ),
     // ---------------------------------------------------- fields, columns
     (keys::FIELD_SEARCH, "Search"),
@@ -222,9 +222,9 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     (keys::PENS_BLACK, "Black pen"),
     (keys::PENS_WHITE, "White pen"),
     (keys::PENS_VIEW_2D, "2D: the NES picture"),
-    (keys::PENS_VIEW_ZAXNES, "3D as Zaxnes draws it"),
-    (keys::PENS_VIEW_3DSEN, "3D as 3dSen draws it (the Zaxnes blocks of the scripts left out)"),
-    (keys::PENS_VIEW_HANDHELD, "3D as Zaxnes draws it on a handheld"),
+    (keys::PENS_VIEW_ZAXNES, "3D as XSnes3D+ draws it"),
+    (keys::PENS_VIEW_3DSEN, "3D as 3dSen draws it (the XSnes3D+ blocks of the scripts left out)"),
+    (keys::PENS_VIEW_HANDHELD, "3D as XSnes3D+ draws it on a handheld"),
     (keys::BROWSER_FILTER_ZIP, ".zip archives"),
     (keys::BROWSER_FILTER_PROFILES, "3D profiles (*.3dn, *.3dh)"),
     (keys::BROWSER_FILTER_BUNDLE, "3dSen profile bundle (*.bundle)"),
@@ -652,7 +652,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
         "Smooths the staircase on the slanted edges of the 3D shapes. The first two levels are \
          multisampling — 4 and 8 samples per pixel — so the pixel art of the textures stays \
          sharp. 3dSen calls them FFAA and SMAA, which is also what the settings file and the \
-         libretro option hold; Zaxnes draws them as what they are, MSAA 4× and MSAA 8×. SMAA \
+         libretro option hold; XSnes3D+ draws them as what they are, MSAA 4× and MSAA 8×. SMAA \
          (depth) is a filter instead of extra samples: it draws the scene once and finds the edges \
          in the depth of the picture, so it smooths the shapes without ever touching a texture, and \
          it costs about a third of MSAA 4×'s memory. It leaves the status bar's own outline alone. \
@@ -723,7 +723,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         "detail.video.backend",
-        "Which graphics API the window draws with, read once when Zaxnes starts. OpenGL 3.3 is the \
+        "Which graphics API the window draws with, read once when XSnes3D+ starts. OpenGL 3.3 is the \
          default and the only choice on a handheld. Vulkan lets post-processing tools such as \
          ReShade read the depth of the 3D scene; DirectX 12 is Windows only and does not work with \
          ReShade yet. Neither Vulkan nor DirectX 12 draws the effects of the Enhanced style, and \
@@ -731,7 +731,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         "detail.video.max_queued_frames",
-        "How many drawn frames the graphics driver may still be working on before Zaxnes waits for \
+        "How many drawn frames the graphics driver may still be working on before XSnes3D+ waits for \
          the oldest to finish. 2 lets the processor run a frame ahead of the graphics card, which \
          is the smoothest; 1 waits for each frame, which costs frames per second and shortens the \
          delay between a button press and the picture. It applies to the OpenGL back end — Vulkan \
@@ -920,7 +920,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         "detail.scene.bend_2d_mode",
-        "A setting of Zaxnes's own: 3dSen always bends the flat rectangle of the 2D mode with the \
+        "A setting of XSnes3D+'s own: 3dSen always bends the flat rectangle of the 2D mode with the \
          scene, and this is how to keep that rectangle flat while the 3D scene stays curved. It \
          does nothing in 3D mode, and nothing while all three angles are 0. No script reaches it — \
          the original program has no such setting. Default: on, on both platforms.",
@@ -1012,7 +1012,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     // --------------------------------------------------------------- Audio tab
     (
         "detail.audio.volume",
-        "The gain applied to everything Zaxnes plays, from 0.00 to 1.00. Mute, in the Audio menu, \
+        "The gain applied to everything XSnes3D+ plays, from 0.00 to 1.00. Mute, in the Audio menu, \
          silences the sound without touching this value, so turning mute off brings the same volume \
          back. Changing it plays no validation sound. Default: 1.00.",
     ),
@@ -1028,7 +1028,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         "detail.audio.classic_output",
-        "Puts back the audio output Zaxnes had in version 0.4.2: an output buffer of four blocks \
+        "Puts back the audio output XSnes3D+ had in version 0.4.2: an output buffer of four blocks \
          of 512 frames, about 43 ms, topped up from the main thread once per drawn frame. Use it \
          if the new output misbehaves on this device. It is the shorter buffer of the two and it \
          sends out a block of silence whenever the emulation is late with its samples, so it can \
@@ -1077,7 +1077,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     (
         "detail.emu.auto_tv_mode",
         "Reads the region out of the ROM header when a game is loaded and writes it into the row \
-         below, so that a European dump runs at 50 Hz on its own. It is Zaxnes's own default — \
+         below, so that a European dump runs at 50 Hz on its own. It is XSnes3D+'s own default — \
          3dSen has it off — and turning it off is what makes the row below yours to choose. Takes \
          effect at the next ROM load. Default: on.",
     ),
@@ -1091,8 +1091,8 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ),
     (
         "detail.input.emulated_menu_button",
-        "A 3dSen setting Zaxnes keeps so that a settings file and a script written for 3dSen read \
-         back exactly what they wrote. Nothing in Zaxnes acts on it: the console interface reaches \
+        "A 3dSen setting XSnes3D+ keeps so that a settings file and a script written for 3dSen read \
+         back exactly what they wrote. Nothing in XSnes3D+ acts on it: the console interface reaches \
          its own menu by holding Select and Start, which is not this setting. Default: off.",
     ),
     (
@@ -1115,9 +1115,9 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     (
         "detail.ui.roms_folder",
         "Which folder the console mode lists games from. Empty means the roms folder beside your \
-         Zaxnes data, which is what the field shows in grey, and the --roms option on the command \
+         XSnes3D+ data, which is what the field shows in grey, and the --roms option on the command \
          line wins over both. It is written when you press Enter or leave the field; the button \
-         beside it opens a folder picker. Nothing else in Zaxnes reads it.",
+         beside it opens a folder picker. Nothing else in XSnes3D+ reads it.",
     ),
     (
         "detail.ui.sort_option",
@@ -1151,7 +1151,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     (
         "detail.achievements.enabled",
         "Turns RetroAchievements on: the ROM of each game you start is identified against the \
-         server, its achievements are fetched, and unlocks are sent as you earn them. Zaxnes plays \
+         server, its achievements are fetched, and unlocks are sent as you earn them. XSnes3D+ plays \
          in softcore only, so save states, rollback and fast forward all stay allowed and the \
          unlocks count as softcore. Nothing happens until you sign in, above. The four rows below \
          do nothing while this is off. Default: off.",
@@ -1330,11 +1330,11 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     // --------------------------------------------------------- shaders window
     ("cmd.ui.show_shaders", "Shaders…"),
     ("shaders.title", "Shaders"),
-    ("shaders.not_built", "This build of Zaxnes has no slang shaders."),
-    ("shaders.pack_missing", "This build of Zaxnes was made without its shader pack."),
+    ("shaders.not_built", "This build of XSnes3D+ has no slang shaders."),
+    ("shaders.pack_missing", "This build of XSnes3D+ was made without its shader pack."),
     ("shaders.needs_wgpu", "The shaders need the Vulkan or DirectX 12 renderer (Graphics API option)."),
     ("shaders.use_vulkan", "Use Vulkan (after a restart)"),
-    ("shaders.restart", "Restart Zaxnes to use the new renderer."),
+    ("shaders.restart", "Restart XSnes3D+ to use the new renderer."),
     ("shaders.slot.2d", "2D"),
     ("shaders.slot.2d_ws", "2D widescreen"),
     ("shaders.slot.3d", "3D"),
@@ -1408,7 +1408,7 @@ pub(super) const ENGLISH: &[(&str, &str)] = &[
     ("shaders.preset.ntsc_nes", "NES composite"),
     ("shaders.preset.ntsc_nes.help", "The colour bleed of a 256-pixel composite signal, with scanlines."),
     ("shaders.preset.blargg", "Blargg NTSC"),
-    ("shaders.preset.blargg.help", "Blargg's NTSC filter, the one of many NES emulators."),
+    ("shaders.preset.blargg.help", "Blargg's NTSC filter, the one of many SNES emulators."),
     ("shaders.preset.mega_bezel", "Mega Bezel"),
     ("shaders.preset.mega_bezel.help", "A TV with its bezel, its reflection and its room, at the picture's aspect."),
     ("shaders.preset.mega_bezel_light", "Mega Bezel (light)"),

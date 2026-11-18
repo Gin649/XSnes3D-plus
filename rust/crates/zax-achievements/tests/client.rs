@@ -93,7 +93,7 @@ fn image() -> Vec<u8> {
 
 fn signed_in_with_game(server: &Arc<FakeServer>, memory: &Ram) -> Client {
     let transport: Arc<dyn Transport> = server.clone();
-    let Some(mut client) = Client::new(transport, "Zaxnes/test") else {
+    let Some(mut client) = Client::new(transport, "XSnes3D+/test") else {
         panic!("rcheevos could not allocate the client");
     };
     client.login_with_password("Player", "secret");
@@ -108,7 +108,7 @@ fn a_sign_in_keeps_the_token_and_not_the_password() {
     let server = Arc::new(FakeServer::default());
     let memory = Ram::new();
     let transport: Arc<dyn Transport> = server.clone();
-    let Some(mut client) = Client::new(transport, "Zaxnes/test") else {
+    let Some(mut client) = Client::new(transport, "XSnes3D+/test") else {
         panic!("rcheevos could not allocate the client");
     };
     client.login_with_password("Player", "secret");
@@ -124,7 +124,7 @@ fn a_sign_in_keeps_the_token_and_not_the_password() {
         .lock()
         .map(|seen| seen.clone())
         .unwrap_or_default();
-    assert!(seen[0].user_agent.starts_with("Zaxnes/test rcheevos/"));
+    assert!(seen[0].user_agent.starts_with("XSnes3D+/test rcheevos/"));
 }
 
 #[test]
@@ -221,7 +221,7 @@ fn the_https_transport_reaches_the_server() {
         url: "https://retroachievements.org/dorequest.php".to_owned(),
         post_data: Some("r=gameid&m=00000000000000000000000000000000".to_owned()),
         content_type: Some("application/x-www-form-urlencoded".to_owned()),
-        user_agent: "Zaxnes/test".to_owned(),
+        user_agent: "XSnes3D+/test".to_owned(),
     });
     assert!(answer.status > 0, "no answer: {answer:?}");
     assert!(

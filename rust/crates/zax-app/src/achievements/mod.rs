@@ -47,9 +47,7 @@ pub struct CoreMemory<'a>(pub &'a NesCore);
 
 impl Memory for CoreMemory<'_> {
     fn read(&self, address: u32) -> Option<u8> {
-        u16::try_from(address)
-            .ok()
-            .map(|address| self.0.read_memory(address))
+        self.0.achievement_memory(address)
     }
 }
 

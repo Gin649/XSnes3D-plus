@@ -2114,7 +2114,7 @@ fn video_nes_palette(out: &mut Vec<SettingDescriptor>) {
             SettingTheme::Video,
         )
         .with_domain(Domain::choice(vec![
-            opt(0, "Zaxnes"),
+            opt(0, "XSnes3D+"),
             opt(1, "Mesen"),
             opt(2, "FCEUX"),
             opt(3, "Nestopia (YUV)"),

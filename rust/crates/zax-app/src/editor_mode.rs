@@ -370,7 +370,7 @@ pub fn create_project(folder: &Path, game: &str) -> Result<NewProject, String> {
         "title": title,
         "author": "",
         "publisher": "",
-        "description": format!("A Lua profile of {name}, made with the editor mode of Zaxnes."),
+        "description": format!("A Lua profile of {name}, made with the editor mode of XSnes3D+."),
         // A profile without patterns is played in 2D: this one keeps the new profile in 3D (the
         // default extrusion of every tile) until the agent writes patterns of its own.
         "tiles": { "placeholder": [PLACEHOLDER_PLANES[0], PLACEHOLDER_PLANES[1]] },
@@ -429,8 +429,8 @@ pub fn agent_prompt(context: &PromptContext) -> String {
     let t = |english: &'static str, francais: &'static str| if french { francais } else { english };
     let mut out = String::new();
     out.push_str(t(
-        "You are going to write a 3D Lua profile for Zaxnes, a NES emulator that draws games in 3D (profiles compatible with 3dSen).\n",
-        "Tu vas écrire un profil 3D en Lua pour Zaxnes, un émulateur NES qui dessine les jeux en 3D (profils compatibles 3dSen).\n",
+        "You are going to write a 3D Lua profile for XSnes3D+, a SNES emulator that draws games in 3D (profiles compatible with 3dSen).\n",
+        "Tu vas écrire un profil 3D en Lua pour XSnes3D+, un émulateur SNES qui dessine les jeux en 3D (profils compatibles 3dSen).\n",
     ));
     if let Some((title, rom)) = &context.game {
         let _ = writeln!(out, "{} {title} (ROM : {rom})", t("Game:", "Jeu :"));
@@ -487,8 +487,8 @@ pub fn agent_prompt(context: &PromptContext) -> String {
                 project.display()
             );
             out.push_str(t(
-                "After each change, call reload_script (or the user presses F5): Zaxnes rebuilds the .3dn from the project and restarts the scripts. Then step one frame and read get_log.\n",
-                "Après chaque modification, appelle reload_script (ou l'utilisateur appuie sur F5) : Zaxnes reconstruit le .3dn depuis le projet et relance les scripts. Avance ensuite d'une frame (step) et lis get_log.\n",
+                "After each change, call reload_script (or the user presses F5): XSnes3D+ rebuilds the .3dn from the project and restarts the scripts. Then step one frame and read get_log.\n",
+                "Après chaque modification, appelle reload_script (ou l'utilisateur appuie sur F5) : XSnes3D+ reconstruit le .3dn depuis le projet et relance les scripts. Avance ensuite d'une frame (step) et lis get_log.\n",
             ));
             out.push_str(t(
                 "Keep NOTES.md of the project up to date (state, depth plan, my choices, what is left): it is what lets the work resume after a crash or with another agent. Read it first if it is not empty.\n",
@@ -506,8 +506,8 @@ pub fn agent_prompt(context: &PromptContext) -> String {
                 out,
                 "{} {url}",
                 t(
-                    "Zaxnes runs in editor mode; its MCP server (tools status, seek, step, screenshot, dump_frame, annotations, reload_script, get_log...):",
-                    "Zaxnes tourne en mode éditeur ; son serveur MCP (outils status, seek, step, screenshot, dump_frame, annotations, reload_script, get_log...) :",
+                    "XSnes3D+ runs in editor mode; its MCP server (tools status, seek, step, screenshot, dump_frame, annotations, reload_script, get_log...):",
+                    "XSnes3D+ tourne en mode éditeur ; son serveur MCP (outils status, seek, step, screenshot, dump_frame, annotations, reload_script, get_log...) :",
                 ),
             );
             let _ = writeln!(
@@ -547,8 +547,8 @@ pub fn agent_prompt(context: &PromptContext) -> String {
         out,
         "{} {SOURCE_URL}",
         t(
-            "The source of Zaxnes, if the documents are not enough:",
-            "Le source de Zaxnes, si les documents ne suffisent pas :",
+            "The source of XSnes3D+, if the documents are not enough:",
+            "Le source de XSnes3D+, si les documents ne suffisent pas :",
         ),
     );
     out

@@ -28,24 +28,26 @@ use crate::ui::menu_bar;
 use crate::ui::zax_ui::{UiFrame, ZaxUi};
 use crate::ui::{key_config, keys, strings, text};
 
-const BACKGROUND: [f32; 4] = [0.03, 0.03, 0.06, 1.0];
-const PANEL: [f32; 4] = [0.05, 0.05, 0.09, 0.96];
-const TEXT: [f32; 4] = [0.96, 0.96, 0.96, 1.0];
-const DIM: [f32; 4] = [0.68, 0.72, 0.8, 1.0];
-const FOCUS: [f32; 4] = [1.0, 0.82, 0.16, 1.0];
-const ON_FOCUS: [f32; 4] = [0.04, 0.04, 0.04, 1.0];
+const BACKGROUND: [f32; 4] = [0.06, 0.055, 0.08, 1.0];
+const PANEL: [f32; 4] = [0.1, 0.09, 0.13, 0.97];
+const TEXT: [f32; 4] = [0.91, 0.9, 0.93, 1.0];
+const DIM: [f32; 4] = [0.66, 0.65, 0.7, 1.0];
+const FOCUS: [f32; 4] = [0.67, 0.63, 0.87, 1.0];
+const ON_FOCUS: [f32; 4] = [0.05, 0.04, 0.08, 1.0];
 const PROFILE: [f32; 4] = [0.45, 0.92, 0.55, 1.0];
 const PROFILE_ON_FOCUS: [f32; 4] = [0.02, 0.32, 0.08, 1.0];
-const BAR: [f32; 4] = [0.1, 0.1, 0.16, 1.0];
+const BAR: [f32; 4] = [0.19, 0.19, 0.21, 1.0];
 const WARNING: [f32; 4] = [1.0, 0.45, 0.35, 1.0];
-/// Xnes3D+: the NES look. The red of the stripe under the title, and of the A and B button
-/// badges of the hints; the grey of the other buttons; the line between rows.
-const NES_RED: [f32; 4] = [0.85, 0.09, 0.15, 1.0];
-const NES_BUTTON_GREY: [f32; 4] = [0.36, 0.36, 0.38, 1.0];
+/// XSnes3D+: the SNES look (purples, the console's greys, blacks). The dark purple of the A and
+/// B buttons, for the stripe under the title and the A and B badges of the hints; the lavender
+/// of the X and Y buttons; the grey of the other buttons; the line between rows.
+const SNES_PURPLE: [f32; 4] = [0.33, 0.27, 0.58, 1.0];
+const SNES_LAVENDER: [f32; 4] = [0.6, 0.55, 0.82, 1.0];
+const SNES_BUTTON_GREY: [f32; 4] = [0.4, 0.4, 0.43, 1.0];
 const ON_BUTTON: [f32; 4] = [1.0, 1.0, 1.0, 1.0];
 const ROW_LINE: [f32; 4] = [1.0, 1.0, 1.0, 0.07];
 /// The logo in the title band of the game list: the name, then the "+" in red.
-const LOGO_NAME: &str = "XNES3D";
+const LOGO_NAME: &str = "XSNES3D";
 const LOGO_PLUS: &str = "+";
 /// Xnes3D+: the 5 x 7 pixel letters of the logo, a row per byte, the left square the high
 /// bit of five. Letters it does not have are blank.
@@ -77,7 +79,7 @@ const GAME_OWN_ON_FOCUS: [f32; 4] = [0.0, 0.3, 0.4, 1.0];
 /// desktop's console mode steps — keeps its place.
 const GAME_OWN_MARKER: &str = "*";
 /// A group title of the option tree (RO-3): dimmer than [`DIM`], which is a value.
-const GROUP_TITLE: [f32; 4] = [0.5, 0.54, 0.62, 1.0];
+const GROUP_TITLE: [f32; 4] = [0.6, 0.56, 0.78, 1.0];
 /// The save state screen when it saves, and when it loads: two colours apart from each other and
 /// from the orange and red of the states that do not load as they are.
 const SAVE_ACCENT: [f32; 4] = [0.84, 0.46, 1.0, 1.0];
@@ -155,13 +157,13 @@ impl Painter<'_> {
             .add_rect([0.0, 0.0], [self.size[0], metrics.title_band()], BAR)
             .filled(true)
             .build();
-        // Xnes3D+: a red stripe under the band, as on the console's front.
+        // XSnes3D+: a purple stripe under the band, the colour of the console's A and B.
         let stripe = (metrics.padding * 0.3).max(2.0);
         self.list
             .add_rect(
                 [0.0, metrics.title_band() - stripe],
                 [self.size[0], metrics.title_band()],
-                NES_RED,
+                SNES_PURPLE,
             )
             .filled(true)
             .build();
@@ -169,11 +171,11 @@ impl Painter<'_> {
             let _heading = self.heading.map(|font| self.ui.push_font(font));
             if title == text::PRODUCT_NAME {
                 // The game list carries the logo, in the pixel letters of the app icon: the
-                // name, then the "+" in red.
+                // name, then the "+" in lavender.
                 let pixel = (metrics.heading / 7.0).floor().max(2.0);
                 let top = (metrics.title_band() - stripe - pixel * 7.0) * 0.5;
                 let x = self.pixel_word(metrics.padding, top, pixel, TEXT, LOGO_NAME);
-                self.pixel_word(x + pixel * 2.0, top, pixel, NES_RED, LOGO_PLUS);
+                self.pixel_word(x + pixel * 2.0, top, pixel, SNES_LAVENDER, LOGO_PLUS);
             } else {
                 self.text(metrics.padding, metrics.padding, FOCUS, title);
             }
@@ -434,10 +436,10 @@ impl Painter<'_> {
         let height = metrics.font + metrics.padding * 0.4;
         let width = self.badge_width(button);
         let top = y - metrics.padding * 0.2;
-        let colour = if matches!(button, "A" | "B") {
-            NES_RED
-        } else {
-            NES_BUTTON_GREY
+        let colour = match button {
+            "A" | "B" => SNES_PURPLE,
+            "X" | "Y" => SNES_LAVENDER,
+            _ => SNES_BUTTON_GREY,
         };
         self.list
             .add_rect([x, top], [x + width, top + height], colour)

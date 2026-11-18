@@ -10,7 +10,7 @@ use time::macros::format_description;
 use time::OffsetDateTime;
 
 /// Name of the per-user folder.
-pub const PRODUCT_NAME: &str = "Zaxnes";
+pub const PRODUCT_NAME: &str = "XSnes3D";
 /// Name of the folder of the previous product, whose content is migrated once (AMD-029 §2).
 pub const LEGACY_PRODUCT_NAME: &str = "Sen";
 /// A file of this name next to the executable switches to the portable mode.

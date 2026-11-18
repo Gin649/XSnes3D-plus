@@ -16,7 +16,7 @@ aarch64-linux-android and cargo-ndk.
    (password in ZAXNES_ANDROID_KEYSTORE_PASSWORD), or a debug key made once in the user's
    folder: the key never goes into the repository.
 
-The APK goes to target-android/package/Zaxnes-<version>-android-arm64.apk.
+The APK goes to target-android/package/XSnes3D-plus-<version>-android-arm64.apk.
 """
 
 import glob
@@ -160,7 +160,7 @@ def main():
     tools = os.path.join(sdk, 'build-tools', BUILD_TOOLS)
     android_jar = os.path.join(sdk, 'platforms', f'android-{TARGET_SDK}', 'android.jar')
     linked = os.path.join(work, 'linked.apk')
-    run([tool(tools, 'aapt2'), 'link', '-o', linked, '--manifest',
+    run([tool(tools, 'aapt2'), 'link', '-o', linked, *([os.environ['ZAXNES_EXTRA_RES']] if os.environ.get('ZAXNES_EXTRA_RES') else []), '--manifest',
          os.path.join(ANDROID, 'AndroidManifest.xml'), '-I', android_jar, '--min-sdk-version',
          str(MIN_SDK), '--target-sdk-version', str(TARGET_SDK), '--version-code',
          str(version_code(name)), '--version-name', name])
@@ -173,7 +173,7 @@ def main():
     os.makedirs(package, exist_ok=True)
     aligned = os.path.join(work, 'aligned.apk')
     run([tool(tools, 'zipalign'), '-f', '-p', '4', linked, aligned])
-    out = os.path.join(package, f'Zaxnes-{name}-android-arm64.apk')
+    out = os.path.join(package, f'XSnes3D-plus-{name}-android-arm64.apk')
     store, password = keystore(work)
     run([tool(tools, 'apksigner'), 'sign', '--ks', store, '--ks-pass', f'pass:{password}',
          '--out', out, aligned])

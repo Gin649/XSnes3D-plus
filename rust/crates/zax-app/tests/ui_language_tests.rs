@@ -296,7 +296,7 @@ fn req_ui_082_in_english_the_fixed_texts_are_the_texts_of_the_spec() {
     // AMD-056 §2: a space after the path, and « obsolete ».
     assert_eq!(
         "C:\\x\\y.3dn has an obsolete or wrong profile format. \
-         This profile is not compatible with the current version of Zaxnes.",
+         This profile is not compatible with the current version of XSnes3D+.",
         notifications::translate(&import_messages::obsolete_format(std::path::Path::new(
             "C:\\x\\y.3dn"
         )))

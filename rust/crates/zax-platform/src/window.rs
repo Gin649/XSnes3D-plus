@@ -59,7 +59,7 @@ impl Default for HostWindowSettings {
     /// The P0 defaults: a 1280x720 window titled "Zaxnes", with vsync on.
     fn default() -> Self {
         Self {
-            title: "Zaxnes".to_owned(),
+            title: "XSnes3D+".to_owned(),
             width: 1280,
             height: 720,
             vsync: 1,
@@ -503,6 +503,6 @@ mod tests {
             (settings.width, settings.height, settings.vsync),
             (1280, 720, 1)
         );
-        assert_eq!(settings.title, "Zaxnes");
+        assert_eq!(settings.title, "XSnes3D+");
     }
 }

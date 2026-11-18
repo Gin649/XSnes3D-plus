@@ -14,8 +14,8 @@ use super::common::recording_log::RecordingProfileLog;
 
 // In-memory paths: nothing is read from or written to a real disk, and no path of any machine
 // appears here (lot PUB-1).
-const USER_FOLDER: &str = "/fake/AppData/Local/Zaxnes/profiles";
-const PROGRAM_FOLDER: &str = "/fake/Program Files/Zaxnes/profiles";
+const USER_FOLDER: &str = "/fake/AppData/Local/XSnes3D+/profiles";
+const PROGRAM_FOLDER: &str = "/fake/Program Files/XSnes3D+/profiles";
 
 fn make_profile(id: Option<&str>, title: Option<&str>) -> Vec<u8> {
     let mut profile = GameProfile::create_empty();

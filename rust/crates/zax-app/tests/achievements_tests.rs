@@ -62,7 +62,7 @@ impl FakeServer {
 fn harness(server: &Arc<FakeServer>, token: &str) -> LoopHarness {
     let mut harness = LoopHarness::create();
     let transport: Arc<dyn Transport> = server.clone();
-    harness.host.achievements = AchievementSystem::with_transport(transport, "Zaxnes/test");
+    harness.host.achievements = AchievementSystem::with_transport(transport, "XSnes3D+/test");
     harness.host.update_settings(|settings| {
         settings.set(SettingId::AchievementsUsername, "Player");
         settings.set(SettingId::AchievementsToken, token);
@@ -204,7 +204,7 @@ fn turned_off_nothing_reaches_the_server() {
     let server = Arc::new(FakeServer::default());
     let mut harness = LoopHarness::create();
     let transport: Arc<dyn Transport> = server.clone();
-    harness.host.achievements = AchievementSystem::with_transport(transport, "Zaxnes/test");
+    harness.host.achievements = AchievementSystem::with_transport(transport, "XSnes3D+/test");
     harness.launch("g1");
     harness.run_frames(30);
     std::thread::sleep(Duration::from_millis(20));

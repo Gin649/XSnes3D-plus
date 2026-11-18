@@ -335,9 +335,7 @@ fn build_menus() -> Vec<Menu> {
             item(Command::ToggleFavorite),
             item(Command::FilterFavorites),
             item(Command::ImportProfile),
-            // AMD-030 §2: "Fichier → Importer depuis 3dSen…", right after the single-file import
-            // it extends.
-            item(Command::ImportThreeDSen),
+            // XSnes3D+: no "Import from 3dSen" (3dSen has no SNES profiles).
             // SPEC-10 REQ-UI-037 with AMD-010 §3: the deletion of a user profile is one of the
             // functions the amendment keeps mandatory, and the tile button it describes becomes
             // a menu entry here: the presentation is informative, the function is not.

@@ -24,10 +24,10 @@ import java.util.ArrayList;
 import java.util.List;
 
 /**
- * The Android half of the rows of Options > Games and 3D profiles. Xnes3D+ has one icon: its
+ * The Android half of the rows of Options > Games and 3D profiles. XSnes3D+ has one icon: its
  * own menus send a message (zax-app's android_bridge.rs), ZaxnesActivity opens this screen with
  * the action asked, and this screen runs the picker or the download, then closes. It also takes
- * .3dn and .bundle files opened or shared from a file manager.
+ * .3dn files opened or shared from a file manager.
  *
  * <p>What it finds goes back to the running app through the user data folder: the ROM folder as
  * a path in roms-folder.txt, profiles into profile-inbox, which the app imports from on its own.
@@ -39,17 +39,15 @@ public class ProfilesActivity extends Activity {
     /** The extra ZaxnesActivity passes: the number of the action (AndroidAction in Rust). */
     static final String EXTRA_ACTION = "action";
     static final int ACTION_ROM_FOLDER = 1;
-    static final int ACTION_IMPORT_3DSEN = 2;
-    static final int ACTION_COMMUNITY = 3;
     static final int ACTION_PROFILES_FOLDER = 4;
     static final int ACTION_COPY_PROFILES = 5;
     static final int ACTION_SAVES_FOLDER = 6;
-    /** Xnes3D+: Options > Check for updates. */
+    /** XSnes3D+: Options > Check for updates. */
     static final int ACTION_UPDATES = 7;
     static final int LAST_ACTION = ACTION_UPDATES;
 
     /** Where the saves folder is kept; ZaxnesActivity passes it to the native side as --saves. */
-    static final String PREFS = "zaxnes_plus";
+    static final String PREFS = "xsnes3d_plus";
     static final String KEY_SAVES = "saves_folder";
 
     /** Must match ROMS_FOLDER_FILE in zax-app's android_bridge.rs. */
@@ -58,7 +56,6 @@ public class ProfilesActivity extends Activity {
     static final String SAVES_FOLDER_FILE = "saves-folder.txt";
 
     private static final int PICK_FOLDER = 1;
-    private static final int PICK_BUNDLE = 2;
     private static final int PICK_ROM_FOLDER = 3;
     private static final int ASK_STORAGE = 4;
     private static final int PICK_SAVES_FOLDER = 5;
@@ -69,20 +66,14 @@ public class ProfilesActivity extends Activity {
     /** Waiting for the player to come back from the "All files access" settings page. */
     private boolean waitingForAllFiles;
 
-    /** Xnes3D+: the update waiting for the "Install unknown apps" switch, if any. */
+    /** XSnes3D+: the update waiting for the "Install unknown apps" switch, if any. */
     private AppUpdate.Release waitingToInstall;
 
-    /**
-     * zax-android: converts the 3dSen bundle file at {@code bundle} into .3dn profiles in the
-     * folder {@code profiles}, as File > Import from 3dSen does. Returns "ok" or "failed" on the
-     * first line, then the importer's report.
-     */
-    private native String nativeImport3dSen(String bundle, String profiles);
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
-        // Xnes3D+: Android's installer reporting on an update.
+        // XSnes3D+: Android's installer reporting on an update.
         if (AppUpdate.STATUS_ACTION.equals(getIntent().getAction())) {
             installStatus(getIntent());
             return;
@@ -91,8 +82,6 @@ public class ProfilesActivity extends Activity {
         if (handleSharedFiles(getIntent())) return;
         switch (getIntent().getIntExtra(EXTRA_ACTION, 0)) {
             case ACTION_ROM_FOLDER: chooseRomFolder(); break;
-            case ACTION_IMPORT_3DSEN: pickBundle(); break;
-            case ACTION_COMMUNITY: getCommunityProfiles(); break;
             case ACTION_PROFILES_FOLDER: pickFolder(); break;
             case ACTION_COPY_PROFILES: copyNow(); break;
             case ACTION_SAVES_FOLDER: forSaves = true; chooseRomFolder(); break;
@@ -111,7 +100,7 @@ public class ProfilesActivity extends Activity {
                 downloadAndInstall(release);
             } else {
                 showResult("Update not installed",
-                    "Xnes3D+ needs \"Install unknown apps\" to install its own updates. "
+                    "XSnes3D+ needs \"Install unknown apps\" to install its own updates. "
                         + "You can try again from Options > Games and 3D profiles.");
             }
         }
@@ -121,7 +110,7 @@ public class ProfilesActivity extends Activity {
                 openRomFolderPicker();
             } else {
                 showResult("No access to your files",
-                    "Without \"All files access\", Xnes3D+ can't read your ROM folder. "
+                    "Without \"All files access\", XSnes3D+ can't read your ROM folder. "
                         + "You can try again from Options > Games and 3D profiles.");
             }
         }
@@ -157,8 +146,8 @@ public class ProfilesActivity extends Activity {
         dialog()
             .setTitle("Allow access to your games")
             .setMessage("To list the games in your own ROM folder, without copying them anywhere, "
-                + "Xnes3D+ needs \"All files access\". It only reads the folder you choose next.\n\n"
-                + "Turn it on for Xnes3D+ on the next screen, then come back.")
+                + "XSnes3D+ needs \"All files access\". It only reads the folder you choose next.\n\n"
+                + "Turn it on for XSnes3D+ on the next screen, then come back.")
             .setPositiveButton("Continue", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface d, int w) {
@@ -171,8 +160,8 @@ public class ProfilesActivity extends Activity {
                             startActivity(new Intent(Settings.ACTION_MANAGE_ALL_FILES_ACCESS_PERMISSION));
                         } catch (Exception again) {
                             waitingForAllFiles = false;
-                            showResult("Can't open the setting", "Allow \"All files access\" for Xnes3D+ "
-                                + "in Android's settings (Apps > Xnes3D+), then try again.");
+                            showResult("Can't open the setting", "Allow \"All files access\" for XSnes3D+ "
+                                + "in Android's settings (Apps > XSnes3D+), then try again.");
                         }
                     }
                 }
@@ -189,7 +178,7 @@ public class ProfilesActivity extends Activity {
         if (canReadStorage()) {
             openRomFolderPicker();
         } else {
-            showResult("No access to your files", "Without it, Xnes3D+ can't read your ROM folder.");
+            showResult("No access to your files", "Without it, XSnes3D+ can't read your ROM folder.");
         }
     }
 
@@ -246,149 +235,13 @@ public class ProfilesActivity extends Activity {
         return part.renameTo(new File(root, name));
     }
 
-    // ---- 3dSen bundle -----------------------------------------------------------------------
-
-    private void pickBundle() {
-        dialog()
-            .setTitle("Import 3dSen profiles")
-            .setMessage("Choose the bundle file from your 3dSen installation. On your PC, in Steam: "
-                + "3dSen > Manage > Browse local files, then the folder ending in _Data > "
-                + "StreamingAssets > aa > StandaloneWindows64 > "
-                + "defaultprofiles_assets_all_....bundle. Copy it to this device first.")
-            .setPositiveButton("Choose file", new DialogInterface.OnClickListener() {
-                @Override
-                public void onClick(DialogInterface d, int w) {
-                    Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
-                    i.addCategory(Intent.CATEGORY_OPENABLE);
-                    i.setType("*/*");
-                    try {
-                        startActivityForResult(i, PICK_BUNDLE);
-                    } catch (Exception e) {
-                        showResult("No file picker", "This device has no file picker.");
-                    }
-                }
-            })
-            .setNegativeButton("Cancel", finishOnClick())
-            .setOnCancelListener(finishOnCancel())
-            .show();
-    }
-
-    /** Copies the bundle into the cache, converts it on a background thread, then reports. */
-    private void convertBundle(final Uri uri, String name) {
-        if (!ProfileFolder.isBundle(name)) {
-            showResult("That isn't a 3dSen bundle", "Choose the file whose name starts with "
-                + "defaultprofiles_assets_all_ and ends in .bundle.");
-            return;
-        }
-        final File copy = new File(new File(getCacheDir(), "import-3dsen"), ProfileFolder.safe(name));
-        final File profiles = inbox();
-        if (profiles == null) {
-            showResult("Import failed", "Xnes3D+'s storage isn't available right now.");
-            return;
-        }
-        final AlertDialog working = dialog()
-            .setTitle("Converting 3dSen profiles...")
-            .setMessage("This can take a moment.")
-            .setCancelable(false)
-            .show();
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                String report;
-                try {
-                    copy.getParentFile().mkdirs();
-                    if (!ProfileFolder.copy(getContentResolver(), uri, copy)) {
-                        report = "failed\nThe bundle file couldn't be read.";
-                    } else {
-                        System.loadLibrary("c++_shared");
-                        System.loadLibrary("SDL2");
-                        System.loadLibrary("main");
-                        report = nativeImport3dSen(copy.getAbsolutePath(), profiles.getAbsolutePath());
-                    }
-                } catch (Throwable t) {
-                    report = "failed\n" + t.getMessage();
-                } finally {
-                    copy.delete();
-                }
-                final String done = report == null ? "failed\nNo answer from the converter." : report;
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        working.dismiss();
-                        boolean ok = done.startsWith("ok");
-                        showResult(ok ? "3dSen profiles imported" : "Import finished with problems", readable(done));
-                    }
-                });
-            }
-        }).start();
-    }
-
-    /** The importer's report without its first line and the folder paths. */
-    private static String readable(String report) {
-        StringBuilder out = new StringBuilder();
-        String[] lines = report.split("\n");
-        int shown = 0;
-        for (int i = 1; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (line.isEmpty() || line.startsWith("3dSen:")) continue;
-            if (shown == 12) {
-                out.append("...");
-                break;
-            }
-            out.append(line).append('\n');
-            shown++;
-        }
-        String text = out.toString().trim();
-        return (text.isEmpty() ? "Done." : text) + "\n\nYour game list shows them in a moment.";
-    }
-
-    // ---- community profiles -----------------------------------------------------------------
-
-    private void getCommunityProfiles() {
-        final File profiles = inbox();
-        if (profiles == null) {
-            showResult("Couldn't get community profiles", "Xnes3D+'s storage isn't available right now.");
-            return;
-        }
-        final AlertDialog working = dialog()
-            .setTitle("Getting community profiles...")
-            .setMessage("Each one is downloaded from its creator's own link.")
-            .setCancelable(false)
-            .show();
-        new Thread(new Runnable() {
-            @Override
-            public void run() {
-                final CommunityProfiles.Result r = CommunityProfiles.fetchAll(ProfilesActivity.this, profiles);
-                runOnUiThread(new Runnable() {
-                    @Override
-                    public void run() {
-                        working.dismiss();
-                        if (r.error != null) {
-                            showResult("Couldn't get community profiles", r.error);
-                            return;
-                        }
-                        StringBuilder text = new StringBuilder();
-                        if (r.listed == 0) {
-                            text.append("The list has no profiles yet.");
-                        } else {
-                            if (r.addedCount > 0) text.append("New or updated, thanks to their makers:\n").append(r.added).append('\n');
-                            if (r.upToDate > 0) text.append(r.upToDate).append(r.upToDate == 1 ? " profile was" : " profiles were").append(" already up to date.\n");
-                            if (r.failed.length() > 0) text.append("\nCouldn't be downloaded (try again later):\n").append(r.failed);
-                        }
-                        showResult(r.addedCount > 0 ? r.addedCount + " community profiles added" : "Community profiles", text.toString().trim());
-                    }
-                });
-            }
-        }).start();
-    }
-
-    // ---- updates (Xnes3D+) ------------------------------------------------------------------
+    // ---- updates (XSnes3D+) ------------------------------------------------------------------
 
     private void checkForUpdates() {
         final String installed = AppUpdate.installed(this);
         final AlertDialog working = dialog()
             .setTitle("Checking for updates...")
-            .setMessage("Asking GitHub for the newest Xnes3D+.")
+            .setMessage("Asking GitHub for the newest XSnes3D+.")
             .setCancelable(false)
             .show();
         new Thread(new Runnable() {
@@ -410,7 +263,7 @@ public class ProfilesActivity extends Activity {
                         if (release == null) {
                             showResult("Couldn't check for updates", problem);
                         } else if (!AppUpdate.newer(release.version, installed)) {
-                            showResult("Xnes3D+ is up to date", "You have the newest version, v" + installed + ".");
+                            showResult("XSnes3D+ is up to date", "You have the newest version, v" + installed + ".");
                         } else {
                             offer(release, installed);
                         }
@@ -424,7 +277,7 @@ public class ProfilesActivity extends Activity {
         String notes = release.notes == null ? "" : release.notes.trim();
         if (notes.length() > 600) notes = notes.substring(0, 600) + "...";
         dialog()
-            .setTitle("Xnes3D+ v" + release.version + " is available")
+            .setTitle("XSnes3D+ v" + release.version + " is available")
             .setMessage("You have v" + installed + "." + (notes.isEmpty() ? "" : "\n\n" + notes))
             .setPositiveButton("Install", new DialogInterface.OnClickListener() {
                 @Override
@@ -437,7 +290,7 @@ public class ProfilesActivity extends Activity {
             .show();
     }
 
-    /** Whether Android lets Xnes3D+ hand an APK to its installer ("Install unknown apps"). */
+    /** Whether Android lets XSnes3D+ hand an APK to its installer ("Install unknown apps"). */
     private boolean canInstall() {
         return Build.VERSION.SDK_INT < 26 || getPackageManager().canRequestPackageInstalls();
     }
@@ -449,8 +302,8 @@ public class ProfilesActivity extends Activity {
         }
         dialog()
             .setTitle("One switch first")
-            .setMessage("To install its own updates, Xnes3D+ needs \"Install unknown apps\". "
-                + "Turn it on for Xnes3D+ on the next screen, then come back.")
+            .setMessage("To install its own updates, XSnes3D+ needs \"Install unknown apps\". "
+                + "Turn it on for XSnes3D+ on the next screen, then come back.")
             .setPositiveButton("Open settings", new DialogInterface.OnClickListener() {
                 @Override
                 public void onClick(DialogInterface d, int w) {
@@ -470,9 +323,9 @@ public class ProfilesActivity extends Activity {
     }
 
     private void downloadAndInstall(final AppUpdate.Release release) {
-        final File apk = new File(new File(getCacheDir(), "update"), "Xnes3D-plus.apk");
+        final File apk = new File(new File(getCacheDir(), "update"), "XSnes3D-plus.apk");
         final AlertDialog working = dialog()
-            .setTitle("Downloading Xnes3D+ v" + release.version)
+            .setTitle("Downloading XSnes3D+ v" + release.version)
             .setMessage("0%")
             .setCancelable(false)
             .show();
@@ -542,7 +395,7 @@ public class ProfilesActivity extends Activity {
         String now = tree == null ? "No folder chosen yet." : "Now: " + folderName(tree) + ".";
         dialog()
             .setTitle("Profiles folder")
-            .setMessage("Choose a folder of .3dn profiles, say on your SD card. Xnes3D+ copies new "
+            .setMessage("Choose a folder of .3dn profiles, say on your SD card. XSnes3D+ copies new "
                 + "and changed profiles from it each time it starts.\n\n" + now)
             .setPositiveButton("Choose folder", new DialogInterface.OnClickListener() {
                 @Override
@@ -578,9 +431,7 @@ public class ProfilesActivity extends Activity {
             finish();
             return;
         }
-        if (requestCode == PICK_BUNDLE) {
-            convertBundle(picked, name(picked));
-        } else if (requestCode == PICK_FOLDER) {
+        if (requestCode == PICK_FOLDER) {
             try {
                 getContentResolver().takePersistableUriPermission(picked, Intent.FLAG_GRANT_READ_URI_PERMISSION);
             } catch (Exception ignored) {
@@ -592,12 +443,12 @@ public class ProfilesActivity extends Activity {
             String path = pathOf(picked);
             File folder = path == null ? null : new File(path);
             if (folder == null || !folder.isDirectory() || !folder.canWrite()) {
-                showResult("That folder can't be used", "Choose a folder Xnes3D+ can write to, on the internal storage or an SD card.");
+                showResult("That folder can't be used", "Choose a folder XSnes3D+ can write to, on the internal storage or an SD card.");
             } else {
                 getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit().putString(KEY_SAVES, path).apply();
                 sendAnswer(SAVES_FOLDER_FILE, path); // its row in the options shows it at once
                 showResult("Saves folder set", "Your saves and save states go to " + folderName(picked)
-                    + " (in its saves and states folders) from the next time Xnes3D+ starts. "
+                    + " (in its saves and states folders) from the next time XSnes3D+ starts. "
                     + "The ones you have now are copied there then.");
             }
         } else if (requestCode == PICK_ROM_FOLDER) {
@@ -605,7 +456,7 @@ public class ProfilesActivity extends Activity {
             if (path == null || !new File(path).isDirectory()) {
                 showResult("That folder can't be used", "Choose a folder on the internal storage or an SD card.");
             } else if (!sendRomFolder(path)) {
-                showResult("ROM folder not saved", "Xnes3D+'s storage isn't available right now.");
+                showResult("ROM folder not saved", "XSnes3D+'s storage isn't available right now.");
             } else {
                 Toast.makeText(this, "ROM folder: " + folderName(picked), Toast.LENGTH_LONG).show();
                 finish();
@@ -617,7 +468,7 @@ public class ProfilesActivity extends Activity {
 
     // ---- files opened or shared from a file manager -----------------------------------------
 
-    /** .3dn files are copied in; a .bundle is converted. True when there was something. */
+    /** .3dn files are copied in. True when there was something. */
     private boolean handleSharedFiles(Intent intent) {
         if (intent == null) return false;
         List<Uri> uris = new ArrayList<>();
@@ -632,13 +483,6 @@ public class ProfilesActivity extends Activity {
             if (list != null) uris.addAll(list);
         }
         if (uris.isEmpty()) return false;
-        for (Uri u : uris) {
-            String n = name(u);
-            if (ProfileFolder.isBundle(n)) {
-                convertBundle(u, n);
-                return true;
-            }
-        }
         File to = inbox();
         int copied = 0;
         if (to != null) for (Uri u : uris) if (ProfileFolder.importOne(this, u, name(u), to)) copied++;
@@ -699,7 +543,7 @@ public class ProfilesActivity extends Activity {
 
     private void toast(int copied) {
         String text = copied == 0 ? "No new profiles to copy."
-            : copied == 1 ? "1 profile added to Xnes3D+." : copied + " profiles added to Xnes3D+.";
+            : copied == 1 ? "1 profile added to XSnes3D+." : copied + " profiles added to XSnes3D+.";
         Toast.makeText(this, text, Toast.LENGTH_LONG).show();
     }
 

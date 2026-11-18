@@ -66,7 +66,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     //                     « Profil importé : … » de REQ-UI-212 a disparu.
     (keys::DIALOG_IMPORT_REFUSED_TITLE, "Impossible d'importer ce fichier"),
     (keys::DIALOG_IMPORT_REFUSED_BODY, "{0} : {1}"),
-    (keys::DIALOG_IMPORT_BUILT_IN_TITLE, "Déjà dans Zaxnes"),
+    (keys::DIALOG_IMPORT_BUILT_IN_TITLE, "Déjà dans XSnes3D+"),
     (keys::DIALOG_IMPORT_BUILT_IN_BODY, "{0} est un profil embarqué ; {1} n'a pas été importé."),
     (keys::DIALOG_IMPORT_REPLACE_TITLE, "Remplacer {0} ?"),
     (keys::DIALOG_IMPORT_REPLACE_BODY, "Le profil sera remplacé par celui de {0}. La ROM, la jaquette et les sauvegardes d'état seront conservées."),
@@ -90,7 +90,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     (keys::NOTIFY_FOREIGN_CORE, "La sauvegarde d'état vient d'un autre cœur."),
     (keys::NOTIFY_NOT_A3DN_FILE, "Ce fichier n'est pas un fichier 3dn"),
     (keys::NOTIFY_UNSUPPORTED3DN_VERSION, "La version {0} du format 3dn n'est pas prise en charge"),
-    (keys::NOTIFY_OBSOLETE_PROFILE_FORMAT, "{0} a un format de profil obsolète ou incorrect. Ce profil n'est pas compatible avec la version actuelle de Zaxnes."),
+    (keys::NOTIFY_OBSOLETE_PROFILE_FORMAT, "{0} a un format de profil obsolète ou incorrect. Ce profil n'est pas compatible avec la version actuelle de XSnes3D+."),
     // ------------- notifications des fichiers persistants (REQ-PERS-022, REQ-PERS-024)
     (keys::NOTIFY_SETTINGS_UNREADABLE, "Le fichier de réglages était illisible et a été réinitialisé."),
     (keys::NOTIFY_SETTINGS_NEWER_VERSION, "Les réglages ont été créés par une version plus récente."),
@@ -144,7 +144,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     (keys::HINT_CLASSIC_AUDIO, "(sans effet : la sortie audio classique a sa propre réserve fixe)"),
     (keys::HINT_NEEDS_ACHIEVEMENTS, "(sans effet : RetroAchievements est désactivé)"),
     (keys::HINT_STYLE_CLASSIC, "Style = Classic : ces effets sont désactivés."),
-    (keys::HINT_MENU_BUTTON_UNUSED, "(conservé pour 3dSen : Zaxnes n'en tient pas compte)"),
+    (keys::HINT_MENU_BUTTON_UNUSED, "(conservé pour 3dSen : XSnes3D+ n'en tient pas compte)"),
     // ---------------------------------------------------- fields, columns
     (keys::FIELD_SEARCH, "Rechercher"),
     (keys::COLUMN_ACTION, "Action"),
@@ -192,9 +192,9 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     (keys::PENS_BLACK, "Stylo noir"),
     (keys::PENS_WHITE, "Stylo blanc"),
     (keys::PENS_VIEW_2D, "2D : l'image NES"),
-    (keys::PENS_VIEW_ZAXNES, "3D telle que Zaxnes la dessine"),
-    (keys::PENS_VIEW_3DSEN, "3D telle que 3dSen la dessine (sans les blocs Zaxnes des scripts)"),
-    (keys::PENS_VIEW_HANDHELD, "3D telle que Zaxnes la dessine sur une console portable"),
+    (keys::PENS_VIEW_ZAXNES, "3D telle que XSnes3D+ la dessine"),
+    (keys::PENS_VIEW_3DSEN, "3D telle que 3dSen la dessine (sans les blocs XSnes3D+ des scripts)"),
+    (keys::PENS_VIEW_HANDHELD, "3D telle que XSnes3D+ la dessine sur une console portable"),
     (keys::BROWSER_FILTER_ZIP, "Archives .zip"),
     (keys::BROWSER_FILTER_PROFILES, "Profils 3D (*.3dn, *.3dh)"),
     (keys::BROWSER_FILTER_BUNDLE, "Bundle de profils 3dSen (*.bundle)"),
@@ -613,7 +613,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
         "Adoucit l'escalier sur les arêtes obliques des formes 3D. Les deux premiers niveaux sont \
          du multi-échantillonnage — 4 et 8 échantillons par pixel — afin que les textures en pixel \
          art restent nettes. 3dSen les nomme FFAA et SMAA, et c'est aussi ce que contiennent le \
-         fichier de réglages et l'option libretro ; Zaxnes les affiche pour ce qu'ils sont, MSAA 4× \
+         fichier de réglages et l'option libretro ; XSnes3D+ les affiche pour ce qu'ils sont, MSAA 4× \
          et MSAA 8×. SMAA (profondeur) est un filtre et non des échantillons supplémentaires : la \
          scène est rendue une seule fois et les contours sont cherchés dans la profondeur de \
          l'image, de sorte que les formes sont adoucies sans qu'une texture soit jamais touchée, \
@@ -691,7 +691,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     ),
     (
         "detail.video.backend",
-        "Avec quelle API graphique la fenêtre dessine, lue une seule fois au démarrage de Zaxnes. \
+        "Avec quelle API graphique la fenêtre dessine, lue une seule fois au démarrage de XSnes3D+. \
          OpenGL 3.3 est la valeur par défaut et le seul choix sur une console portable. Vulkan \
          permet à des outils de post-traitement comme ReShade de lire la profondeur de la scène \
          3D ; DirectX 12 est réservé à Windows et ne fonctionne pas encore avec ReShade. Ni Vulkan \
@@ -701,7 +701,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     (
         "detail.video.max_queued_frames",
         "Combien d'images dessinées le pilote graphique peut encore avoir en chantier avant que \
-         Zaxnes attende la plus ancienne. 2 laisse le processeur prendre une image d'avance sur la \
+         XSnes3D+ attende la plus ancienne. 2 laisse le processeur prendre une image d'avance sur la \
          carte graphique, ce qui est le plus fluide ; 1 attend chaque image, ce qui coûte des \
          images par seconde et raccourcit le délai entre l'appui sur un bouton et l'image. Cela \
          concerne le moteur OpenGL — Vulkan et DirectX 12 ont leur propre file — et sur une console \
@@ -899,7 +899,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     ),
     (
         "detail.scene.bend_2d_mode",
-        "Un réglage propre à Zaxnes : 3dSen courbe toujours le rectangle plat du mode 2D avec la \
+        "Un réglage propre à XSnes3D+ : 3dSen courbe toujours le rectangle plat du mode 2D avec la \
          scène, et c'est ainsi que l'on garde ce rectangle plat pendant que la scène 3D reste \
          courbée. Cela ne fait rien en mode 3D, ni quand les trois angles valent 0. Aucun script n'y \
          accède — le programme d'origine n'a pas ce réglage. Par défaut : activé, sur les deux \
@@ -997,7 +997,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     // ----------------------------------------------------------- onglet Audio
     (
         "detail.audio.volume",
-        "Le gain appliqué à tout ce que Zaxnes joue, de 0,00 à 1,00. Muet, dans le menu Audio, \
+        "Le gain appliqué à tout ce que XSnes3D+ joue, de 0,00 à 1,00. Muet, dans le menu Audio, \
          coupe le son sans toucher à cette valeur, si bien que désactiver Muet rend le même volume. \
          Le changer ne joue pas le son de validation. Par défaut : 1,00.",
     ),
@@ -1014,7 +1014,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     ),
     (
         "detail.audio.classic_output",
-        "Rétablit la sortie audio que Zaxnes avait en version 0.4.2 : une réserve de sortie de \
+        "Rétablit la sortie audio que XSnes3D+ avait en version 0.4.2 : une réserve de sortie de \
          quatre blocs de 512 trames, environ 43 ms, réalimentée par le fil principal une fois \
          par image dessinée. À utiliser si la nouvelle sortie se comporte mal sur cet appareil. \
          C'est la plus courte des deux réserves, et elle émet un bloc de silence chaque fois que \
@@ -1068,7 +1068,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
         "detail.emu.auto_tv_mode",
         "Lit la région dans l'en-tête de la ROM au chargement d'un jeu et l'écrit dans la ligne \
          ci-dessous, de sorte qu'un dump européen tourne de lui-même à 50 Hz. C'est une valeur par \
-         défaut propre à Zaxnes — 3dSen l'a désactivée — et la désactiver est ce qui rend la ligne \
+         défaut propre à XSnes3D+ — 3dSen l'a désactivée — et la désactiver est ce qui rend la ligne \
          ci-dessous à votre main. Prend effet au prochain chargement de ROM. Par défaut : activée.",
     ),
     (
@@ -1082,8 +1082,8 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     ),
     (
         "detail.input.emulated_menu_button",
-        "Un réglage de 3dSen que Zaxnes conserve afin qu'un fichier de réglages et un script écrits \
-         pour 3dSen relisent exactement ce qu'ils ont écrit. Rien dans Zaxnes n'en tient compte : \
+        "Un réglage de 3dSen que XSnes3D+ conserve afin qu'un fichier de réglages et un script écrits \
+         pour 3dSen relisent exactement ce qu'ils ont écrit. Rien dans XSnes3D+ n'en tient compte : \
          l'interface des consoles atteint son menu en maintenant Select et Start, ce qui n'est pas \
          ce réglage. Par défaut : désactivé.",
     ),
@@ -1108,9 +1108,9 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     (
         "detail.ui.roms_folder",
         "Dans quel dossier le mode console liste les jeux. Vide signifie le dossier roms à côté de \
-         vos données Zaxnes, ce que le champ montre en gris, et l'option --roms de la ligne de \
+         vos données XSnes3D+, ce que le champ montre en gris, et l'option --roms de la ligne de \
          commande l'emporte sur les deux. Il est écrit quand vous appuyez sur Entrée ou quittez le \
-         champ ; le bouton à côté ouvre un sélecteur de dossier. Rien d'autre dans Zaxnes ne le lit.",
+         champ ; le bouton à côté ouvre un sélecteur de dossier. Rien d'autre dans XSnes3D+ ne le lit.",
     ),
     (
         "detail.ui.sort_option",
@@ -1147,7 +1147,7 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
         "detail.achievements.enabled",
         "Active RetroAchievements : la ROM de chaque jeu que vous lancez est identifiée auprès du \
          serveur, ses succès sont récupérés, et les déblocages sont envoyés au fur et à mesure. \
-         Zaxnes ne joue qu'en softcore : les sauvegardes d'état, le retour en arrière et l'avance \
+         XSnes3D+ ne joue qu'en softcore : les sauvegardes d'état, le retour en arrière et l'avance \
          rapide restent permis, et les déblocages comptent comme softcore. Rien ne se passe avant \
          que vous ne soyez connecté, ci-dessus. Les quatre lignes ci-dessous ne font rien tant que \
          ceci est désactivé. Par défaut : désactivé.",
@@ -1328,11 +1328,11 @@ pub(super) const FRENCH: &[(&str, &str)] = &[
     // --------------------------------------------------------- shaders window
     ("cmd.ui.show_shaders", "Shaders…"),
     ("shaders.title", "Shaders"),
-    ("shaders.not_built", "Cette version de Zaxnes n'a pas les shaders slang."),
-    ("shaders.pack_missing", "Cette version de Zaxnes a été construite sans son pack de shaders."),
+    ("shaders.not_built", "Cette version de XSnes3D+ n'a pas les shaders slang."),
+    ("shaders.pack_missing", "Cette version de XSnes3D+ a été construite sans son pack de shaders."),
     ("shaders.needs_wgpu", "Les shaders demandent le rendu Vulkan ou DirectX 12 (option API graphique)."),
     ("shaders.use_vulkan", "Passer en Vulkan (après redémarrage)"),
-    ("shaders.restart", "Redémarrez Zaxnes pour utiliser le nouveau rendu."),
+    ("shaders.restart", "Redémarrez XSnes3D+ pour utiliser le nouveau rendu."),
     ("shaders.slot.2d", "2D"),
     ("shaders.slot.2d_ws", "2D large"),
     ("shaders.slot.3d", "3D"),

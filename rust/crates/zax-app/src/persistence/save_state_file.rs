@@ -297,17 +297,17 @@ pub const MAX_ACHIEVEMENTS_BYTES: usize = 64 * 1024;
 pub fn thumbnail_jpeg(picture: &[u8]) -> Option<Vec<u8>> {
     const HEIGHT: usize = 240;
     const WIDTH_4_3: usize = 320;
-    if picture.is_empty() || picture.len() % HEIGHT != 0 {
+    // XSnes3D+: the picture is red, green, blue and alpha, four bytes a pixel.
+    if picture.is_empty() || picture.len() % (HEIGHT * 4) != 0 {
         return None;
     }
-    let width = picture.len() / HEIGHT;
+    let width = picture.len() / HEIGHT / 4;
     let kept = width.min(WIDTH_4_3);
     let left = (width - kept) / 2;
     let mut rgb = Vec::with_capacity(kept * HEIGHT * 3);
-    for row in picture.chunks_exact(width) {
-        for &index in &row[left..left + kept] {
-            let color = zax_engine3d::palette::nes_color(usize::from(index));
-            rgb.extend_from_slice(&[color.r, color.g, color.b]);
+    for row in picture.chunks_exact(width * 4) {
+        for pixel in row[left * 4..(left + kept) * 4].chunks_exact(4) {
+            rgb.extend_from_slice(&pixel[..3]);
         }
     }
     let mut jpeg = Vec::new();

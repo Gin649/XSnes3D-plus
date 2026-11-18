@@ -239,16 +239,14 @@ pub const TOUCH_ROWS: [OptionRow; 14] = [
 pub const LIBRARY_TITLE: &str = "Games and 3D profiles";
 
 /// Xnes3D+: the rows of the games and profiles page, each carried out by Android.
-pub const LIBRARY_ROWS: [OptionRow; 10] = [
+pub const LIBRARY_ROWS: [OptionRow; 8] = [
     OptionRow::Group("Games"),
     OptionRow::Android(AndroidAction::ChooseRomFolder),
     OptionRow::Android(AndroidAction::ChooseSavesFolder),
     OptionRow::Group("3D profiles"),
-    OptionRow::Android(AndroidAction::Import3dSen),
-    OptionRow::Android(AndroidAction::CommunityProfiles),
     OptionRow::Android(AndroidAction::ProfilesFolder),
     OptionRow::Android(AndroidAction::CopyProfiles),
-    OptionRow::Group("Xnes3D+"),
+    OptionRow::Group("XSnes3D+"),
     OptionRow::Android(AndroidAction::CheckUpdates),
 ];
 
@@ -256,8 +254,6 @@ pub const LIBRARY_ROWS: [OptionRow; 10] = [
 fn android_label(action: AndroidAction) -> String {
     match action {
         AndroidAction::ChooseRomFolder => "ROM folder",
-        AndroidAction::Import3dSen => "Import 3dSen profiles",
-        AndroidAction::CommunityProfiles => "Get community profiles",
         AndroidAction::ProfilesFolder => "Profiles folder",
         AndroidAction::CopyProfiles => "Copy from the profiles folder now",
         AndroidAction::ChooseSavesFolder => "Saves folder",
@@ -288,8 +284,7 @@ fn android_value(action: AndroidAction, settings: &SettingsModel) -> String {
                     .map_or(folder.clone(), |name| name.to_string_lossy().into_owned())
             },
         ),
-        AndroidAction::Import3dSen | AndroidAction::ProfilesFolder => "Choose...".to_owned(),
-        AndroidAction::CommunityProfiles => "Download".to_owned(),
+        AndroidAction::ProfilesFolder => "Choose...".to_owned(),
         AndroidAction::CopyProfiles => "Copy".to_owned(),
         AndroidAction::CheckUpdates => format!("v{}", crate::android_bridge::app_version()),
     }

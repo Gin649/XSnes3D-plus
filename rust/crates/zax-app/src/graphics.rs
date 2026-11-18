@@ -437,5 +437,5 @@ impl Graphics {
 }
 
 fn log(message: &str) {
-    crate::app_log::line(&format!("Zaxnes: {message}"));
+    crate::app_log::line(&format!("XSnes3D+: {message}"));
 }

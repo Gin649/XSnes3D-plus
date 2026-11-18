@@ -135,7 +135,7 @@ pub mod import_messages {
     pub fn obsolete_format(path: &Path) -> String {
         format!(
             "{} has an obsolete or wrong profile format. \
-             This profile is not compatible with the current version of Zaxnes.",
+             This profile is not compatible with the current version of XSnes3D+.",
             path.display()
         )
     }

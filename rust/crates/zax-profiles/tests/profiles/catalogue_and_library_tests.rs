@@ -23,7 +23,7 @@ use super::common::recording_log::RecordingProfileLog;
 
 // Two roots of the in-memory file system of these tests (FakeProfileFileSystem): nothing is
 // read from or written to a real disk, and no path of any machine appears here (lot PUB-1).
-const ROOT: &str = "/fake/AppData/Local/Zaxnes";
+const ROOT: &str = "/fake/AppData/Local/XSnes3D+";
 const ASSETS: &str = "/fake/assets-neutral";
 
 fn make_profile(id: Option<&str>, title: Option<&str>) -> Vec<u8> {

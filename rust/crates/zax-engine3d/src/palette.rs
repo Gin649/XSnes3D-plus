@@ -208,7 +208,7 @@ pub enum NesPalette {
 impl NesPalette {
     /// The palettes in the order of the `video.nes_palette` choices.
     pub const LABELS: [&'static str; 11] = [
-        "Zaxnes",
+        "XSnes3D+",
         "Mesen",
         "FCEUX",
         "Nestopia (YUV)",

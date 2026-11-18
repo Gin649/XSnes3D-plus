@@ -258,6 +258,24 @@ int xs_load_state(XsSnes* snes, const uint8_t* data, uint32_t size)
 	}
 }
 
+// The console's work RAM (which = 0, 128 KiB) or the cartridge's save RAM (which = 1), as
+// Mesen holds it. The bytes stay where they are while the game is loaded. Null when there is
+// none.
+uint8_t* xs_memory(XsSnes* snes, uint32_t which, uint32_t* size)
+{
+	*size = 0;
+	if(!snes->Loaded) {
+		return nullptr;
+	}
+	MemoryType type = which == 0 ? MemoryType::SnesWorkRam : MemoryType::SnesSaveRam;
+	ConsoleMemoryInfo info = snes->Emu->GetMemory(type);
+	if(!info.Memory) {
+		return nullptr;
+	}
+	*size = info.Size;
+	return (uint8_t*)info.Memory;
+}
+
 // Runs one frame. Returns 1 on success.
 int xs_run_frame(XsSnes* snes)
 {

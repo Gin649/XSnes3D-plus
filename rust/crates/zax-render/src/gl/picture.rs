@@ -1,13 +1,9 @@
-//! The 256 × 240 pixel frame of the core, uploaded as an RGBA texture for the 2D mode of
-//! SPEC-06 REQ-SCN-055 and AMD-009 (Q-022).
-//!
-//! The core hands out one NES colour index per pixel (SPEC-02 REQ-CORE-048); they are resolved
-//! here through the fixed 64-colour table of SPEC-04 §4.1, which is also the table the tiles
-//! use. The texture is a direct-colour one for the scene shader, sampled nearest without mipmap
-//! like every other NES texture (REQ-E3D-563).
+//! The 256 x 240 picture of the core, uploaded as an RGBA texture for the 2D mode of
+//! SPEC-06 REQ-SCN-055 and AMD-009 (Q-022). XSnes3D+: the core hands out red, green, blue and
+//! alpha for each pixel, so the bytes go to the texture as they are. The texture is sampled
+//! nearest without mipmap like every other texture of the game (REQ-E3D-563).
 
 use glow::Texture;
-use zax_engine3d::palette::nes_color;
 
 use super::api::{Gl, GlError};
 use super::texture_cache::set_nearest_clamp;
@@ -39,8 +35,8 @@ impl NesPictureTexture {
         }
     }
 
-    /// Uploads `indices` (NES colour indices, row 0 first, `height` rows of 256 or of a
-    /// widescreen width) and returns the texture, or `None` when the frame has no such size.
+    /// Uploads `indices` (red, green, blue and alpha, row 0 first, `height` rows of 256 or of a
+    /// wider width) and returns the texture, or `None` when the frame has no such size.
     pub fn upload(&mut self, indices: &[u8], height: usize) -> Result<Option<Texture>, GlError> {
         let Some(size) = crate::interop::picture_size(indices.len(), height) else {
             return Ok(None);
@@ -64,19 +60,10 @@ impl NesPictureTexture {
         // This loop already ran once per frame in 2D mode and already wrote alpha 0 for a pixel
         // the overscan leaves out, so the mask costs it one `AND` and one select per pixel, in
         // 2D mode only.
-        for (pixel, &byte) in self.pixels.chunks_exact_mut(4).zip(indices) {
-            if byte == crate::interop::HIDDEN_PIXEL {
-                pixel.copy_from_slice(&[0; 4]);
-                continue;
-            }
-            let color = nes_color(usize::from(byte & crate::interop::PIXEL_COLOR));
-            let alpha = if byte & crate::interop::OPAQUE_PIXEL == 0 {
-                0
-            } else {
-                255
-            };
-            pixel.copy_from_slice(&[color.r, color.g, color.b, alpha]);
-        }
+        // XSnes3D+: the picture is already red, green, blue and alpha (alpha 0: not drawn,
+        // which `scene.frag` rejects in the opaque pass).
+        let length = self.pixels.len();
+        self.pixels.copy_from_slice(&indices[..length]);
 
         let gl = &self.gl;
         #[allow(clippy::cast_possible_truncation, clippy::cast_possible_wrap)] // At most 1280.

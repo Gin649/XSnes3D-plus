@@ -12,7 +12,7 @@ pub const DEFAULT_SMOKE_TEST_FRAMES: u32 = 60;
 
 /// The usage text: what `--help` prints, and what follows a usage error. It is the text of the
 /// C# program, and a test compares the two.
-pub const USAGE: &str = r#"Zaxnes - NES emulator with 3D rendering
+pub const USAGE: &str = r#"XSnes3D+ - SNES emulator with 3D rendering
 
 Usage:
   Zax.App --rom <path> [--profile <title-or-file>] [options]
@@ -31,7 +31,7 @@ Options taken from the original program (single dash; the double-dash forms are 
 Options:
   --rom <path>            The .nes ROM to play. Without it only the empty scene shows.
   --movie <path>          A movie to play once the ROM has started: an FCEUX .fm2,
-                          an FCE Ultra .fcm or a Zaxnes movie (.mv<n>), with its bar
+                          an FCE Ultra .fcm or a XSnes3D+ movie (.mv<n>), with its bar
                           at the bottom.
   --profile <name>        Built-in profile title, or the path of a profile file.
                           Defaults to the "2D Mode" entry (SPEC-06 REQ-SCN-055).
@@ -45,7 +45,7 @@ Options:
   --builtin-font          Use the built-in ImGui font (no accents) instead of a
                           system font.
   --userdata <dir>        Where settings, save states and battery RAM go.
-                          Default: %LOCALAPPDATA%\Zaxnes, or userdata\ in portable mode.
+                          Default: %LOCALAPPDATA%\XSnes3D+, or userdata\ in portable mode.
   --list-profiles         Print the built-in catalogue and exit.
   --import-3dsen <path>   Import the profiles of your own 3dSen installation into your
                           profile folder, print the summary and exit. Give the folder

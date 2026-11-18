@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Zaxnes on Android: a gamepad-driven app (the console interface), its user data in its own
+<!-- XSnes3D+ on Android: a gamepad-driven app (the console interface), its user data in its own
      folder on the shared storage, which needs no permission. -->
 <manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    package="io.github.nixxou.zaxnes"
+    package="io.github.gin649.xsnes3d"
     android:installLocation="auto">
 
     <!-- OpenGL ES 3.0 -->
@@ -15,14 +15,15 @@
     <!-- RetroAchievements. -->
     <uses-permission android:name="android.permission.INTERNET" />
     <uses-permission android:name="android.permission.VIBRATE" />
-    <!-- Xnes3D+: the game list reads the player's own ROM folder, wherever it is. -->
+    <!-- XSnes3D+: the game list reads the player's own ROM folder, wherever it is. -->
     <uses-permission android:name="android.permission.MANAGE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" />
-    <!-- Xnes3D+: Options > Check for updates hands the new APK to Android's installer. -->
+    <!-- XSnes3D+: Options > Check for updates hands the new APK to Android's installer. -->
     <uses-permission android:name="android.permission.REQUEST_INSTALL_PACKAGES" />
 
     <application
-        android:label="Zaxnes"
+        android:icon="@mipmap/ic_launcher"
+        android:label="XSnes3D+"
         android:allowBackup="false"
         android:extractNativeLibs="true"
         android:isGame="true"
@@ -31,7 +32,7 @@
 
         <activity
             android:name="io.github.nixxou.zaxnes.ZaxnesActivity"
-            android:label="Zaxnes"
+            android:label="XSnes3D+"
             android:alwaysRetainTaskState="true"
             android:launchMode="singleInstance"
             android:screenOrientation="sensorLandscape"
@@ -43,22 +44,22 @@
                 <category android:name="android.intent.category.LAUNCHER" />
                 <category android:name="android.intent.category.LEANBACK_LAUNCHER" />
             </intent-filter>
-            <!-- Xnes3D+: no "open this file" filter, so Xnes3D+ stays out of Android's
+            <!-- XSnes3D+: no "open this file" filter, so XSnes3D+ stays out of Android's
                  "Open with" list for zips and other files. A launcher starts a game by naming
                  this activity, which needs no filter: the ROM still comes as the intent's data
                  (see LaunchedRom). -->
         </activity>
 
-        <!-- Xnes3D+: the Android half of Options > Games and 3D profiles (pickers,
+        <!-- XSnes3D+: the Android half of Options > Games and 3D profiles (pickers,
              downloads), opened by the emulator itself, so it has no icon of its own; it also
              takes .3dn files opened or shared from a file manager (ProfilesActivity). -->
         <activity
             android:name="io.github.nixxou.zaxnes.ProfilesActivity"
-            android:label="Zaxnes profiles"
+            android:label="XSnes3D+ profiles"
             android:theme="@android:style/Theme.Translucent.NoTitleBar"
             android:excludeFromRecents="true"
             android:exported="true">
-            <!-- Share only (the share sheet, not "Open with"): .3dn and .bundle files. -->
+            <!-- Share only (the share sheet, not "Open with"): .3dn files. -->
             <intent-filter>
                 <action android:name="android.intent.action.SEND" />
                 <action android:name="android.intent.action.SEND_MULTIPLE" />

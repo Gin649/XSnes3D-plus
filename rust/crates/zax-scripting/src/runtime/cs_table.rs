@@ -27,7 +27,7 @@ pub(crate) const INFO_VERSION: &str = "2.1";
 
 /// What `CS.Nes3D.Info.Title` reads (REQ-LUA-112): the product name of AMD-029, which a script
 /// compares against `"3dSenMaker"` — the profile editor — to pick a field of view.
-pub(crate) const INFO_TITLE: &str = "Zaxnes";
+pub(crate) const INFO_TITLE: &str = "XSnes3D+";
 
 /// What `CS.Nes3D.SettingManager.DefaultMsaa` reads (REQ-LUA-117), the default of
 /// `Setting.Msaa`.

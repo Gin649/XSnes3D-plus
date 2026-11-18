@@ -21,7 +21,7 @@ use super::common::synthetic_hash_profile::EnvelopeSpec;
 /// Roots of the in-memory file system of these tests: nothing is read from or written to a real
 /// disk, and no path of any machine appears here (lot PUB-1).
 const ASSETS: &str = "/fake/assets-neutral";
-const USER: &str = "/fake/AppData/Local/Zaxnes/profiles";
+const USER: &str = "/fake/AppData/Local/XSnes3D+/profiles";
 
 fn user_directory() -> PathBuf {
     PathBuf::from(USER)

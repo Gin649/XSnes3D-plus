@@ -1,0 +1,100 @@
+name: Android APK
+
+# Builds the XSnes3D+ Android APK (run it from the Actions tab) and publishes it as a
+# pre-release named after .github/fork/VERSION, so a test build never shows up as the app's
+# "latest" update.
+#
+# The app installs as its own app, io.github.gin649.xsnes3d, beside Xnes3D+. It is signed with
+# rust/build/android/fork.keystore so each build installs over the last one, keeping its saves.
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write # to publish the APK as a release
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      # Each build is a release named after .github/fork/VERSION. Stop at once, before the long
+      # build, when that version was already released: raise the version first.
+      - name: The version is new
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(tr -d '[:space:]' < .github/fork/VERSION)
+          if gh release view "v${version}" > /dev/null 2>&1; then
+            echo "::error::XSnes3D+ v${version} is already released. Raise .github/fork/VERSION first."
+            exit 1
+          fi
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Android SDK parts the build script needs
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --install \
+            "platforms;android-34" "build-tools;35.0.0" "cmake;3.22.1" "ndk;27.2.12479018" > /dev/null
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/27.2.12479018" >> "$GITHUB_ENV"
+
+      - name: Rust (the version in rust-toolchain.toml) and cargo-ndk
+        working-directory: rust
+        run: |
+          rustup show
+          rustup target add aarch64-linux-android
+          cargo install cargo-ndk --locked
+
+      - uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            rust/target-android
+          key: android-${{ hashFiles('rust/Cargo.lock', 'rust/crates/zax-snes/build.rs', 'rust/crates/zax-snes/patches/*', 'rust/crates/zax-snes/cpp/*') }}
+          restore-keys: android-
+
+      - name: Icon and interface font
+        run: |
+          # The interface font, VT323 (SIL Open Font License), packed as a raw resource
+          # (ZaxnesActivity.interfaceFont).
+          mkdir -p .github/fork/res/raw
+          curl -fsSL -o .github/fork/res/raw/vt323.ttf \
+            "https://raw.githubusercontent.com/google/fonts/main/ofl/vt323/VT323-Regular.ttf"
+          "$ANDROID_HOME/build-tools/35.0.0/aapt2" compile --dir .github/fork/res -o "$RUNNER_TEMP/extra-res.zip"
+          echo "ZAXNES_EXTRA_RES=$RUNNER_TEMP/extra-res.zip" >> "$GITHUB_ENV"
+
+      - name: Build the APK
+        working-directory: rust
+        env:
+          ZAXNES_ANDROID_KEYSTORE: ${{ github.workspace }}/rust/build/android/fork.keystore
+          ZAXNES_ANDROID_KEYSTORE_PASSWORD: android
+        # rust/target-android is cached between runs, so the APKs of earlier builds come back
+        # with it. Clear them first, so only this build's APK is uploaded and released.
+        run: |
+          rm -rf target-android/package
+          python3 -I build/package-android.py
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XSnes3D-plus-android
+          path: rust/target-android/package/*.apk
+
+      - name: Publish it as a pre-release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(tr -d '[:space:]' < .github/fork/VERSION)
+          tag="v${version}"
+          apk="rust/target-android/package/XSnes3D-plus-${version}-android-arm64.apk"
+          test -f "$apk"
+          gh api -X DELETE "repos/${{ github.repository }}/git/refs/tags/${tag}" 2> /dev/null || true
+          gh release create "$tag" "$apk" --prerelease \
+            --target "${{ github.sha }}" --title "XSnes3D+ v${version} (test build)" \
+            --notes "XSnes3D+, a 3D SNES emulator for Android: Mesen 2's SNES core with tiles turned into 3D layers. A test build. Credits: Mesen 2 by Sour, Zaxnes by nixxou (GPL-3.0); interface font VT323 (SIL Open Font License). See CREDITS.md."

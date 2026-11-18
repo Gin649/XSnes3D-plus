@@ -162,7 +162,7 @@ pub fn resolve_startup_game(
 }
 
 fn log(message: &str) {
-    app_log::line(&format!("Zaxnes: {message}"));
+    app_log::line(&format!("XSnes3D+: {message}"));
 }
 
 /// Where the editor mode stands (`editor_mode.rs`).
@@ -302,7 +302,7 @@ impl Running {
             .as_deref()
             .filter(|rom| !Path::new(rom).is_file())
         {
-            return Err(format!("Zaxnes: the ROM '{rom}' does not exist."));
+            return Err(format!("XSnes3D+: the ROM '{rom}' does not exist."));
         }
         let startup_game = resolve_startup_game(options, &catalog, &paths, &log);
         let mut scene = SceneState::default();
@@ -310,7 +310,7 @@ impl Running {
 
         let request = pacing_request(options, &model);
         let window_settings = HostWindowSettings {
-            title: "Zaxnes".to_owned(),
+            title: "XSnes3D+".to_owned(),
             width: options.width,
             height: options.height,
             vsync: request.vsync,
@@ -1769,7 +1769,7 @@ fn load_settings(options: &AppOptions, paths: &UserDataPaths) -> (SettingsStore,
     command_line_settings::apply(options, &mut model);
     if !paths.is_writable {
         app_log::error(&format!(
-            "Zaxnes: {}",
+            "XSnes3D+: {}",
             paths.unwritable_message.clone().unwrap_or_default()
         ));
     }
@@ -1865,7 +1865,7 @@ fn resolve_user_data(options: &AppOptions) -> UserDataPaths {
         let fallback = UserDataPaths::resolve(None, None, None);
         if fallback.is_writable {
             app_log::error(&format!(
-                "Zaxnes: '{}' refuses writes; the user data goes to '{}' instead.",
+                "XSnes3D+: '{}' refuses writes; the user data goes to '{}' instead.",
                 paths.root.display(),
                 fallback.root.display()
             ));
@@ -2043,11 +2043,11 @@ fn open_log_file(paths: &UserDataPaths) {
             frame_profiler::build_profile(),
             file.display()
         )),
-        None => app_log::error("Zaxnes: no log file could be created; the console has the log."),
+        None => app_log::error("XSnes3D+: no log file could be created; the console has the log."),
     }
     for failure in failures {
         app_log::error(&format!(
-            "Zaxnes: the log file could not be created at {failure}"
+            "XSnes3D+: the log file could not be created at {failure}"
         ));
     }
     log(&format!(
@@ -2298,12 +2298,12 @@ fn seed() -> u64 {
 fn smoke_banner(options: &AppOptions) -> String {
     if options.smoke_emulated_frames > 0 {
         format!(
-            "Zaxnes smoke test: playing {} emulated frames.",
+            "XSnes3D+ smoke test: playing {} emulated frames.",
             options.smoke_emulated_frames
         )
     } else {
         format!(
-            "Zaxnes smoke test: rendering {} frames.",
+            "XSnes3D+ smoke test: rendering {} frames.",
             options.smoke_test_frames
         )
     }
@@ -2323,7 +2323,7 @@ fn finish(options: &AppOptions, state: &RunState, emulated: i64) -> i32 {
     }
     let emulated = u64::try_from(emulated).unwrap_or(0);
     println!(
-        "Zaxnes smoke test: rendered {} frames and emulated {emulated} on {} ({}).",
+        "XSnes3D+ smoke test: rendered {} frames and emulated {emulated} on {} ({}).",
         state.rendered_frames, state.renderer_name, state.version
     );
     if options.smoke_emulated_frames > 0 {
@@ -2333,7 +2333,7 @@ fn finish(options: &AppOptions, state: &RunState, emulated: i64) -> i32 {
             return 0;
         }
         eprintln!(
-            "Zaxnes smoke test: expected {} emulated frames, only {emulated} were produced.",
+            "XSnes3D+ smoke test: expected {} emulated frames, only {emulated} were produced.",
             options.smoke_emulated_frames
         );
         return 1;
@@ -2342,7 +2342,7 @@ fn finish(options: &AppOptions, state: &RunState, emulated: i64) -> i32 {
         return 0;
     }
     eprintln!(
-        "Zaxnes smoke test: expected {} frames, only {} rendered.",
+        "XSnes3D+ smoke test: expected {} frames, only {} rendered.",
         options.smoke_test_frames, state.rendered_frames
     );
     1
@@ -2736,7 +2736,8 @@ fn update_scene(host: &mut AppHost, state: &mut RunState) {
         // The cut sides left out, the scene's background showing there; in Resize the head-on
         // view frames the rest. The picture's own size tells its margins: one 256 wide has none,
         // whatever margin the 3D conversion was asked for.
-        let width = state.picture.len() / state.picture_height.max(1);
+        // XSnes3D+: four bytes a pixel.
+        let width = state.picture.len() / state.picture_height.max(1) / 4;
         // The picture's margins, not the conversion's: with `emu.pause_3d_in_2d` no frame is
         // converted in 2D, and the margin of the last one (none, in a game started in 2D) cut
         // the sides off, grey bands where the widescreen picture is.

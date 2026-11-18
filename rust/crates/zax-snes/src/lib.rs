@@ -41,6 +41,7 @@ extern "C" {
     fn xs_save_state(snes: *mut RawSnes, size: *mut u32) -> *const u8;
     fn xs_load_state(snes: *mut RawSnes, data: *const u8, size: u32) -> c_int;
     fn xs_run_frame(snes: *mut RawSnes) -> c_int;
+    fn xs_memory(snes: *mut RawSnes, which: u32, size: *mut u32) -> *mut u8;
     fn xs_frame(
         snes: *mut RawSnes,
         width: *mut u32,
@@ -83,11 +84,11 @@ pub enum SnesError {
 impl fmt::Display for SnesError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
-            Self::Create => write!(f, "the SNES emulator could not be set up"),
+            Self::Create => write!(f, "the SSNES emulator could not be set up"),
             Self::BadPath => write!(f, "the path holds a zero byte"),
             Self::Load(path) => write!(f, "{path} could not be loaded as a SNES game"),
-            Self::Frame => write!(f, "the SNES emulator failed while running a frame"),
-            Self::Busy => write!(f, "another SNES emulator is still running in this process"),
+            Self::Frame => write!(f, "the SSNES emulator failed while running a frame"),
+            Self::Busy => write!(f, "another SSNES emulator is still running in this process"),
             Self::Tap => write!(f, "the tile tap could not be switched"),
             Self::State => write!(f, "the savestate could not be made or put back"),
         }
@@ -232,6 +233,43 @@ impl Snes {
             return Err(SnesError::Frame);
         }
         Ok(())
+    }
+
+    /// The console's work RAM (128 KiB, banks $7E and $7F), empty before a game is loaded.
+    #[must_use]
+    pub fn work_ram(&self) -> &[u8] {
+        self.memory(0)
+    }
+
+    /// The cartridge's save RAM, empty when the game has none.
+    #[must_use]
+    pub fn save_ram(&self) -> &[u8] {
+        self.memory(1)
+    }
+
+    /// The console's work RAM, to change.
+    pub fn work_ram_mut(&mut self) -> &mut [u8] {
+        let mut size = 0;
+        // SAFETY: `raw` is alive; Mesen's memory stays put while the game is loaded, and
+        // `&mut self` keeps everything else away from it for the borrow.
+        let memory = unsafe { xs_memory(self.raw, 0, &raw mut size) };
+        if memory.is_null() {
+            return &mut [];
+        }
+        // SAFETY: as above, `size` bytes at `memory`.
+        unsafe { std::slice::from_raw_parts_mut(memory, size as usize) }
+    }
+
+    fn memory(&self, which: u32) -> &[u8] {
+        let mut size = 0;
+        // SAFETY: `raw` is alive; Mesen's memory stays put while the game is loaded, and only
+        // `&mut self` methods (running a frame, loading) change it.
+        let memory = unsafe { xs_memory(self.raw, which, &raw mut size) };
+        if memory.is_null() {
+            return &[];
+        }
+        // SAFETY: as above, `size` bytes at `memory`.
+        unsafe { std::slice::from_raw_parts(memory, size as usize) }
     }
 
     /// The whole console state, to put back later with [`Snes::load_state`].

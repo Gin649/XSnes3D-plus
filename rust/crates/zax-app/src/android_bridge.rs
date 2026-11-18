@@ -17,21 +17,17 @@
 pub enum AndroidAction {
     /// Pick the folder the game list shows (and get the permission to read it).
     ChooseRomFolder = 1,
-    /// Pick a 3dSen bundle file and convert its profiles.
-    Import3dSen = 2,
-    /// Download the community profiles.
-    CommunityProfiles = 3,
     /// Pick a folder of `.3dn` profiles that is copied from at each start.
     ProfilesFolder = 4,
     /// Copy from that folder now.
     CopyProfiles = 5,
     /// Pick the folder the battery saves and save states go to (used from the next start).
     ChooseSavesFolder = 6,
-    /// Look for a newer Xnes3D+ release and offer to install it.
+    /// Look for a newer XSnes3D+ release and offer to install it.
     CheckUpdates = 7,
 }
 
-/// The Xnes3D+ version this build is (`.github/fork/VERSION`), shown beside Check for updates.
+/// The XSnes3D+ version this build is (`.github/fork/VERSION`), shown beside Check for updates.
 #[must_use]
 pub fn app_version() -> &'static str {
     include_str!("../../../../.github/fork/VERSION").trim()

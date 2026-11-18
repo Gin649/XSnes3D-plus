@@ -107,9 +107,9 @@ fn list_profiles(options: &AppOptions) -> i32 {
     // generic entries written in code (Q-065). Nothing is an error here any more.
     match &root {
         None => println!(
-            "Zaxnes: built-in entries (no asset folder; pass --assets <dir> for your own files)"
+            "XSnes3D+: built-in entries (no asset folder; pass --assets <dir> for your own files)"
         ),
-        Some(root) => println!("Zaxnes: built-in profiles of {}", root.display()),
+        Some(root) => println!("XSnes3D+: built-in profiles of {}", root.display()),
     }
     println!("  '*' marks a profile with no Lua script, which renders fully today.");
     println!();

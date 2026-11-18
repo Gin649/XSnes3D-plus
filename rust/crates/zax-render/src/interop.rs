@@ -253,11 +253,16 @@ pub const PIXEL_COLOR: u8 = 0x3F;
 /// exactly what the index image alone cannot express.
 pub const OPAQUE_PIXEL: u8 = 0x40;
 
-/// The width and height in pixels of a 2D-mode picture of `len` colour indices in `height` rows
-/// (0 reads as 240): 256 x 240, or wider and taller by widescreen margins on each side; `None`
-/// for any other size.
+/// The width and height in pixels of a 2D-mode picture of `len` bytes in `height` rows (0 reads
+/// as 240). XSnes3D+: the picture is red, green, blue and alpha, four bytes a pixel (the NES app
+/// had one colour index a pixel); alpha 0 is a pixel not drawn. 256 x 240, or wider and taller
+/// by margins on each side; `None` for any other size.
 #[must_use]
 pub const fn picture_size(len: usize, height: usize) -> Option<(usize, usize)> {
+    if len % 4 != 0 {
+        return None;
+    }
+    let len = len / 4;
     let height = if height == 0 { 240 } else { height };
     if len == 0 || height < 240 || (height - 240) % 2 != 0 || len % height != 0 {
         return None;

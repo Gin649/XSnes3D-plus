@@ -245,11 +245,11 @@ fn call_tool(name: &str, arguments: Value, calls: &Sender<ToolCall>) -> ToolResu
         reply,
     };
     if calls.send(call).is_err() {
-        return ToolResult::error("Zaxnes is closing.");
+        return ToolResult::error("XSnes3D+ is closing.");
     }
     answer
         .recv_timeout(CALL_TIMEOUT)
-        .unwrap_or_else(|_| ToolResult::error("Zaxnes did not answer in time."))
+        .unwrap_or_else(|_| ToolResult::error("XSnes3D+ did not answer in time."))
 }
 
 /// The `result` of a `tools/call`.

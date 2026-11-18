@@ -14,7 +14,7 @@ use crate::application::AppHost;
 use crate::emulation::commands::{Command, CommandArgs};
 
 /// What the server tells the client about itself.
-pub const INSTRUCTIONS: &str = "XSnes3D+, a SNES emulator that renders games in 3D through Lua \
+pub const INSTRUCTIONS: &str = "XSnes3D+, a SSNES emulator that renders games in 3D through Lua \
 profiles. These tools drive the running window: pause and resume the game, look at it \
 (screenshot, 3d or 2d), dump the tiles of the frame on screen, reload the profile's scripts after \
 editing them (they restart on the frame on screen), and read the log (Lua output and errors).";
@@ -308,16 +308,13 @@ fn screenshot(host: &mut AppHost, arguments: &Value) -> ToolResult {
         };
         let mut picture = Vec::new();
         let rows = session.copy_nes_picture(&mut picture);
-        if rows == 0 || picture.len() % rows != 0 {
+        if rows == 0 || picture.len() % (rows * 4) != 0 {
             return ToolResult::error("No picture yet.");
         }
-        let width = picture.len() / rows;
+        let width = picture.len() / rows / 4;
         let rgb: Vec<u8> = picture
-            .iter()
-            .flat_map(|&index| {
-                let color = zax_engine3d::palette::nes_color(usize::from(index));
-                [color.r, color.g, color.b]
-            })
+            .chunks_exact(4)
+            .flat_map(|pixel| [pixel[0], pixel[1], pixel[2]])
             .collect();
         zax_render::assets::png_image::encode_rgb(
             u32::try_from(width).unwrap_or(0),

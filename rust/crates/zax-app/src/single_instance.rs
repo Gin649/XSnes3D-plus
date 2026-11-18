@@ -6,7 +6,7 @@ use std::path::Path;
 
 /// What the second instance prints before it closes.
 pub const ALREADY_RUNNING_MESSAGE: &str =
-    "Zaxnes: another instance is already running on this data folder; this one closes (REQ-LOOP-054).";
+    "XSnes3D+: another instance is already running on this data folder; this one closes (REQ-LOOP-054).";
 
 /// The guard. Dropping it releases the lock.
 #[derive(Debug)]

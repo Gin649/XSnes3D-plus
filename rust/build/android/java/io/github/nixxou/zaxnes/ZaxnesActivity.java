@@ -37,7 +37,7 @@ public class ZaxnesActivity extends SDLActivity {
             args.add("--font");
             args.add(font);
         }
-        // Xnes3D+: the saves folder the player chose (Options > Games and 3D profiles).
+        // XSnes3D+: the saves folder the player chose (Options > Games and 3D profiles).
         String saves = getSharedPreferences(ProfilesActivity.PREFS, MODE_PRIVATE).getString(ProfilesActivity.KEY_SAVES, null);
         if (saves != null && new File(saves).isDirectory()) {
             args.add("--saves");
@@ -52,14 +52,14 @@ public class ZaxnesActivity extends SDLActivity {
     }
 
     /**
-     * Xnes3D+: the interface font, Pixelify Sans (SIL Open Font License), packed in the APK
+     * XSnes3D+: the interface font, Pixelify Sans (SIL Open Font License), packed in the APK
      * as a raw resource and copied out once, since the native side reads it from a file. Null
      * when the APK has none: the native side then uses the system font.
      */
     private String interfaceFont() {
-        int id = getResources().getIdentifier("pixelify_sans", "raw", getPackageName());
+        int id = getResources().getIdentifier("vt323", "raw", getPackageName());
         if (id == 0) return null;
-        File out = new File(new File(getFilesDir(), "fonts"), "PixelifySans.ttf");
+        File out = new File(new File(getFilesDir(), "fonts"), "VT323.ttf");
         if (out.isFile() && out.length() > 0) return out.getAbsolutePath();
         out.getParentFile().mkdirs();
         File part = new File(out.getPath() + ".part");
@@ -75,7 +75,7 @@ public class ZaxnesActivity extends SDLActivity {
     }
 
     /**
-     * Xnes3D+: a row of the emulator's menus that needs Android (a picker, a download). The
+     * XSnes3D+: a row of the emulator's menus that needs Android (a picker, a download). The
      * native side sends it with SDL_AndroidSendMessage (zax-app's android_bridge.rs); SDL hands
      * the numbers from 0x8000 up to this method. The answer comes back through the user data
      * folder, see ProfilesActivity.
@@ -122,7 +122,7 @@ public class ZaxnesActivity extends SDLActivity {
         if (leaving) System.exit(0);
     }
 
-    /** Copies the profiles from the folder picked in Xnes3D+ profiles (see ProfilesActivity). */
+    /** Copies the profiles from the folder picked in XSnes3D+ profiles (see ProfilesActivity). */
     @Override
     protected void onCreate(android.os.Bundle savedInstanceState) {
         ProfileFolder.importAll(this);

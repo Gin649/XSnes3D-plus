@@ -7,7 +7,6 @@ use std::sync::Arc;
 use zax_engine3d::geometry::texture::ObjectTexture;
 use zax_engine3d::geometry::tile_mesh::TileMesh;
 use zax_engine3d::hashing::FastMap;
-use zax_engine3d::palette::nes_color;
 
 /// Rendered frames an unused mesh or texture is kept for, as in the GL caches.
 pub const RETENTION_FRAMES: u64 = 600;
@@ -403,7 +402,7 @@ impl TextureStore {
         handle
     }
 
-    /// Uploads the NES picture of the 2D mode (colour indices, row 0 first, `height` rows of 256
+    /// Uploads the picture of the 2D mode (red, green, blue and alpha, row 0 first, `height` rows of 256
     /// or of a widescreen width), or `None` when it has no such size.
     pub fn picture(
         &mut self,
@@ -444,14 +443,9 @@ impl TextureStore {
     ) -> Option<TextureHandle> {
         let (width, height) = crate::interop::picture_size(indices.len(), height)?;
         self.picture_pixels.resize(width * height * 4, 0);
-        for (pixel, &index) in self.picture_pixels.chunks_exact_mut(4).zip(indices) {
-            if index == crate::interop::HIDDEN_PIXEL {
-                pixel.copy_from_slice(&[0; 4]);
-                continue;
-            }
-            let color = nes_color(usize::from(index));
-            pixel.copy_from_slice(&[color.r, color.g, color.b, 255]);
-        }
+        // XSnes3D+: the picture is already red, green, blue and alpha.
+        let length = self.picture_pixels.len();
+        self.picture_pixels.copy_from_slice(&indices[..length]);
 
         #[allow(clippy::cast_possible_truncation)] // At most 1280 and 720.
         let size = (width as u32, height as u32);

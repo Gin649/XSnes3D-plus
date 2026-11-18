@@ -20,7 +20,7 @@ import java.net.HttpURLConnection;
 import java.net.URL;
 
 /**
- * Xnes3D+: finds the newest Xnes3D+ release on GitHub, downloads its APK and hands it to
+ * XSnes3D+: finds the newest XSnes3D+ release on GitHub, downloads its APK and hands it to
  * Android's installer, which asks the player to confirm. Every build is signed with the same
  * key, so the update installs over the app and keeps its data. Used by ProfilesActivity
  * (Options > Check for updates). No lambdas: the APK is compiled without LambdaMetafactory.
@@ -30,10 +30,10 @@ final class AppUpdate {
 
     /** The newest release, as GitHub's API gives it. */
     static final String LATEST =
-        "https://api.github.com/repos/Gin649/Xnes3D-plus/releases/latest";
+        "https://api.github.com/repos/Gin649/XSnes3D-plus/releases/latest";
 
     /** The action of the intent Android's installer sends back when it has news. */
-    static final String STATUS_ACTION = "io.github.gin649.zaxnes.UPDATE_STATUS";
+    static final String STATUS_ACTION = "io.github.gin649.xsnes3d.UPDATE_STATUS";
 
     /** A release: its version ("1.0.3"), notes and APK. */
     static final class Release {
@@ -63,7 +63,7 @@ final class AppUpdate {
     static Release latest() throws Exception {
         HttpURLConnection c = (HttpURLConnection) new URL(LATEST).openConnection();
         c.setRequestProperty("Accept", "application/vnd.github+json");
-        c.setRequestProperty("User-Agent", "Xnes3D+");
+        c.setRequestProperty("User-Agent", "XSnes3D+");
         c.setConnectTimeout(15000);
         c.setReadTimeout(15000);
         int code = c.getResponseCode();
@@ -128,7 +128,7 @@ final class AppUpdate {
         File folder = out.getParentFile();
         if (folder != null) folder.mkdirs();
         HttpURLConnection c = (HttpURLConnection) new URL(r.apkUrl).openConnection();
-        c.setRequestProperty("User-Agent", "Xnes3D+");
+        c.setRequestProperty("User-Agent", "XSnes3D+");
         c.setInstanceFollowRedirects(true);
         c.setConnectTimeout(15000);
         c.setReadTimeout(30000);
@@ -171,7 +171,7 @@ final class AppUpdate {
         PackageInstaller.Session session = installer.openSession(id);
         try {
             try (InputStream in = new FileInputStream(apk);
-                 OutputStream o = session.openWrite("xnes3d-plus.apk", 0, apk.length())) {
+                 OutputStream o = session.openWrite("xsnes3d-plus.apk", 0, apk.length())) {
                 byte[] buffer = new byte[64 * 1024];
                 int n;
                 while ((n = in.read(buffer)) > 0) o.write(buffer, 0, n);

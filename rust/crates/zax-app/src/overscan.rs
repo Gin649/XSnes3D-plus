@@ -97,9 +97,11 @@ impl Overscan {
     /// as the widescreen margins make it, the screen's 240 lines in the middle), and the vertical
     /// margin past the top and bottom ones: the picture ends where it does without a vertical
     /// margin. The left and right sides are cut on a picture without a horizontal margin only.
-    /// A pixel left out is `zax_render::interop::HIDDEN_PIXEL`, which is not drawn.
+    /// XSnes3D+: the picture is red, green, blue and alpha, four bytes a pixel; a pixel left out
+    /// gets all four bytes 0 (alpha 0 is not drawn). The arithmetic below counts in bytes, a row
+    /// being `width` bytes, so the columns cut are four bytes each.
     pub fn leave_out(&self, picture: &mut [u8], height: usize) {
-        const HIDDEN: u8 = zax_render::interop::HIDDEN_PIXEL;
+        const HIDDEN: u8 = 0;
         let height_i = i32::try_from(height).unwrap_or(0);
         if height_i < SCREEN_HEIGHT || picture.is_empty() {
             return;
@@ -116,10 +118,10 @@ impl Overscan {
             picture[end.min(length)..].fill(HIDDEN);
         }
         let (left, right) = (
-            usize::try_from(self.left).unwrap_or(0),
-            usize::try_from(self.right).unwrap_or(0),
+            usize::try_from(self.left).unwrap_or(0) * 4,
+            usize::try_from(self.right).unwrap_or(0) * 4,
         );
-        if (left > 0 || right > 0) && width == usize::try_from(SCREEN_WIDTH).unwrap_or(0) {
+        if (left > 0 || right > 0) && width == usize::try_from(SCREEN_WIDTH).unwrap_or(0) * 4 {
             for row in picture.chunks_mut(width) {
                 row[..left.min(width)].fill(HIDDEN);
                 row[width.saturating_sub(right)..].fill(HIDDEN);
@@ -153,7 +155,7 @@ impl Overscan {
 mod tests {
     use super::*;
 
-    const HIDDEN: u8 = zax_render::interop::HIDDEN_PIXEL;
+    const HIDDEN: u8 = 0;
 
     fn sides(top: i32, bottom: i32, left: i32, right: i32) -> Overscan {
         Overscan {
@@ -182,9 +184,9 @@ mod tests {
 
     #[test]
     fn each_side_is_cut_on_its_own() {
-        let mut picture = vec![1u8; 256 * 240];
+        let mut picture = vec![1u8; 256 * 240 * 4];
         sides(2, 0, 3, 5).leave_out(&mut picture, 240);
-        let at = |x: usize, y: usize| picture[y * 256 + x];
+        let at = |x: usize, y: usize| picture[(y * 256 + x) * 4];
         assert_eq!(HIDDEN, at(100, 1), "top");
         assert_eq!(1, at(100, 2));
         assert_eq!(1, at(100, 239), "no bottom");

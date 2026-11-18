@@ -756,14 +756,14 @@ mod tests {
         );
         let zaxnes = choices
             .iter()
-            .position(|choice| choice == "Zaxnes")
+            .position(|choice| choice == "XSnes3D+")
             .unwrap();
         model.choose(OptionRow::Palette, zaxnes);
         assert_eq!(
             model.options(),
             [(SettingId::VideoNesPalette, SettingValue::Enum(0))]
         );
-        assert_eq!(model.value_text(OptionRow::Palette), "Zaxnes");
+        assert_eq!(model.value_text(OptionRow::Palette), "XSnes3D+");
         model.use_global(OptionRow::Palette);
         assert!(!model.is_own(OptionRow::Palette));
     }

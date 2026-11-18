@@ -134,7 +134,6 @@ fn req_ui_200_every_entry_of_the_table_exists_and_names_a_command() {
         (text::menu_file(), Command::OpenRecentRom),
         (text::menu_file(), Command::ChooseProfile),
         (text::menu_file(), Command::ImportProfile),
-        (text::menu_file(), Command::ImportThreeDSen), // AMD-030 §2
         (text::menu_file(), Command::LoadSlot),
         (text::menu_file(), Command::QuickLoad),
         (text::menu_file(), Command::SaveSlot),

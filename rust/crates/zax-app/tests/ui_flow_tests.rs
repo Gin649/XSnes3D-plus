@@ -368,7 +368,7 @@ fn dec_10_q3_the_about_block_has_its_six_lines() {
 
     let lines = text::about_lines();
     assert_eq!(6, lines.len());
-    assert_eq!("Zaxnes", lines[0]);
+    assert_eq!("XSnes3D+", lines[0]);
     assert_eq!(format!("Version {}", text::version()), lines[1]);
     let numbers: Vec<&str> = text::version().split('.').collect();
     assert!(

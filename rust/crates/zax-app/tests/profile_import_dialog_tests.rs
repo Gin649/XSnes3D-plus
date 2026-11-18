@@ -75,7 +75,7 @@ fn req_ui_214_a_file_that_is_not_a_profile_cannot_be_imported() {
     assert_eq!(
         format!(
             "junk.3dn: {} has an obsolete or wrong profile format. \
-             This profile is not compatible with the current version of Zaxnes.",
+             This profile is not compatible with the current version of XSnes3D+.",
             junk.display()
         ),
         dialog.body
@@ -130,7 +130,7 @@ fn req_ui_214_a_built_in_identifier_is_already_in_zaxnes() {
 
     let dialog = harness.ui.import_dialog().expect("a dialogue").clone();
     assert_eq!(ProfileImportDialogKind::AlreadyBuiltIn, dialog.kind);
-    assert_eq!("Already in Zaxnes", dialog.title);
+    assert_eq!("Already in XSnes3D+", dialog.title);
     assert_eq!(
         "Foo is a built-in profile, so x.3dn was not imported.",
         dialog.body
@@ -255,12 +255,12 @@ fn req_prof_088_the_built_in_contra_is_already_in_zaxnes_in_both_languages() {
     for (language, title, body) in [
         (
             UiLanguage::English,
-            "Already in Zaxnes",
+            "Already in XSnes3D+",
             format!("{shown} is a built-in profile, so Contra.3dn was not imported."),
         ),
         (
             UiLanguage::French,
-            "Déjà dans Zaxnes",
+            "Déjà dans XSnes3D+",
             format!("{shown} est un profil embarqué ; Contra.3dn n'a pas été importé."),
         ),
     ] {
@@ -314,7 +314,7 @@ fn amd_036_the_import_dialogues_follow_the_interface_language() {
     );
     choose(&mut harness, &built_in);
     let already = harness.ui.import_dialog().expect("a dialogue").clone();
-    assert_eq!("Déjà dans Zaxnes", already.title);
+    assert_eq!("Déjà dans XSnes3D+", already.title);
     assert_eq!(
         "Foo est un profil embarqué ; x.3dn n'a pas été importé.",
         already.body

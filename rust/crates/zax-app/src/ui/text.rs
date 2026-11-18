@@ -19,7 +19,7 @@ use super::keys;
 use super::strings;
 
 /// Product name shown in the title bar and the about block (DEC-10-Q3).
-pub const PRODUCT_NAME: &str = "Zaxnes";
+pub const PRODUCT_NAME: &str = "XSnes3D+";
 
 /// Title of the File menu (REQ-UI-200).
 #[must_use]

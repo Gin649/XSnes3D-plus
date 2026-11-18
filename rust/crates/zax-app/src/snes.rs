@@ -25,6 +25,10 @@ pub const MAX_RATIO_ADJUSTMENT: f64 = 0.005;
 /// usual rate).
 const RING_FRAMES: usize = 24_000;
 
+/// The 2D picture's size, as the renderer takes it (the NES app's frame).
+const PICTURE_WIDTH: usize = 256;
+const PICTURE_HEIGHT: usize = 240;
+
 /// The least sound the audio stream's ring is sized for, in frames.
 pub const MIN_BUFFER_SAMPLES: usize = 10_000;
 
@@ -549,28 +553,70 @@ impl SnesCore {
     /// The most frames of run-ahead the core offers: none yet on the SNES.
     pub const MAX_RUN_AHEAD: u8 = 0;
 
-    /// A byte of the game's memory for the scripts' `ReadMem`. SNES profiles do not exist
-    /// yet, so this reads 0 until the scripts get a SNES memory map.
+    /// A byte of the game's memory for the scripts' `ReadMem`: the first 64 KiB of work RAM,
+    /// bank $7E (the bank games keep their variables in; $0000 to $1FFF is also what banks $00
+    /// to $3F show at those addresses). 0 without a game.
     #[must_use]
-    pub const fn read_memory(&self, address: u16) -> u8 {
-        let _ = address;
-        0
+    pub fn read_memory(&self, address: u16) -> u8 {
+        self.snes
+            .as_ref()
+            .and_then(|snes| snes.work_ram().get(usize::from(address)).copied())
+            .unwrap_or(0)
     }
 
-    /// A write of the scripts' `WriteMem`: not done on the SNES yet (see
-    /// [`SnesCore::read_memory`]).
-    pub const fn write_memory(&mut self, address: u16, value: u8) {
-        let _ = (address, value);
+    /// A write of the scripts' `WriteMem`, to the same bytes [`SnesCore::read_memory`] reads.
+    pub fn write_memory(&mut self, address: u16, value: u8) {
+        if let Some(byte) = self
+            .snes
+            .as_mut()
+            .and_then(|snes| snes.work_ram_mut().get_mut(usize::from(address)))
+        {
+            *byte = value;
+        }
     }
 
-    // The NES app's 2D picture path. The renderer's 2D picture is NES colour indices, which a
-    // SNES picture is not; until it takes RGB pictures, the 2D picture is blank.
+    /// A byte as RetroAchievements addresses a SNES: work RAM from $000000 to $01FFFF, then
+    /// the save RAM from $020000. `None` past the end.
+    #[must_use]
+    pub fn achievement_memory(&self, address: u32) -> Option<u8> {
+        const WORK_RAM: usize = 0x2_0000;
+        let snes = self.snes.as_ref()?;
+        let address = usize::try_from(address).ok()?;
+        if address < WORK_RAM {
+            snes.work_ram().get(address).copied()
+        } else {
+            snes.save_ram().get(address - WORK_RAM).copied()
+        }
+    }
 
-    /// Copies the 2D picture into `out` (256 by 240 colour indices); returns its rows.
+    /// Copies the 2D picture into `out`: 256 by 240 pixels, red, green, blue and alpha. The
+    /// SNES picture's 224 (or 239) lines are the top rows and the rest is left out (alpha 0);
+    /// a hi-res picture is halved each way. Returns the rows, 240.
     pub fn wide_picture_into(&self, out: &mut Vec<u8>) -> usize {
         out.clear();
-        out.resize(256 * 240, 0);
-        240
+        out.resize(PICTURE_WIDTH * PICTURE_HEIGHT * 4, 0);
+        let Some(frame) = &self.picture else {
+            return PICTURE_HEIGHT;
+        };
+        let width = frame.width as usize;
+        let height = frame.height as usize;
+        let step_x = if width >= 2 * PICTURE_WIDTH { 2 } else { 1 };
+        let step_y = if height > PICTURE_HEIGHT + 16 { 2 } else { 1 };
+        let rows = (height / step_y).min(PICTURE_HEIGHT);
+        let columns = (width / step_x).min(PICTURE_WIDTH);
+        for y in 0..rows {
+            let source = y * step_y * width;
+            let target = y * PICTURE_WIDTH;
+            for x in 0..columns {
+                let from = (source + x * step_x) * 3;
+                let to = (target + x) * 4;
+                if let Some(rgb) = frame.rgb.get(from..from + 3) {
+                    out[to..to + 3].copy_from_slice(rgb);
+                    out[to + 3] = 255;
+                }
+            }
+        }
+        PICTURE_HEIGHT
     }
 
     /// The smooth-scrolling shift of the 2D picture: none on the SNES.

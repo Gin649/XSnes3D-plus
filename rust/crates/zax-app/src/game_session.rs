@@ -387,7 +387,7 @@ impl GameSession {
         let light = runtime.light_update_s_scripts();
         if !light.is_empty() {
             crate::app_log::line(&format!(
-                "Zaxnes: Lua: the UpdateS of {} take(s) the light shape.",
+                "XSnes3D+: Lua: the UpdateS of {} take(s) the light shape.",
                 light.join(", ")
             ));
         }
@@ -422,7 +422,7 @@ impl GameSession {
         session.run_ahead_held_at_zero = session.run_ahead_forced_to_zero;
         if session.run_ahead_forced_to_zero {
             crate::app_log::line(
-                "Zaxnes: run-ahead: the scripts of this profile change the core from a frame \
+                "XSnes3D+: run-ahead: the scripts of this profile change the core from a frame \
                  hook, so the game runs at run-ahead 0 (Q-103); the setting is kept for the next \
                  game.",
             );
@@ -751,7 +751,7 @@ impl GameSession {
         }
         self.pipeline.in_flight = false;
         let Some(finished) = self.pipeline.worker.as_ref().and_then(CoreWorker::finish) else {
-            crate::app_log::error("Zaxnes: the emulation thread stopped during a frame.");
+            crate::app_log::error("XSnes3D+: the emulation thread stopped during a frame.");
             return;
         };
         self.pipeline.spare = Some(std::mem::replace(&mut self.core, finished.core));
@@ -1116,7 +1116,7 @@ impl GameSession {
                 }
                 Err(error) => {
                     crate::app_log::error(&format!(
-                        "Zaxnes: no emulation thread ({error}); the emulation stays on the main thread."
+                        "XSnes3D+: no emulation thread ({error}); the emulation stays on the main thread."
                     ));
                 }
             }
@@ -1159,7 +1159,7 @@ impl GameSession {
         if self.pipeline.in_flight {
             self.pipeline.in_flight = false;
             let Some(finished) = self.pipeline.worker.as_ref().and_then(CoreWorker::finish) else {
-                crate::app_log::error("Zaxnes: the emulation thread stopped during a frame.");
+                crate::app_log::error("XSnes3D+: the emulation thread stopped during a frame.");
                 return;
             };
             self.pipeline.spare = Some(std::mem::replace(&mut self.core, finished.core));

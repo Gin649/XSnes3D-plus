@@ -39,6 +39,11 @@ fn a_state_put_back_plays_the_same_frames_and_sound_keeps_coming() {
         "the frames after the state changed"
     );
 
+    // The work RAM is there, all 128 KiB of it, and a byte written stays.
+    assert_eq!(snes.work_ram().len(), 0x2_0000);
+    snes.work_ram_mut()[0x1F00] = 0xA5;
+    assert_eq!(snes.work_ram()[0x1F00], 0xA5);
+
     // A damaged state is refused.
     assert!(snes.load_state(&state[..state.len() / 3]).is_err());
 

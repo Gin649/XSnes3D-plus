@@ -14,7 +14,7 @@ use sdl2::event::Event;
 use sdl2::sys;
 
 /// The name SDL gives the virtual controller.
-pub const TOUCH_PAD_NAME: &str = "Zaxnes touch pad";
+pub const TOUCH_PAD_NAME: &str = "XSnes3D+ touch pad";
 
 /// Whether this build offers the pad: on Android, or with `ZAXNES_TOUCH_PAD=1` to try it on a
 /// desktop, where the mouse touches it.

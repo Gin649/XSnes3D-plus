@@ -172,7 +172,7 @@ fn amd_029_an_existing_root_is_never_overwritten() {
 fn amd_029_the_copy_refuses_the_cases_that_are_not_a_migration() {
     let root = TemporaryRoot::new("zax-pers-");
     let legacy = root.path().join("edge").join("Sen");
-    let target = root.path().join("edge").join("Zaxnes");
+    let target = root.path().join("edge").join("XSnes3D+");
     // No old root.
     assert!(!try_copy_legacy_root(&legacy, &target));
     assert!(!target.exists());
