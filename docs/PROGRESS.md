@@ -1,6 +1,15 @@
 # XSnes3D+: progress and decisions
 
-Last updated 2026-11-18 (night). Kept in step with the claude.ai project doc of the same name.
+Last updated 2026-11-19. Kept in step with the claude.ai project doc of the same name.
+
+## PAUSED (2026-11-19)
+Gin649 has paused XSnes3D+ to focus on other projects. Latest build: **v0.1.7** (works well in 2D).
+Why, from the v0.1.7 reports on the Thor:
+- **Speed:** Aero the Acro-Bat and Aladdin run near 60 fps most of the time; Yogi Bear's levels stay near 35 fps (its 3D conversion alone takes about 13 ms a frame).
+- **Crash:** Yogi Bear still closes during play in 3D, with no crash line in the report, so most likely Android closing the app (probably memory), not a crash in the code. Not investigated further.
+- **The 3D adds little:** SNES games are flat painted layers with their own shading, so setting them apart in depth adds far less than the NES app's blocks. Making the 3D worthwhile would be a design project, not a round of fixes.
+
+To pick it up again: read the rest of this file, then the newest reports in the roms repo. First candidates: the Yogi Bear close (`adb logcat` right after it, memory use per engine), the conversion cost of busy Mode 1 games, then the Aero letters and the "state is too short" save states.
 
 ## Status
 - **Android app:** test builds v0.1.0 to v0.1.3 released as pre-releases on Gin649/XSnes3D-plus (`android-apk.yml`, run from the Actions tab; the version is `.github/fork/VERSION`, raise it before each build). Installs as `io.github.gin649.xsnes3d`, beside Xnes3D+.
