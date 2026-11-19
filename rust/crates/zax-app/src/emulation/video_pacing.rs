@@ -12,8 +12,6 @@ use zax_platform::pacing::{self, DisplayPacingState, DisplaySurface};
 use zax_settings::catalogue::SettingId;
 use zax_settings::model::SettingsModel;
 
-use crate::persistence::app_settings::AppSettings;
-
 /// What the host wants in force on the window right now.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct VideoPacingRequest {
@@ -49,7 +47,7 @@ impl VideoPacing {
         Self {
             request: request.unwrap_or_else(|| {
                 Box::new(|model| VideoPacingRequest {
-                    vsync: model.vsync(),
+                    vsync: model.effective_vsync(),
                     target_frame_rate: model.frame_rate(),
                 })
             }),

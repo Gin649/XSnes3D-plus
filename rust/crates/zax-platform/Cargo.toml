@@ -39,6 +39,10 @@ wgpu = { version = "30.0.0", optional = true, default-features = false, features
     "wgsl",
 ] }
 
+# XSnes3D+: the crash catcher's signal handler (crash_catcher.rs).
+[target.'cfg(target_os = "android")'.dependencies]
+libc = "0.2"
+
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_System_Console"] }
 

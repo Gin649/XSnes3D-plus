@@ -49,6 +49,8 @@ impl CoreWorker {
         let thread = thread::Builder::new()
             .name("zaxnes-emulation".to_owned())
             .spawn(move || {
+                // XSnes3D+: the emulation on the chip's fastest core (Android).
+                crate::cpu_affinity::pin(crate::cpu_affinity::Role::Emulation);
                 while let Ok(Job {
                     mut core,
                     word,
@@ -66,6 +68,8 @@ impl CoreWorker {
                     }
                 }
             })?;
+        // XSnes3D+: and the thread that starts it (the main thread) on the other fast cores.
+        crate::cpu_affinity::pin(crate::cpu_affinity::Role::Main);
         Ok(Self {
             jobs: Some(jobs),
             finished,

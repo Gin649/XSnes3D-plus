@@ -1,0 +1,77 @@
+diff --git a/Core/SNES/SnesPpu.cpp b/Core/SNES/SnesPpu.cpp
+index fbd9e19..44758a9 100644
+--- a/Core/SNES/SnesPpu.cpp
++++ b/Core/SNES/SnesPpu.cpp
+@@ -430,6 +430,35 @@ void SnesPpu::TapChunk()
+ 	memcpy(_tapReference + _drawStartX, _mainScreenBuffer + _drawStartX, (_drawEndX - _drawStartX + 1) * sizeof(uint16_t));
+ }
+ 
++// XSnes3D+: which pixels of this piece the colour window turned black and left black after
++// colour maths. Games use this to hide the column where they redraw scenery as the screen
++// scrolls; the 3D must hide it too. Called after ApplyColorMath, on the chunk TapChunk added.
++void SnesPpu::TapClippedBlack()
++{
++	if(_tap->Building.Chunks.empty() || _state.ColorMathClipMode == ColorWindowMode::Never) {
++		return;
++	}
++	bool hiResMode = _state.HiResMode || _state.BgMode == 5 || _state.BgMode == 6;
++	if(hiResMode) {
++		return;
++	}
++	SnesTapChunk& chunk = _tap->Building.Chunks.back();
++	uint8_t count = (uint8_t)_state.Window[0].ActiveLayers[SnesPpu::ColorWindowIndex] + (uint8_t)_state.Window[1].ActiveLayers[SnesPpu::ColorWindowIndex];
++	for(int x = _drawStartX; x <= _drawEndX; x++) {
++		bool inside = ProcessMaskWindow<SnesPpu::ColorWindowIndex>(count, x);
++		bool clipped;
++		switch(_state.ColorMathClipMode) {
++			case ColorWindowMode::OutsideWindow: clipped = !inside; break;
++			case ColorWindowMode::InsideWindow: clipped = inside; break;
++			case ColorWindowMode::Always: clipped = true; break;
++			default: clipped = false; break;
++		}
++		if(clipped && (_mainScreenBuffer[x] & 0x7FFF) == 0) {
++			chunk.ClippedBlack[x >> 3] |= (uint8_t)(1 << (x & 0x07));
++		}
++	}
++}
++
+ // XSnes3D+: which pixels of this piece a window hides from the main screen, for one layer.
+ template<uint8_t layerIndex>
+ void SnesPpu::TapWindowMask(uint8_t masked[32])
+@@ -997,6 +1026,9 @@ void SnesPpu::RenderScanline()
+ 		}
+ 
+ 		ApplyColorMath();
++		if(_tap) {
++			TapClippedBlack();
++		}
+ 		ApplyBrightness<true>();
+ 		ApplyHiResMode();
+ 
+diff --git a/Core/SNES/SnesPpu.h b/Core/SNES/SnesPpu.h
+index 0b700ab..b58bcf4 100644
+--- a/Core/SNES/SnesPpu.h
++++ b/Core/SNES/SnesPpu.h
+@@ -231,6 +231,7 @@ private:
+ 	void TapChunk();
+ 	void TapLineEnd();
+ 	void TapSprite();
++	void TapClippedBlack();
+ 	template<uint8_t layerIndex>
+ 	void TapWindowMask(uint8_t masked[32]);
+ 
+diff --git a/Core/SNES/SnesTileTap.h b/Core/SNES/SnesTileTap.h
+index 3b48eef..240e7e1 100644
+--- a/Core/SNES/SnesTileTap.h
++++ b/Core/SNES/SnesTileTap.h
+@@ -25,8 +25,9 @@ struct SnesTapChunk
+ 	uint16_t HScroll[4];
+ 	uint32_t CgramIndex; // which palette snapshot was in force (SnesTapFrame::Cgram, 256 per snapshot)
+ 	uint8_t WindowMasked[5][32]; // per layer (4 = sprites), one bit per pixel hidden by a window
++	uint8_t ClippedBlack[32]; // one bit per pixel the colour window turned black (games hide scroll seams so)
+ };
+-static_assert(sizeof(SnesTapChunk) == 184, "SnesTapChunk layout changed");
++static_assert(sizeof(SnesTapChunk) == 216, "SnesTapChunk layout changed");
+ 
+ // One finished line: the tiles fetched for each background layer (33 columns) and the main
+ // screen as drawn, before colour maths and brightness.

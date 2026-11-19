@@ -623,10 +623,11 @@ impl TileCapture {
                         ..Builder::default()
                     });
                     let keep = shown_pixels(x, flip_x, |screen_x| {
-                        on_main_only
-                            && chunk.window_masked[layer][usize::from(screen_x >> 3)]
-                                & (1 << (screen_x & 7))
-                                != 0
+                        chunk.clipped_black_at(screen_x)
+                            || (on_main_only
+                                && chunk.window_masked[layer][usize::from(screen_x >> 3)]
+                                    & (1 << (screen_x & 7))
+                                    != 0)
                     });
                     builder.add_row(&tile.chr, usize::from(bpp), source_row as u32, keep);
                 }
@@ -674,10 +675,11 @@ impl TileCapture {
                 }
                 used[target] = true;
                 let keep = shown_pixels(x as i16, false, |screen_x| {
-                    on_main_only
-                        && chunk.window_masked[target][usize::from(screen_x >> 3)]
-                            & (1 << (screen_x & 7))
-                            != 0
+                    chunk.clipped_black_at(screen_x)
+                        || (on_main_only
+                            && chunk.window_masked[target][usize::from(screen_x >> 3)]
+                                & (1 << (screen_x & 7))
+                                != 0)
                 });
                 let order = layers[target].len();
                 let key = (y - shown_row, x as i16, MODE7_TILE);
@@ -726,10 +728,11 @@ impl TileCapture {
                 });
                 let keep = shown_pixels(sprite.x, sprite.horizontal_mirror != 0, |screen_x| {
                     chunk.is_some_and(|c| {
-                        c.sub_layers & 0x10 == 0
-                            && c.window_masked[4][usize::from(screen_x >> 3)]
-                                & (1 << (screen_x & 7))
-                                != 0
+                        c.clipped_black_at(screen_x)
+                            || (c.sub_layers & 0x10 == 0
+                                && c.window_masked[4][usize::from(screen_x >> 3)]
+                                    & (1 << (screen_x & 7))
+                                    != 0)
                     })
                 });
                 builder.add_row(&sprite.chr, 4, u32::from(source_row), keep);

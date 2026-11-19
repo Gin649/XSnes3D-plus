@@ -6,6 +6,18 @@ use std::io::Write;
 use std::path::{Path, PathBuf};
 
 fn main() {
+    // XSnes3D+: the app's version is the one in .github/fork/VERSION, which names each test
+    // build's release; the Cargo version stays 0.1.0. Without the file, the Cargo version.
+    let version_file = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../.github/fork/VERSION");
+    println!("cargo:rerun-if-changed={}", version_file.display());
+    let version = std::fs::read_to_string(&version_file)
+        .map(|text| text.trim().to_owned())
+        .ok()
+        .filter(|text| !text.is_empty())
+        .unwrap_or_else(|| env!("CARGO_PKG_VERSION").to_owned());
+    println!("cargo:rustc-env=XSNES3D_VERSION={version}");
+
     println!("cargo:rerun-if-env-changed=CARGO_ENCODED_RUSTFLAGS");
     let flags = std::env::var("CARGO_ENCODED_RUSTFLAGS").unwrap_or_default();
     let mut parts = flags.split('\u{1f}');

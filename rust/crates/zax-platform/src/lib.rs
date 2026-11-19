@@ -5,6 +5,7 @@
 pub mod android_message;
 pub mod audio;
 pub mod console;
+pub mod crash_catcher;
 pub mod framebuffer;
 mod gl_loader;
 pub mod icon;
@@ -12,6 +13,7 @@ pub mod imgui_glyphs;
 pub mod imgui_renderer;
 pub mod input;
 pub mod pacing;
+pub mod thread_cores;
 #[cfg(feature = "shaders")]
 pub mod slang_chain;
 pub mod ui_image;

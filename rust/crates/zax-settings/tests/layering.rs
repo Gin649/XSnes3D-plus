@@ -524,3 +524,22 @@ fn ro_2_the_preference_is_read_under_the_game_and_the_session() {
     model.set_layer(id, SettingValue::Enum(0), SettingLayer::CommandLine);
     assert_eq!(0, model.preference(id).as_int());
 }
+
+/// XSnes3D+: "Every refresh" with 60fps asked on a 120 Hz screen swaps every other refresh.
+#[test]
+fn sixty_frames_on_a_120_hz_screen_swap_every_other_refresh() {
+    let mut model = SettingsModel::default();
+    model.set_display_refresh_rate(120.0);
+    model.set(SettingId::VideoVSync, SettingValue::Int(1));
+    model.set(SettingId::VideoFrameRate, SettingValue::Int(60));
+    assert_eq!(2, model.effective_vsync());
+    assert_exact(model.get(SettingId::VideoTargetFramerate).as_float(), 60.0);
+    // Auto and 120fps keep every refresh, and a 60 Hz screen is left alone.
+    model.set(SettingId::VideoFrameRate, SettingValue::Int(0));
+    assert_eq!(1, model.effective_vsync());
+    model.set(SettingId::VideoFrameRate, SettingValue::Int(120));
+    assert_eq!(1, model.effective_vsync());
+    model.set_display_refresh_rate(60.0);
+    model.set(SettingId::VideoFrameRate, SettingValue::Int(60));
+    assert_eq!(1, model.effective_vsync());
+}

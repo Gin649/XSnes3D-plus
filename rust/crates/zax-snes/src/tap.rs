@@ -50,6 +50,16 @@ pub(crate) struct RawChunk {
     pub hscroll: [u16; 4],
     pub cgram_index: u32,
     pub window_masked: [[u8; 32]; 5],
+    /// One bit per pixel the colour window turned black (and colour maths left black): games
+    /// hide the column where they redraw scenery while scrolling this way. Hidden in 3D too.
+    pub clipped_black: [u8; 32],
+}
+
+impl RawChunk {
+    /// Whether the colour window turned pixel `x` of this piece black.
+    pub(crate) fn clipped_black_at(&self, x: u16) -> bool {
+        x < 256 && self.clipped_black[usize::from(x >> 3)] & (1 << (x & 7)) != 0
+    }
 }
 
 #[repr(C)]
@@ -90,7 +100,7 @@ pub(crate) struct RawMode7Line {
 
 // The C++ side checks the same sizes (SnesTileTap.h).
 const _: () = assert!(std::mem::size_of::<RawTile>() == 12);
-const _: () = assert!(std::mem::size_of::<RawChunk>() == 184);
+const _: () = assert!(std::mem::size_of::<RawChunk>() == 216);
 const _: () = assert!(std::mem::size_of::<RawLine>() == 2100);
 const _: () = assert!(std::mem::size_of::<RawSprite>() == 16);
 const _: () = assert!(std::mem::size_of::<RawMode7Line>() == 268);

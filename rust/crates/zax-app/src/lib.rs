@@ -11,6 +11,7 @@ pub mod application;
 pub mod audio;
 pub mod bundled_profiles;
 pub mod core_worker;
+pub mod cpu_affinity;
 pub mod editor_mode;
 pub mod emulation;
 mod flags;

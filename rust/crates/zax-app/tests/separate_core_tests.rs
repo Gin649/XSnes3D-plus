@@ -124,3 +124,25 @@ fn a_script_reading_memory_sees_the_same_bytes_ahead() {
     );
     assert_eq!(serial, ahead);
 }
+
+#[test]
+fn late_ticks_in_a_row_run_one_frame_on_the_emulation_thread() {
+    // With the emulation on its own thread, one late tick may catch up, but the ticks after it
+    // that are still late run one frame each: a second frame would run on the main thread after
+    // the first and make the next tick later still. Without the thread, the catch-up limit
+    // applies every time.
+    let late = 3.0 / 60.0;
+    let mut frames = Vec::new();
+    for separate_core in [true, false] {
+        let mut harness = LoopHarness::create();
+        harness.host.separate_core = separate_core;
+        harness.launch("g1");
+        for _ in 0..40 {
+            harness.tick_frame();
+        }
+        assert_eq!(1, harness.tick_frame());
+        frames.push((0..3).map(|_| harness.tick(late)).collect::<Vec<u32>>());
+    }
+    assert_eq!(vec![2, 1, 1], frames[0]);
+    assert_eq!(vec![2, 2, 2], frames[1]);
+}

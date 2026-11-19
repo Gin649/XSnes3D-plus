@@ -591,10 +591,29 @@ impl SettingsModel {
     }
 
     fn target_framerate(&self) -> f32 {
-        match self.get(SettingId::VideoVSync).as_int() {
+        match self.effective_vsync() {
             1 => self.display_refresh_rate,
             2 => self.display_refresh_rate / 2.0,
             _ => num::i32_to_f32(self.frame_rate()),
+        }
+    }
+
+    /// The `video.vsync` value in force (XSnes3D+): "Every refresh" swaps every other refresh
+    /// when `video.frame_rate` asks for half the display's rate or less, so a 120 Hz screen
+    /// set to 60fps draws 60 frames a second, which is what SNES games run at. Auto keeps
+    /// every refresh.
+    #[must_use]
+    pub fn effective_vsync(&self) -> i32 {
+        let vsync = self.get(SettingId::VideoVSync).as_int();
+        let asked = self.get(SettingId::VideoFrameRate).as_int();
+        if vsync == 1
+            && asked > 0
+            && self.display_refresh_rate.is_finite()
+            && num::i32_to_f32(asked) * 2.0 <= self.display_refresh_rate + 2.0
+        {
+            2
+        } else {
+            vsync
         }
     }
 

@@ -500,7 +500,8 @@ impl Running {
     fn frame(&mut self) -> Result<bool, String> {
         {
             let host = &self.host;
-            let game = host.current_game_id().zip(host.current_game_title());
+            let title = crate::field_report::game_name(host);
+            let game = host.current_game_id().zip(title.as_deref());
             let root = host.paths().root.clone();
             self.field_report.follow(&root, game);
         }
@@ -2056,8 +2057,8 @@ fn open_log_file(paths: &UserDataPaths) {
     let (file, failures) = app_log::open_first(&candidates);
     match &file {
         Some(file) => log(&format!(
-            "zaxnes {} ({}), log file '{}'",
-            env!("CARGO_PKG_VERSION"),
+            "XSnes3D+ {} ({}), log file '{}'",
+            env!("XSNES3D_VERSION"),
             frame_profiler::build_profile(),
             file.display()
         )),

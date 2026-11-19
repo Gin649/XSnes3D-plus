@@ -267,6 +267,8 @@ pub struct EmulationHost<C: GameCatalog, V: GameView = NoView> {
     /// (Rust-only "emulation on a separate core", handheld default): the game sees its inputs
     /// one displayed frame later, nothing else changes. See `GameSession::prepare_frame_timed`.
     pub separate_core: bool,
+    /// XSnes3D+: whether the last tick had more than one frame due (see `run_due_frames`).
+    was_late: bool,
     /// Whether this run shows the gamepad-only interface: a handheld (`--handheld`) or the
     /// desktop opened in its console mode (`--console`). Handed to each session so that a Lua
     /// write of `Setting.Msaa` leaves the anti-aliasing alone there (RO-2 part 4).
@@ -424,6 +426,7 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
             step_input: Default::default(),
             rollback_enabled: true,
             separate_core: false,
+            was_late: false,
             console_interface: false,
             core_ahead: true,
             fast_forward: FastForwardState::new(),
@@ -1048,7 +1051,23 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         self.pacer.max_backlog = self
             .effective_catch_up()
             .frames_per_display(self.pacer.effective_rate(), displayed_rate);
+        // XSnes3D+: with the emulation on its own thread, only one frame runs there per
+        // displayed frame; a second one runs here on the main thread after the first, which
+        // makes the next displayed frame later still. A single late tick may still catch up
+        // (the display's timing wobbles), but when the ticks keep coming late the extra frame is
+        // dropped instead and the game slows down a little: before this, a game that fell behind
+        // stayed stuck at a third of its speed (Yogi Bear on the Thor).
+        if self.separate_core && self.was_late {
+            self.pacer.max_backlog = self.pacer.max_backlog.min(
+                CatchUp::Off.frames_per_display(self.pacer.effective_rate(), displayed_rate),
+            );
+        }
+        let dropped_before = self.pacer.dropped_frames();
         let due = self.pacer.due_frames();
+        // Late: more frames due than one displayed frame stands for, or frames dropped.
+        self.was_late = due
+            > CatchUp::Off.frames_per_display(self.pacer.effective_rate(), displayed_rate)
+            || self.pacer.dropped_frames() > dropped_before;
         let ahead = self.runs_ahead();
         let last_3d =
             self.settings.get(SettingId::EmuCatchUpLast3d).as_bool() || self.half_rate_3d();

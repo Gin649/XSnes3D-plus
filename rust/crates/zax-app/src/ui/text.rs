@@ -417,7 +417,7 @@ pub fn welcome_no_recent() -> String {
 /// The version the about block shows.
 #[must_use]
 pub const fn version() -> &'static str {
-    env!("CARGO_PKG_VERSION")
+    env!("XSNES3D_VERSION")
 }
 
 /// The version line of the about block and of the welcome screen.

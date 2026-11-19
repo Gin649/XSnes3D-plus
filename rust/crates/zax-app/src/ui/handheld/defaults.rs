@@ -104,6 +104,10 @@ pub fn apply_android(model: &mut SettingsModel) {
         (SettingId::EmuPause3dIn2d, SettingValue::Bool(true)),
         (SettingId::RenderStyleSsrQuality, SettingValue::Int(0)),
         (SettingId::RenderBackdropLighting, SettingValue::Bool(false)),
+        // XSnes3D+: draw 60 frames a second, the rate SNES games run at. On the Thor's 120 Hz
+        // screen this swaps every other refresh and halves the drawing work; 120fps can still
+        // be picked in the options.
+        (SettingId::VideoFrameRate, SettingValue::Int(60)),
     ] {
         model.set_environment_default(id, value);
     }

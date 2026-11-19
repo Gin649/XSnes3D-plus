@@ -21,7 +21,7 @@ use crate::emulation::game_catalog::GameCatalog as _;
 pub const FOLDER: &str = "reports";
 
 /// The build, for the head of each report.
-const VERSION: &str = env!("CARGO_PKG_VERSION");
+const VERSION: &str = env!("XSNES3D_VERSION");
 
 /// The report of the game being played.
 #[derive(Debug, Default)]
@@ -151,11 +151,29 @@ pub const MOMENTS: &str = "moments";
 /// # Errors
 ///
 /// No game running, or the folder could not be written.
+/// The name a report gives the game being played: its title, or for a game played on one of
+/// the generic entries ("Smart 3D (no profile)", "2D Mode") the ROM's file name, since the
+/// entry's title says nothing of the game. `None` when no game runs.
+#[must_use]
+pub fn game_name(host: &crate::application::AppHost) -> Option<String> {
+    let title = host.current_game_title()?;
+    if host.current_game_is_generic() {
+        let id = host.current_game_id().unwrap_or_default();
+        if let Some(rom) = host.games().rom_path(id) {
+            let stem = Path::new(&rom)
+                .file_stem()
+                .and_then(|stem| stem.to_str())
+                .map(str::to_owned);
+            if let Some(stem) = stem.filter(|stem| !stem.is_empty()) {
+                return Some(stem);
+            }
+        }
+    }
+    Some(title.to_owned())
+}
+
 pub fn report_moment(host: &mut crate::application::AppHost) -> Result<String, String> {
-    let title = host
-        .current_game_title()
-        .ok_or("no game is running")?
-        .to_owned();
+    let title = game_name(host).ok_or("no game is running")?;
     let id = host.current_game_id().unwrap_or_default().to_owned();
     let rom = host.games().rom_path(&id).unwrap_or_default();
     let stamp = time::OffsetDateTime::now_utc();

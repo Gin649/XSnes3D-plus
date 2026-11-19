@@ -123,6 +123,10 @@ pub fn first_lines() -> Vec<String> {
 
 /// Starts sending every log line to `file` too (a play report), replacing the one before.
 pub fn start_report(file: File) {
+    // XSnes3D+: a crash in Mesen's C++ code writes its own line to this report (Android).
+    zax_platform::crash_catcher::install();
+    #[cfg(unix)]
+    zax_platform::crash_catcher::set_report_fd(std::os::fd::AsRawFd::as_raw_fd(&file));
     if let Ok(mut report) = REPORT.lock() {
         *report = Some(LineWriter::new(file));
     }
@@ -130,6 +134,7 @@ pub fn start_report(file: File) {
 
 /// Stops sending the log to the play report, writing `last` at its end first.
 pub fn end_report(last: &str) {
+    zax_platform::crash_catcher::set_report_fd(-1);
     if let Ok(mut report) = REPORT.lock() {
         if let Some(file) = report.as_mut() {
             let _ = writeln!(file, "{last}");
