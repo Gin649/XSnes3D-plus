@@ -28,9 +28,12 @@ import java.net.URL;
 final class AppUpdate {
     private AppUpdate() {}
 
-    /** The newest release, as GitHub's API gives it. */
-    static final String LATEST =
-        "https://api.github.com/repos/Gin649/XSnes3D-plus/releases/latest";
+    /**
+     * The releases, newest first. Not ".../releases/latest": that one skips pre-releases, and
+     * every test build so far is a pre-release, so it answered 404.
+     */
+    static final String RELEASES =
+        "https://api.github.com/repos/Gin649/XSnes3D-plus/releases?per_page=30";
 
     /** The action of the intent Android's installer sends back when it has news. */
     static final String STATUS_ACTION = "io.github.gin649.xsnes3d.UPDATE_STATUS";
@@ -61,7 +64,7 @@ final class AppUpdate {
 
     /** The newest release. Throws with a readable message when it can't be read. */
     static Release latest() throws Exception {
-        HttpURLConnection c = (HttpURLConnection) new URL(LATEST).openConnection();
+        HttpURLConnection c = (HttpURLConnection) new URL(RELEASES).openConnection();
         c.setRequestProperty("Accept", "application/vnd.github+json");
         c.setRequestProperty("User-Agent", "XSnes3D+");
         c.setConnectTimeout(15000);
@@ -78,10 +81,25 @@ final class AppUpdate {
         } finally {
             c.disconnect();
         }
-        JSONObject json = new JSONObject(text);
-        Release r = new Release();
+        // The highest version among the app's releases ("v" and a number: not the build tools'
+        // "dev-vendor") that have an APK, drafts left out.
+        JSONArray releases = new JSONArray(text);
+        Release best = null;
+        for (int i = 0; i < releases.length(); i++) {
+            Release r = release(releases.getJSONObject(i));
+            if (r != null && (best == null || newer(r.version, best.version))) best = r;
+        }
+        if (best == null) throw new Exception("No release has an APK yet.");
+        return best;
+    }
+
+    /** One release of the list, or null when it is a draft, not the app's, or has no APK. */
+    private static Release release(JSONObject json) throws Exception {
+        if (json.optBoolean("draft", false)) return null;
         String tag = json.optString("tag_name", "");
-        r.version = tag.startsWith("v") ? tag.substring(1) : tag;
+        if (tag.length() < 2 || tag.charAt(0) != 'v' || !Character.isDigit(tag.charAt(1))) return null;
+        Release r = new Release();
+        r.version = tag.substring(1);
         r.notes = json.optString("body", "");
         JSONArray assets = json.optJSONArray("assets");
         if (assets != null) {
@@ -94,8 +112,7 @@ final class AppUpdate {
                 }
             }
         }
-        if (r.version.isEmpty() || r.apkUrl == null) throw new Exception("The newest release has no APK yet.");
-        return r;
+        return r.apkUrl == null ? null : r;
     }
 
     /** True when version {@code a} ("1.0.10") is newer than {@code b} ("1.0.9"). */
