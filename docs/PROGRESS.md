@@ -52,5 +52,5 @@ Boot (Mesen 2.1.1), tile tap proven pixel-exact, tiles fed to the 3D engine, 3D 
 ## Known limits (for later)
 - Performance: on the Thor (first report, before the core pinning) the emulation took 11 to 14 ms per game frame, the 3D conversion about 5 ms, the scene about 7 ms. On a desktop: emulation about 4 ms, tile capture 4 to 5 ms, layer conversion about 1 ms per frame.
 - The Mode 7 floor's far rows are coarse; Super FX 3D (Star Fox) stays flat; Mario Kart's lap number missing in 3D.
-- About 41 of the app's own tests still fail (goldens, NES-era cases); listed in `docs/APP-PORT.md`. CI runs the SNES crates and the renderer, and is green. CI does not build `zax-app`; it is checked in the session (below).
+- About 39 of the app's own tests still fail (goldens, NES-era cases); listed in `docs/APP-PORT.md`. CI runs the SNES crates and the renderer, and is green. CI does not build `zax-app`; it is checked in the session (below).
 - **Building in the session:** the `dev-vendor` release's crates (`.cargo/config.toml` pointing at them, not committed), the stable toolchain (`RUSTUP_TOOLCHAIN=stable`), and for the app's tests `LIBRARY_PATH` at a folder with a `libSDL2.so` link to the system's `libSDL2-2.0.so.0`. The Android-only code (core pinning, crash catcher) is only compiled by the APK build.

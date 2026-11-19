@@ -379,8 +379,8 @@ fn the_options_of_a_game_hold_only_what_changes_and_play_with_it() {
 fn the_options_of_the_menu_go_back_to_the_menu() {
     let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
     play(&mut harness, &mut handheld);
-    // Options is the sixth row (no Rewind row on the handheld).
-    for _ in 0..5 {
+    // Options is the seventh row (no Rewind row on the handheld; "Report this moment" before it).
+    for _ in 0..6 {
         tap(&mut harness, &mut handheld, PadButton::Down);
     }
     tap(&mut harness, &mut handheld, PadButton::A);
