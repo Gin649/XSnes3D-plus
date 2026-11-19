@@ -741,6 +741,56 @@ impl<C: GameCatalog, V: GameView> EmulationHost<C, V> {
         self.two_dimensional_view
     }
 
+    /// XSnes3D+: R3 in a game (owner request). On the "3D by default" entry (no profile) it
+    /// goes Smart 3D, plain 3D, 2D and back to Smart 3D; on a game with a profile, 3D and 2D.
+    /// Says which view it is in the notification area.
+    pub fn cycle_view(&mut self) {
+        let default_three_dimensional = self
+            .current_game
+            .as_ref()
+            .is_some_and(|game| game.is_default_three_dimensional);
+        let smart = zax_engine3d::smart3d::enabled();
+        // A game on the "2D Mode" entry has no 3D to switch to.
+        if self.session.as_ref().is_some_and(GameSession::two_dimensional_mode) {
+            self.notifications.show_normal("2D Mode: no 3D for this entry");
+            return;
+        }
+        let message = if self.showing_two_dimensional() {
+            self.two_dimensional_view = false;
+            if default_three_dimensional {
+                zax_engine3d::smart3d::set_enabled(true);
+                "Smart 3D"
+            } else {
+                "3D"
+            }
+        } else if default_three_dimensional && smart {
+            zax_engine3d::smart3d::set_enabled(false);
+            "Plain 3D"
+        } else {
+            self.two_dimensional_view = true;
+            "2D"
+        };
+        self.notifications.show_normal(message);
+    }
+
+    /// XSnes3D+: the view a play report names: "2D", "Smart 3D", "Plain 3D" or "3D".
+    #[must_use]
+    pub fn view_name(&self) -> &'static str {
+        let default_three_dimensional = self
+            .current_game
+            .as_ref()
+            .is_some_and(|game| game.is_default_three_dimensional);
+        if self.showing_two_dimensional() {
+            "2D"
+        } else if !default_three_dimensional {
+            "3D"
+        } else if zax_engine3d::smart3d::enabled() {
+            "Smart 3D"
+        } else {
+            "Plain 3D"
+        }
+    }
+
     /// Whether the scene shows the flat picture: the toggle, or a game played flat.
     #[must_use]
     pub fn showing_two_dimensional(&self) -> bool {

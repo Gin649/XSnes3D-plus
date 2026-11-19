@@ -633,3 +633,43 @@ fn ro_3_the_advanced_options_of_a_game_are_a_hub_of_pages() {
     assert_eq!(own, harness.host.game_options(&rom));
 }
 
+#[test]
+fn r3_cycles_smart_3d_plain_3d_and_2d_and_l3_with_r3_opens_the_menu() {
+    // XSnes3D+ (owner request): on the "3D by default" entry, R3 (on letting go) goes Smart 3D,
+    // plain 3D, 2D and back. A game with no profile plays on that entry.
+    let (mut harness, mut handheld) = start(
+        &[zax_profiles::catalogue::DEFAULT_THREE_DIMENSIONAL_TITLE],
+        &["Game.sfc"],
+    );
+    tap(&mut harness, &mut handheld, PadButton::A);
+    press(&mut harness, &mut handheld, &[]);
+    assert_eq!(Some("g0"), harness.host.current_game_id());
+    assert_eq!(Screen::InGame, handheld.screen());
+    assert_eq!("Smart 3D", harness.host.view_name());
+
+    let mut views = Vec::new();
+    for _ in 0..3 {
+        tap(&mut harness, &mut handheld, PadButton::R3);
+        press(&mut harness, &mut handheld, &[]);
+        views.push(harness.host.view_name());
+    }
+    assert_eq!(vec!["Plain 3D", "2D", "Smart 3D"], views);
+
+    // L3 and R3 together: the menu, and the view stays.
+    press(&mut harness, &mut handheld, &[PadButton::L3, PadButton::R3]);
+    press(&mut harness, &mut handheld, &[]);
+    assert_eq!(Screen::Overlay, handheld.screen());
+    assert_eq!("Smart 3D", harness.host.view_name());
+}
+
+#[test]
+fn r3_in_a_profiled_or_2d_game_never_reaches_plain_3d() {
+    let (mut harness, mut handheld) = start(&[], &["Game.sfc"]);
+    tap(&mut harness, &mut handheld, PadButton::A);
+    press(&mut harness, &mut handheld, &[]);
+    assert_eq!(Some("2d"), harness.host.current_game_id());
+    // "2D Mode" has no 3D: R3 leaves it in 2D.
+    tap(&mut harness, &mut handheld, PadButton::R3);
+    press(&mut harness, &mut handheld, &[]);
+    assert_eq!("2D", harness.host.view_name());
+}

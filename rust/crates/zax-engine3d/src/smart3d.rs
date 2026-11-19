@@ -29,7 +29,7 @@
 //!
 //! The numbers are first values to be tuned on real games.
 
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 
 use crate::engine::build_geometry;
 use crate::frame::{ConversionFrame, FrameTile, ShapeId};
@@ -41,11 +41,23 @@ use crate::settings::ZLayer;
 use crate::segmenter::SegmentContext;
 
 static ENABLED: AtomicBool = AtomicBool::new(false);
+/// XSnes3D+: counts the switches of [`set_enabled`], so that a running game's engines know to
+/// build their shapes again (the shapes are kept once built).
+static SWITCHES: AtomicU32 = AtomicU32::new(0);
 
 /// Turns Smart 3D on for the game about to start (the "3D by default" entry) or off (2D Mode or a
-/// profile).
+/// profile). XSnes3D+: also during a game (R3 cycles Smart 3D, plain 3D and 2D).
 pub fn set_enabled(on: bool) {
-    ENABLED.store(on, Ordering::Relaxed);
+    if ENABLED.swap(on, Ordering::Relaxed) != on {
+        SWITCHES.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+/// XSnes3D+: how many times Smart 3D was switched on or off; a change since an engine's shapes
+/// were built means they should be built again.
+#[must_use]
+pub fn switches() -> u32 {
+    SWITCHES.load(Ordering::Relaxed)
 }
 
 /// True while the game plays with Smart 3D.

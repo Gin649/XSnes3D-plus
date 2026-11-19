@@ -194,11 +194,10 @@ pub fn report_moment(host: &mut crate::application::AppHost) -> Result<String, S
         fs::write(part.join(file), bytes).map_err(|error| format!("{file}: {error}"))
     };
 
-    let two_dimensional = host.showing_two_dimensional();
     let mut info = format!(
         "XSnes3D+ {VERSION} moment\ngame: {title}\nid: {id}\nrom: {rom}\ntime (UTC): {stamp}\n\
          view: {}\n",
-        if two_dimensional { "2D" } else { "3D" }
+        host.view_name()
     );
     let session = host.session().ok_or("no game is running")?;
     let core = session.core();

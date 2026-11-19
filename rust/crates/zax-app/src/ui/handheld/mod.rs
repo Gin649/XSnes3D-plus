@@ -485,31 +485,28 @@ impl HandheldUi {
         host.achievements.study_rom(&path);
     }
 
-    /// Y in game (owner request): a short press switches between 2D and 3D; a hold shows the game
-    /// in 2D seen head on, its picture filling the height of the view, as on a television. The
-    /// camera is left alone: back in 3D, it has the angle and the zoom it had.
-    fn update_flat_view(&mut self, pad: &PadState, seconds: f32, host: &mut AppHost) {
+    /// R3 in game (owner request): cycles Smart 3D, plain 3D and 2D (see `cycle_view`). The 2D
+    /// view is seen head on (see
+    /// `follow_head_on`); the camera is left alone, so back in 3D it has the angle and the zoom
+    /// it had.
+    fn update_flat_view(&mut self, pad: &PadState, _seconds: f32, host: &mut AppHost) {
         self.follow_head_on(host);
-        // XSnes3D+: Y is a SNES button in a game, so it never switches the view; the 2D view is
-        // in the menu. The code is kept for a free button later.
-        if self.screen != Screen::InGame || FACE_BUTTONS_PLAY {
+        // XSnes3D+: R3 (the right stick pressed in) changes the view, on letting go.
+        // L3 and R3 together open the menu instead: a press of R3 during which L3 was held at
+        // any moment switches nothing.
+        if self.screen != Screen::InGame {
             self.flat_view = None;
             return;
         }
-        if pad.is_held(PadButton::Y) {
-            let (held, acted) = self.flat_view.get_or_insert((0.0, false));
-            *held += seconds;
-            if *held >= CAMERA_KEEP_SECONDS && !*acted {
-                *acted = true;
-                if !host.showing_two_dimensional() {
-                    host.enqueue(Command::ToggleTwoDimensional, CommandArgs::default());
+        if pad.is_held(PadButton::R3) {
+            let (_, with_l3) = self.flat_view.get_or_insert((0.0, false));
+            *with_l3 |= pad.is_held(PadButton::L3);
+        } else if let Some((_, with_l3)) = self.flat_view.take() {
+            if !with_l3 {
+                host.cycle_view();
+                if host.showing_two_dimensional() {
+                    self.head_on = HeadOn::Waiting;
                 }
-                self.head_on = HeadOn::Waiting;
-                self.follow_head_on(host);
-            }
-        } else if let Some((_, acted)) = self.flat_view.take() {
-            if !acted {
-                host.enqueue(Command::ToggleTwoDimensional, CommandArgs::default());
             }
         }
     }

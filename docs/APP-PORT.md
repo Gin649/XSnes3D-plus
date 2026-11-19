@@ -31,7 +31,10 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
 - Controls: X, Y, L and R are bound by default (keyboard S, A, Q, W; pads in SNES places, L and
   R on the shoulders). On Android, X and Y are no longer turbo A and B, and L1/R1 no longer
   quick load and save (those are in the menu). In a game the handheld interface leaves X and Y
-  alone (the NES app used them for the default view and the 2D view).
+  alone (the NES app used them for the default view and the 2D view). R3 (right stick pressed
+  in) cycles the view in a game: Smart 3D, plain 3D (Smart 3D off, engines start afresh) and
+  2D on the "3D by default" entry; 3D and 2D on a game with a profile; nothing on "2D Mode". A
+  note names the view. L3 and R3 together still open the menu.
 - Lua: Mesen's own copy of Lua is not built; Mesen links the Lua of `mlua-sys`, the one the
   app's scripts use, because two copies clash when the app is linked. Mesen's watchdog hook is a
   stub in the shim (Mesen's script engine never runs).
@@ -60,7 +63,7 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
   (the preview strips the app's tail from the state).
 
 ## Still to do
-- App tests: 689 pass, 39 fail (run with `--test-threads=1`; on this machine link SDL2 through
+- App tests: 691 pass, 39 fail (run with `--test-threads=1`; on this machine link SDL2 through
   `LIBRARY_PATH`). The failures are goldens and counts that the SNES buttons and the removed
   NES pages changed, tests that read RAM through `ReadMem` (0 for now), battery saves (Mesen
   keeps its own), and a few the NES app's own copy already failed (rollback capacity). Still

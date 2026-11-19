@@ -189,6 +189,11 @@ pub struct GameSession {
     engine: ConversionEngine,
     /// The engines of the other layers ([`zax_snes::layers`]).
     layers: LayerEngines,
+    /// XSnes3D+: whether the game plays on the "3D by default" entry (no profile), where R3
+    /// switches Smart 3D on and off.
+    default_three_dimensional: bool,
+    /// XSnes3D+: [`zax_engine3d::smart3d::switches`] when the engines' shapes were built.
+    smart_switches: u32,
     /// The layers of the frame converted last, which the draw list puts together.
     converted: Option<EngineInput>,
     /// The draw list of every layer, built from the engines' own.
@@ -396,6 +401,8 @@ impl GameSession {
             core: Box::new(core),
             engine,
             layers: LayerEngines::new(),
+            default_three_dimensional: two_dimensional_mode == Some(false),
+            smart_switches: zax_engine3d::smart3d::switches(),
             converted: None,
             merged: FrameDrawList::default(),
             layer_distance: zax_render::geometry::reset_distance(scene.camera.fov()),
@@ -1268,6 +1275,27 @@ impl GameSession {
         self.catching_up = catching_up;
     }
 
+    /// XSnes3D+: after Smart 3D was switched on or off during the game (R3), the engines start
+    /// afresh, so every shape is built again the new way. Only on the "3D by default" entry,
+    /// whose engine has no profile (and no scripts) to lose.
+    fn follow_smart_switch(&mut self) {
+        let switches = zax_engine3d::smart3d::switches();
+        if switches == self.smart_switches {
+            return;
+        }
+        self.smart_switches = switches;
+        if !self.default_three_dimensional {
+            return;
+        }
+        self.layers = LayerEngines::new();
+        // The settings the session gave the engine are kept (`false`): only its shapes go.
+        self.engine.unload();
+        if let Err(error) = self.engine.load_profile(&GameProfile::create_empty(), false) {
+            crate::app_log::error(&format!("XSnes3D+: the engine did not start afresh: {error}"));
+        }
+        self.engine.settings_mut().clipping = layers::SNES_CLIPPING;
+    }
+
     /// The conversion, frame hooks and camera tracking of the captured frame.
     fn convert_batch_lent(
         &mut self,
@@ -1294,6 +1322,7 @@ impl GameSession {
             records: Vec::new(),
         };
         let batch = captured.batch(first.map_or(&empty, |index| &captured.layers[index]));
+        self.follow_smart_switch();
         let started = clock.start();
         self.engine.settings_mut().flat_layer = false;
         self.engine.settings_mut().clipping = layers::SNES_CLIPPING;

@@ -378,6 +378,9 @@ impl SnesCore {
             }
             None => line.push_str(", no tiles captured"),
         }
+        // XSnes3D+: R3 switches Smart 3D during a game; the report shows which was on.
+        let smart = if zax_engine3d::smart3d::enabled() { "on" } else { "off" };
+        let _ = write!(line, ", Smart 3D {smart}");
         crate::app_log::file_line(&line);
     }
 
