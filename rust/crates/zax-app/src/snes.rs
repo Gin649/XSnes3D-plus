@@ -322,18 +322,40 @@ impl SnesCore {
         snes.take_audio(&mut self.sound);
         self.audio.push(&self.sound);
         self.picture = snes.frame();
+        let picture = self.picture.as_ref();
+        let mut sky = None;
         self.input = snes.tile_capture().map(|capture| {
-            let mut input = capture.engine_input();
-            if let Some(frame) = &self.picture {
-                if let Some([r, g, b]) = capture.sky_color(frame) {
-                    self.sky = Rgb24::new(r, g, b);
-                }
-                let look = capture.look(frame);
+            // The tiles and the finished picture's look are worked out side by side, on two
+            // threads: each took about a quarter of a frame on the Thor.
+            let (mut input, look) = std::thread::scope(|scope| {
+                let look = picture.and_then(|frame| {
+                    std::thread::Builder::new()
+                        .name("xsnes-look".to_owned())
+                        .spawn_scoped(scope, || {
+                            crate::cpu_affinity::pin_quietly(crate::cpu_affinity::Role::Main);
+                            capture.look(frame)
+                        })
+                        .ok()
+                });
+                let input = capture.engine_input();
+                let look = match look {
+                    Some(handle) => handle.join().ok(),
+                    None => None,
+                };
+                // Without a second thread (the system refused one), here.
+                let look = look.or_else(|| picture.map(|frame| capture.look(frame)));
+                (input, look)
+            });
+            if let (Some(frame), Some(look)) = (picture, look) {
+                sky = capture.sky_color(frame);
                 capture.apply_finished_colors(&mut input, &look);
                 capture.add_backdrop(&mut input, frame, &look);
             }
             input
         });
+        if let Some([r, g, b]) = sky {
+            self.sky = Rgb24::new(r, g, b);
+        }
         if self.frames % REPORT_EVERY == 0 {
             self.log_what_is_shown();
         }

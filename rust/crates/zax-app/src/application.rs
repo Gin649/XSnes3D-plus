@@ -100,7 +100,8 @@ pub fn pacing_request(options: &AppOptions, model: &SettingsModel) -> VideoPacin
         }
     } else {
         VideoPacingRequest {
-            vsync: model.vsync(),
+            // XSnes3D+: every other refresh when the frame rate asks for half the screen's.
+            vsync: model.effective_vsync(),
             target_frame_rate: model.frame_rate(),
         }
     }

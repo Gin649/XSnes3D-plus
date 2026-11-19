@@ -9,6 +9,8 @@ Last updated 2026-11-18 (night). Kept in step with the claude.ai project doc of 
 - **v0.1.2:** play reports. **v0.1.3:** "Report this moment". Both work on the Thor (first reports 2026-11-18).
 - **First reports (v0.1.3, Yogi Bear):** the SNES emulation alone took 11 to 14 ms per game frame on the Thor; once a frame came late, the catch-up ran a second frame on the main thread and the game stayed stuck near 20 fps (sound running dry hundreds of times). The left 8 columns showed half-drawn scenery in 3D (the game blacks them out with the colour window). The app then crashed with no Rust panic (a native crash or the system closing it). Reports said "0.1.0" and named the game "Smart 3D (no profile)".
 - **Fixes after the first reports (next build, untested on the device):** late ticks in a row no longer catch up on the main thread (one late tick still may); the emulation thread is kept on the chip's fastest core and the main thread on the other fast ones; Android draws 60 frames a second by default ("Render Rate" 60fps swaps every other refresh on the 120 Hz screen; 120fps can still be picked); pixels the colour window turns black are hidden in 3D (patch 0004, checked on the Yogi Bear moment with `snes-preview`); a native crash writes a `== NATIVE CRASH` line with the signal and the crash place (offsets into the app's library) to the play report; reports carry the real version and the ROM's name for games without a profile.
+- **v0.1.4 on the Thor (Yogi Bear, 2026-11-19):** cores pinned as planned (emulation on core 7, 3187 MHz), but still 28 to 40 fps in the level: the emulation thread took about 13 ms a frame, half of it building the 3D layers from the tiles (on the desktop, Yogi Bear's moment: Mesen 6.6 ms, tiles 7.7 ms). The 60fps default did not apply: the app's own pacing request still read the plain vsync setting. It crashed again with SIGABRT (the program stopping itself), in the system's library, with no Rust panic.
+- **Fixes after v0.1.4 (untested on the device):** the pacing request uses the 60fps rule; the finished picture's look is worked out on a second thread beside the tiles, and the colour values of each tile are read straight from its bit planes (tiles about 40% faster on the desktop, same pictures); Mesen's own video decoder and renderer threads are stopped (patch 0005: the host reads the PPU's picture, and each frame waited for the decoder); the crash line lists the chain of calls (return addresses from the frame records); release builds keep their function names (`strip = "debuginfo"`) so those addresses can be looked up in the released APK's `libmain.so` with `nm`.
 - **Open from the first reports:** Aero the Acro-Bat's copyright screen shows wrong letters in 3D (its ROM is not in the roms repo yet); two launches right after the crash refused a save state ("the state is too short").
 
 ## How fixes work from now on (the loop)
@@ -33,7 +35,7 @@ Boot (Mesen 2.1.1), tile tap proven pixel-exact, tiles fed to the 3D engine, 3D 
 ## Decisions (3D)
 - **One 3D engine per SNES background layer** (plus background 3's front tiles and the sky). Sprites go with layer 1. Layers ordered by the SNES priority table, 16 units apart, each grown so the front view matches the console picture.
 - **Engine colours widened:** tiles up to 8 bit planes, a 256-entry RGB frame palette.
-- **Mesen is changed only through patches** in `rust/crates/zax-snes/patches/` (0001 frame stepping; 0002 tile tap; 0003 Mode 7 tap; 0004 pixels the colour window turns black).
+- **Mesen is changed only through patches** in `rust/crates/zax-snes/patches/` (0001 frame stepping; 0002 tile tap; 0003 Mode 7 tap; 0004 pixels the colour window turns black; 0005 no video decoder thread).
 - **Mode 7:** lines cut into 8x8 squares; a road seen at an angle is laid as a floor (up to 3 times the nearest line's distance), a map seen from above stays flat.
 - **Windows, colours mid-frame, colour maths, sky gradients:** see the code docs in `zax-snes` (pixels a window hides are dropped; mid-frame palette changes remapped; each palette entry takes its finished colour; per-line sky wall).
 - **Clip to black:** pixels the colour window turns black (and colour maths leaves black) are hidden on every layer and sprite; games hide their scroll seam this way.
@@ -43,6 +45,8 @@ Boot (Mesen 2.1.1), tile tap proven pixel-exact, tiles fed to the 3D engine, 3D 
 ## Decisions (performance, Android)
 - **Catch-up with the emulation thread:** a late tick may run a second frame once; while ticks keep coming late, only one frame runs per tick and the rest is dropped.
 - **Cores:** the emulation thread on the fastest core, the main thread on the other fast cores (`zax-app/src/cpu_affinity.rs`, read from sysfs; nothing changes on a chip whose cores are all alike). The start-up lines of a report say which.
+- **Tiles beside the look:** `SnesCore::run_frame` builds the engine input and the finished picture's look on two threads (the second pinned to the main thread's cores).
+- **Next if still slow:** take the tile work off the emulation thread altogether (frame N's tiles while frame N+1 runs), then the look's per-pixel work (`pixel_source`, the top cost in a profile).
 - **Drawing rate:** Android defaults to 60fps; with vsync on, a frame rate at half the screen's refresh or less swaps every other refresh.
 
 ## Where things are

@@ -74,6 +74,26 @@ pub enum Role {
     Main,
 }
 
+/// The plan for this machine, read once.
+fn machine_plan() -> Option<&'static (Vec<usize>, Vec<usize>)> {
+    static PLAN: std::sync::OnceLock<Option<(Vec<usize>, Vec<usize>)>> = std::sync::OnceLock::new();
+    PLAN.get_or_init(|| plan(&cores())).as_ref()
+}
+
+/// [`pin`] without the log line, for threads started every frame. Does nothing outside Android.
+pub fn pin_quietly(role: Role) {
+    if !cfg!(target_os = "android") {
+        return;
+    }
+    if let Some((emulation, main)) = machine_plan() {
+        let chosen = match role {
+            Role::Emulation => emulation,
+            Role::Main => main,
+        };
+        let _ = zax_platform::thread_cores::pin_calling_thread(chosen);
+    }
+}
+
 /// Keeps the calling thread on the cores [`plan`] gives its `role`, and logs what was done.
 /// Does nothing outside Android.
 pub fn pin(role: Role) {

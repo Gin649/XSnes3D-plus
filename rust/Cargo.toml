@@ -32,7 +32,9 @@ dbg_macro = "deny"
 [profile.release]
 lto = "fat"
 codegen-units = 1
-strip = true
+# XSnes3D+: the function names stay in the library (only the debug info goes), so that the
+# places a crash report names (crash_catcher.rs) can be looked up in the released build.
+strip = "debuginfo"
 
 # librashader-runtime-wgpu with the naga module handed to wgpu directly (Mega Bezel), see
 # vendor/librashader-runtime-wgpu/README.md. Copied from Xnes3D+ with its app.

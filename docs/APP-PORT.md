@@ -60,7 +60,7 @@ The owner's decision (2026-11-18): copy the Xnes3D+ app and edit out what the SN
   (the preview strips the app's tail from the state).
 
 ## Still to do
-- App tests: 690 pass, 39 fail (run with `--test-threads=1`; on this machine link SDL2 through
+- App tests: 689 pass, 39 fail (run with `--test-threads=1`; on this machine link SDL2 through
   `LIBRARY_PATH`). The failures are goldens and counts that the SNES buttons and the removed
   NES pages changed, tests that read RAM through `ReadMem` (0 for now), battery saves (Mesen
   keeps its own), and a few the NES app's own copy already failed (rollback capacity). Still

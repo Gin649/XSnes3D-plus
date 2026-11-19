@@ -256,6 +256,10 @@ pub struct TileCapture {
     pub(crate) mode7: Vec<RawMode7Line>,
     /// For each scanline, the position in `mode7` of its background 1 and 2 lines.
     mode7_index: Vec<[Option<u32>; 2]>,
+    /// For each scanline, the position in `chunks` of its last chunk (see [`Self::last_chunk`]).
+    last_chunk_index: Vec<Option<u32>>,
+    /// For each scanline, the positions in `sprites` of the slices fetched on it.
+    sprites_by_fetch: Vec<Vec<u32>>,
     cgram: Vec<u16>,
 }
 
@@ -276,9 +280,12 @@ impl TileCapture {
                 sprites: copy(view.sprites, view.sprite_count as usize),
                 mode7: copy(view.mode7, view.mode7_count as usize),
                 mode7_index: Vec::new(),
+                last_chunk_index: Vec::new(),
+                sprites_by_fetch: Vec::new(),
                 cgram: copy(view.cgram, view.cgram_snapshots as usize * 256),
             };
             capture.index_mode7();
+            capture.index_lines();
             capture
         }
     }
@@ -294,6 +301,35 @@ impl TileCapture {
         self.mode7_index = index;
     }
 
+    /// Fills `last_chunk_index` and `sprites_by_fetch`, so that what belongs to one scanline
+    /// is found without going through every chunk or sprite slice of the frame (that took
+    /// several milliseconds a frame on the Thor).
+    fn index_lines(&mut self) {
+        let mut last = vec![None; 264];
+        for (position, chunk) in self.chunks.iter().enumerate() {
+            if let Some(slot) = last.get_mut(usize::from(chunk.scanline)) {
+                *slot = Some(position as u32);
+            }
+        }
+        self.last_chunk_index = last;
+        let mut sprites = vec![Vec::new(); 264];
+        for (position, sprite) in self.sprites.iter().enumerate() {
+            if let Some(slot) = sprites.get_mut(usize::from(sprite.fetch_scanline)) {
+                slot.push(position as u32);
+            }
+        }
+        self.sprites_by_fetch = sprites;
+    }
+
+    /// The sprite slices fetched on `scanline` (drawn on the line after), in fetch order.
+    pub(crate) fn sprites_fetched_on(&self, scanline: u16) -> impl Iterator<Item = &RawSprite> {
+        self.sprites_by_fetch
+            .get(usize::from(scanline))
+            .into_iter()
+            .flatten()
+            .filter_map(|&position| self.sprites.get(position as usize))
+    }
+
     /// A capture holding only Mode 7 lines, for tests.
     #[cfg(test)]
     pub(crate) fn with_mode7(mode7: Vec<RawMode7Line>) -> Self {
@@ -303,9 +339,12 @@ impl TileCapture {
             sprites: Vec::new(),
             mode7,
             mode7_index: Vec::new(),
+            last_chunk_index: Vec::new(),
+            sprites_by_fetch: Vec::new(),
             cgram: Vec::new(),
         };
         capture.index_mode7();
+        capture.index_lines();
         capture
     }
 
@@ -367,8 +406,12 @@ impl TileCapture {
     }
 
     /// The last chunk drawn on `scanline`: the settings a line's tiles are filed under.
-    fn last_chunk(&self, scanline: u16) -> Option<&RawChunk> {
-        self.chunks.iter().rev().find(|c| c.scanline == scanline)
+    pub(crate) fn last_chunk(&self, scanline: u16) -> Option<&RawChunk> {
+        match self.last_chunk_index.get(usize::from(scanline)) {
+            Some(position) => position.and_then(|position| self.chunks.get(position as usize)),
+            // A scanline past the index (none is drawn there): the slow way.
+            None => self.chunks.iter().rev().find(|c| c.scanline == scanline),
+        }
     }
 
     /// Every tile row the PPU drew: background tiles of the layers on the main screen, then
@@ -491,11 +534,10 @@ impl TileCapture {
     /// Later slices cover earlier ones, as in Mesen's `FetchSpriteTile`.
     fn sprite_line(&self, scanline: u16) -> Vec<Option<(u8, u8, u8)>> {
         let mut pixels: Vec<Option<(u8, u8, u8)>> = vec![None; 256];
-        for sprite in self
-            .sprites
-            .iter()
-            .filter(|s| s.fetch_scanline + 1 == scanline)
-        {
+        let Some(fetched_on) = scanline.checked_sub(1) else {
+            return pixels;
+        };
+        for sprite in self.sprites_fetched_on(fetched_on) {
             for offset in 0..8i16 {
                 let x = sprite.x + offset;
                 if !(0..=255).contains(&x) {

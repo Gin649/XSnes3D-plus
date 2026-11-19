@@ -161,6 +161,34 @@ impl Builder {
     }
 }
 
+/// The colour values (1 up) the pixels of `record` show; value 0 (clear) is never set. Reads
+/// the bit planes directly and visits only the pixels that are not clear: it runs for every
+/// tile of every frame.
+fn used_values(record: &TileRecord) -> [bool; 256] {
+    let planes = [
+        record.plane0,
+        record.plane1,
+        record.upper[0],
+        record.upper[1],
+        record.upper[2],
+        record.upper[3],
+        record.upper[4],
+        record.upper[5],
+    ];
+    let mut values = [false; 256];
+    let mut drawn = planes.iter().fold(0u64, |all, plane| all | plane);
+    while drawn != 0 {
+        let bit = drawn.trailing_zeros();
+        drawn &= drawn - 1;
+        let mut value = 0usize;
+        for (index, plane) in planes.iter().enumerate() {
+            value |= (((plane >> bit) & 1) as usize) << index;
+        }
+        values[value] = true;
+    }
+    values
+}
+
 /// How far apart two colours are (the sum of the squared differences).
 fn distance(a: [u8; 3], b: [u8; 3]) -> u32 {
     a.iter()
@@ -334,17 +362,7 @@ impl TileCapture {
             Rgb24::new(r, g, b)
         };
         // The colour values (1 up) a record shows.
-        let values_of = |record: &TileRecord| {
-            let mut values = [false; 256];
-            for row in 0..8 {
-                for column in 0..8 {
-                    if let Some(value) = record.source_pixel(column, row) {
-                        values[usize::from(value)] = value != 0;
-                    }
-                }
-            }
-            values
-        };
+        let values_of = used_values;
         let shows = |record: &TileRecord, snapshot: u32, colors: &[Rgb24; 256], start: usize| {
             let Some(palette) = self.palette(snapshot) else {
                 return true;
@@ -482,27 +500,31 @@ impl TileCapture {
         let mut taken = [false; 256];
         taken[0] = true;
         for record in input.layers.iter().flat_map(|layer| &layer.records) {
-            for row in 0..8 {
-                for column in 0..8 {
-                    if let Some(value) = record.source_pixel(column, row) {
-                        if value != 0 {
-                            taken[(usize::from(record.palette) + usize::from(value)).min(255)] =
-                                true;
-                        }
-                    }
+            for (value, &used) in used_values(record).iter().enumerate() {
+                if used {
+                    taken[(usize::from(record.palette) + value).min(255)] = true;
                 }
             }
         }
         let mut free = (0..256).filter(|&entry| !taken[entry]);
         let mut placed: Vec<([u8; 3], usize)> = Vec::new();
+        // The colour asked last, and its entry: neighbouring pixels mostly share one.
+        let mut last: Option<([u8; 3], usize)> = None;
         let mut entry_of = |colour: [u8; 3], colors: &mut [Rgb24; 256]| {
+            if let Some((c, entry)) = last {
+                if c == colour {
+                    return entry;
+                }
+            }
             if let Some(&(_, entry)) = placed.iter().find(|(c, _)| *c == colour) {
+                last = Some((colour, entry));
                 return entry;
             }
             if let Some(entry) = free.next() {
                 let [r, g, b] = colour;
                 colors[entry] = Rgb24::new(r, g, b);
                 placed.push((colour, entry));
+                last = Some((colour, entry));
                 return entry;
             }
             // No free entry left: the closest colour already placed.
@@ -711,11 +733,7 @@ impl TileCapture {
                     flip_y,
                 );
                 let order = sprites.len();
-                let chunk = self
-                    .chunks
-                    .iter()
-                    .rev()
-                    .find(|c| c.scanline == sprite.fetch_scanline + 1);
+                let chunk = self.last_chunk(sprite.fetch_scanline + 1);
                 let mode = chunk.map_or(1, |c| c.bg_mode);
                 let builder = sprites.entry(key).or_insert_with(|| Builder {
                     flip_x: sprite.horizontal_mirror != 0,
@@ -745,7 +763,53 @@ impl TileCapture {
 
 #[cfg(test)]
 mod tests {
-    use super::{behind_layer_1, shown_pixels, FLOOR_MAX_DISTANCE};
+    use super::{behind_layer_1, shown_pixels, used_values, FLOOR_MAX_DISTANCE};
+    use zax_engine3d::input::TileRecord;
+
+    #[test]
+    fn used_values_match_the_pixels() {
+        // A spread of plane patterns: every pixel's value read one by one must give the same set.
+        let mut seed = 0x9E37_79B9_7F4A_7C15u64;
+        let mut next = || {
+            seed ^= seed << 13;
+            seed ^= seed >> 7;
+            seed ^= seed << 17;
+            seed
+        };
+        for round in 0..200 {
+            let sparse = round % 3 == 0;
+            let mut plane = || {
+                if sparse {
+                    next() & next() & next()
+                } else {
+                    next()
+                }
+            };
+            let record = TileRecord::new(
+                plane(),
+                plane(),
+                0,
+                0,
+                0,
+                round % 2 == 0,
+                false,
+                false,
+                0,
+                true,
+            )
+            .with_upper([plane(), plane(), 0, 0, plane(), 0]);
+            let mut expected = [false; 256];
+            for row in 0..8 {
+                for column in 0..8 {
+                    let value = record.source_pixel(column, row).unwrap_or(0);
+                    if value != 0 {
+                        expected[usize::from(value)] = true;
+                    }
+                }
+            }
+            assert_eq!(expected, used_values(&record), "round {round}");
+        }
+    }
     use crate::tap::{RawMode7Line, TileCapture};
 
     fn mode7_line(scanline: u16, a: i16) -> RawMode7Line {

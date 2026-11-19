@@ -70,7 +70,7 @@ mod android {
 
     /// Small text buffer on the stack.
     struct Line {
-        bytes: [u8; 256],
+        bytes: [u8; 1024],
         len: usize,
     }
 
@@ -141,7 +141,7 @@ mod android {
         let fd = REPORT_FD.load(Ordering::SeqCst);
         if fd >= 0 {
             let mut line = Line {
-                bytes: [0; 256],
+                bytes: [0; 1024],
                 len: 0,
             };
             line.text("== NATIVE CRASH: signal ");
@@ -166,6 +166,32 @@ mod android {
                     line.address(pc);
                     line.text(", lr ");
                     line.address(lr);
+                    // The calls that led there, from the chain of frame records (x29 points
+                    // at the caller's x29 and the return address). Only followed while it
+                    // stays on this thread's stack, upwards, so a broken chain ends the list.
+                    let sp = base.add(432).cast::<u64>().read_unaligned();
+                    let mut frame = base.add(416).cast::<u64>().read_unaligned();
+                    line.text(", calls");
+                    let mut count = 0;
+                    while count < 16
+                        && frame >= sp
+                        && frame - sp < 0x10_0000
+                        && frame % 8 == 0
+                    {
+                        let record = frame as *const u64;
+                        let next = record.read();
+                        let back = record.add(1).read();
+                        if back == 0 {
+                            break;
+                        }
+                        line.text(" ");
+                        line.address(back);
+                        count += 1;
+                        if next <= frame {
+                            break;
+                        }
+                        frame = next;
+                    }
                 }
             }
             line.text("\n");

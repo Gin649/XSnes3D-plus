@@ -1,0 +1,57 @@
+diff --git a/Core/Shared/Emulator.cpp b/Core/Shared/Emulator.cpp
+index 9a7a988..ce25924 100644
+--- a/Core/Shared/Emulator.cpp
++++ b/Core/Shared/Emulator.cpp
+@@ -212,6 +212,13 @@ void Emulator::HostBegin()
+ 	_stats.reset(new DebugStats());
+ 	_frameLimiter.reset(new FrameLimiter(0));
+ 	_lastFrameTimer.Reset();
++	// Mesen's video decoder and renderer threads turn each picture into the window's image,
++	// which the host never shows: the host reads the PPU's picture. Each frame waited for the
++	// decoder to finish the last one, which on a phone's slow cores made the emulation two to
++	// three times slower. They are stopped, and the decoder is skipped from now on.
++	_hostDriven = true;
++	_videoDecoder->StopThread();
++	_videoRenderer->StopThread();
+ }
+ 
+ // XSnes3D+: one frame, the same call Run() makes in its loop when run-ahead is off.
+diff --git a/Core/Shared/Emulator.h b/Core/Shared/Emulator.h
+index 320acea..62b41fc 100644
+--- a/Core/Shared/Emulator.h
++++ b/Core/Shared/Emulator.h
+@@ -145,12 +145,17 @@ public:
+ 	void Release();
+ 
+ 	void Run();
++	// XSnes3D+: see IsHostDriven.
++	bool _hostDriven = false;
+ 
+ 	// XSnes3D+: lets a host step the emulation itself, one frame per call, on the calling thread,
+ 	// with no emulation thread and no frame limiter wait. Call HostBegin once after
+ 	// LoadRom(file, patch, false), then HostRunFrame for each frame.
+ 	void HostBegin();
+ 	void HostRunFrame();
++	// XSnes3D+: true once HostBegin ran. The host reads the PPU's picture itself, so Mesen's own
++	// video decoder is skipped then (see VideoDecoder::UpdateFrame).
++	bool IsHostDriven() { return _hostDriven; }
+ 
+ 	void Stop(bool sendNotification, bool preventRecentGameSave = false, bool saveBattery = true);
+ 
+diff --git a/Core/Shared/Video/VideoDecoder.cpp b/Core/Shared/Video/VideoDecoder.cpp
+index 8263795..1cbefaf 100644
+--- a/Core/Shared/Video/VideoDecoder.cpp
++++ b/Core/Shared/Video/VideoDecoder.cpp
+@@ -184,6 +184,12 @@ void VideoDecoder::UpdateFrame(RenderedFrame frame, bool sync, bool forRewind)
+ 		return;
+ 	}
+ 
++	// XSnes3D+: the host reads the PPU's picture itself; nothing to decode (see HostBegin).
++	if(_emu->IsHostDriven()) {
++		_frameCount++;
++		return;
++	}
++
+ 	if(_frameChanged) {
+ 		//Last frame isn't done decoding yet - sometimes Signal() introduces a 25-30ms delay
+ 		while(_frameChanged) {
