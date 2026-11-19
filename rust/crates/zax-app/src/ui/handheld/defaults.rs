@@ -108,6 +108,10 @@ pub fn apply_android(model: &mut SettingsModel) {
         // screen this swaps every other refresh and halves the drawing work; 120fps can still
         // be picked in the options.
         (SettingId::VideoFrameRate, SettingValue::Int(60)),
+        // XSnes3D+: a late frame's 3D conversion runs on its own thread beside the drawing, as
+        // on the handhelds. The Thor's reports showed the conversion (about 12 ms) and the
+        // drawing (about 12 ms) one after the other on the main thread, near 28 fps.
+        (SettingId::EmuPipeline, SettingValue::Enum(PIPELINE_AUTO)),
     ] {
         model.set_environment_default(id, value);
     }
@@ -211,6 +215,14 @@ mod tests {
         assert!(SettingsModel::new()
             .get(SettingId::RenderBackdropLighting)
             .as_bool());
+    }
+
+    #[test]
+    fn android_pipelines_late_frames_and_asks_for_60fps() {
+        let mut model = SettingsModel::new();
+        apply_android(&mut model);
+        assert_eq!(PIPELINE_AUTO, model.get(SettingId::EmuPipeline).as_int());
+        assert_eq!(60, model.get(SettingId::VideoFrameRate).as_int());
     }
 
     #[test]

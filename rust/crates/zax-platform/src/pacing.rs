@@ -67,7 +67,8 @@ impl fmt::Display for DisplayPacingState {
 /// Puts `vsync` and `target_frame_rate` in force on `surface`.
 ///
 /// `vsync` is the `video.vsync` value, anything outside 0…2 is clamped; `target_frame_rate` is
-/// the cap to use when vsync is off, 0 (or less) for uncapped.
+/// the cap to use when vsync is off (XSnes3D+: or when one refresh out of two is refused), 0
+/// (or less) for uncapped.
 pub fn apply(
     surface: &mut dyn DisplaySurface,
     vsync: i32,
@@ -94,12 +95,20 @@ pub fn apply(
     // Q-066: without a swap-interval call there is no way to ask for one refresh out of two,
     // and the documented fallback is every refresh.
     let fell_back = requested == MAXIMUM_VSYNC && !surface.try_set_swap_interval(MAXIMUM_VSYNC);
-    surface.set_frame_cap(0);
+    // XSnes3D+: Android's driver refuses one refresh out of two, so the frame rate asked (60fps
+    // on a 120 Hz screen) is kept by the frame cap instead, on top of every refresh: the loop
+    // waits out every other refresh.
+    let cap = if fell_back {
+        u32::try_from(target_frame_rate).unwrap_or(0)
+    } else {
+        0
+    };
+    surface.set_frame_cap(cap);
 
     DisplayPacingState {
         vsync: requested,
         swap_interval: if fell_back { 1 } else { requested },
-        frame_cap: 0,
+        frame_cap: cap,
         fell_back_to_every_refresh: fell_back,
     }
 }
@@ -206,7 +215,9 @@ mod tests {
         assert!(state.fell_back_to_every_refresh);
         assert_eq!(state.swap_interval, 1);
         assert_eq!(surface.swap_interval, 1);
-        assert_eq!(surface.frame_cap, 0);
+        // XSnes3D+: the frame rate asked is kept by the frame cap.
+        assert_eq!(surface.frame_cap, 90);
+        assert_eq!(state.frame_cap, 90);
         assert!(state.to_string().contains("Q-066"));
     }
 

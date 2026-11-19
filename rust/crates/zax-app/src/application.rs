@@ -1527,9 +1527,9 @@ impl Running {
                 .display_mode()
                 .map_or(60, |mode| mode.refresh_rate)
                 .max(1);
-            return Some(Duration::from_secs_f64(
-                f64::from(interval) / f64::from(refresh),
-            ));
+            let swap = Duration::from_secs_f64(f64::from(interval) / f64::from(refresh));
+            // XSnes3D+: a frame cap on top of the vsync (every other refresh refused) is longer.
+            return Some(self.window.frame_cap().map_or(swap, |cap| cap.max(swap)));
         }
         self.window.frame_cap()
     }
@@ -1545,7 +1545,12 @@ impl Running {
                 .display_mode()
                 .map_or(60, |mode| mode.refresh_rate)
                 .max(1);
-            return f64::from(refresh) / f64::from(interval);
+            let swaps = f64::from(refresh) / f64::from(interval);
+            // XSnes3D+: a frame cap on top of the vsync (every other refresh refused) is lower.
+            return self
+                .window
+                .frame_cap()
+                .map_or(swaps, |period| swaps.min(1.0 / period.as_secs_f64().max(0.001)));
         }
         self.window
             .frame_cap()
@@ -1562,7 +1567,9 @@ impl Running {
             .max(1);
         // The interval in force, which `video.half_rate_3d` may double.
         let interval = self.window.vsync_interval().max(1);
-        Duration::from_secs_f64(f64::from(interval) / f64::from(refresh))
+        let swap = Duration::from_secs_f64(f64::from(interval) / f64::from(refresh));
+        // XSnes3D+: a frame cap on top of the vsync (every other refresh refused) is longer.
+        self.window.frame_cap().map_or(swap, |cap| cap.max(swap))
     }
 
     /// The pipelined frame: the interface is built first, then the conversion the tick left
